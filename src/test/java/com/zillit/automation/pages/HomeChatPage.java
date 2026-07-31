@@ -239,6 +239,47 @@ public class HomeChatPage extends BasePage {
         }
     }
 
+    /**
+     * Like {@link #messageShown} but SCROLLS the conversation looking for the text.
+     * A RecyclerView only materialises rows near the viewport, so a message that is
+     * genuinely in the conversation but scrolled out of view is invisible to a plain
+     * text lookup — which otherwise reads as "the message vanished". Scrolls back
+     * (older) then forward (newer) before giving up.
+     */
+    public boolean messageShownScrolled(String text, int maxSwipes) {
+        if (messageShown(text, Duration.ofSeconds(3))) return true;
+        // search upwards (older messages)
+        for (int i = 0; i < maxSwipes; i++) {
+            swipeChat(true);
+            if (messageShown(text, Duration.ofMillis(700))) return true;
+        }
+        // back down (newer)
+        for (int i = 0; i < maxSwipes * 2; i++) {
+            swipeChat(false);
+            if (messageShown(text, Duration.ofMillis(700))) return true;
+        }
+        return false;
+    }
+
+    /** One chat swipe: up=true reveals OLDER messages, up=false reveals NEWER. */
+    private void swipeChat(boolean older) {
+        var size = driver.manage().window().getSize();
+        int x = size.getWidth() / 2;
+        int yFrom = (int) (size.getHeight() * (older ? 0.35 : 0.75));
+        int yTo = (int) (size.getHeight() * (older ? 0.75 : 0.35));
+        var finger = new org.openqa.selenium.interactions.PointerInput(
+                org.openqa.selenium.interactions.PointerInput.Kind.TOUCH, "finger");
+        var seq = new org.openqa.selenium.interactions.Sequence(finger, 1);
+        seq.addAction(finger.createPointerMove(Duration.ZERO,
+                org.openqa.selenium.interactions.PointerInput.Origin.viewport(), x, yFrom));
+        seq.addAction(finger.createPointerDown(0));
+        seq.addAction(finger.createPointerMove(Duration.ofMillis(300),
+                org.openqa.selenium.interactions.PointerInput.Origin.viewport(), x, yTo));
+        seq.addAction(finger.createPointerUp(0));
+        driver.perform(java.util.Collections.singletonList(seq));
+        sleepQuiet(500);
+    }
+
     public int messageCount() {
         return driver.findElements(byId("rvChat")).isEmpty()
                 ? 0

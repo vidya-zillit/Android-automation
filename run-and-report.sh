@@ -81,7 +81,18 @@ elif [[ "${1:-}" == "--tools" ]]; then
   # PLUS the Tools page management (search, change group order, enable/disable).
   GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.ToolsManagementTest'
                 --tests 'com.zillit.automation.tests.ConfidentialInfoTest'
-                --tests 'com.zillit.automation.tests.InfoTest')
+                --tests 'com.zillit.automation.tests.InfoTest'
+                --tests 'com.zillit.automation.tests.CateringTest')
+elif [[ "${1:-}" == "--recce" ]]; then
+  # RECCE ONLY — the location-scout module: list/search/filters, create form +
+  # publish validation, drafts, stops, personnel, location picker, detail, delete.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.RecceTest')
+elif [[ "${1:-}" == "--recce-pagination" ]]; then
+  # PAGINATION stress: seed N recces (ZILLIT_RECCE_COUNT, default 120) then verify
+  # every one is reachable by scrolling. Black-box — needs only the APK.
+  #   ZILLIT_RECCE_COUNT=300 ./run-and-report.sh --recce-pagination
+  #   ZILLIT_RECCE_SEED=false ./run-and-report.sh --recce-pagination   # verify only
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.RecceePaginationTest')
 elif [[ "${1:-}" == "--manual-media" ]]; then
   # Interactive: YOU pick Video/Location/Contact on the device and reach the
   # send screen; automation sends + verifies. Set ZILLIT_PICK_WAIT for a longer
@@ -163,7 +174,7 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     "Calendar::CalendarTest"
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"
-    "Tools::ToolsManagementTest ConfidentialInfoTest InfoTest"
+    "Tools::ToolsManagementTest ConfidentialInfoTest InfoTest CateringTest RecceTest"
   )
   TEST_EXIT=0
   for entry in "${MODULES[@]}"; do

@@ -54,8 +54,33 @@ abstract class ToolChatBaseTest extends BaseTest {
         }
         dismissPermissionPrompts();
         HomeChatPage chat = new HomeChatPage(driver);
-        if (moduleOpened && chat.isInputBarVisible()) return;   // already in the module chat
+        // Only skip the re-open when we are genuinely still INSIDE the module.
+        // "An input bar is visible" is not enough: the Home units chat has one too,
+        // and Forward/Gallery/Share can land us back on Home — which would silently
+        // run the rest of the module's cases against Bulletin.
+        if (moduleOpened && chat.isInputBarVisible() && inModuleScreen()) { afterModuleReady(); return; }
         openModuleChat();
+        afterModuleReady();
+    }
+
+    /**
+     * Hook run once the module chat is on screen, before each case. Modules whose
+     * input bar is conditional override this to make the chat postable — e.g.
+     * Catering hides the keyboard for a CATERER until a recipient is chosen.
+     */
+    protected void afterModuleReady() { }
+
+    /**
+     * True when the foreground screen is a Tools MODULE chat rather than the Home
+     * tab. Module screens are pushed with their own back button and have no bottom
+     * navigation; Home always shows the bottom nav.
+     */
+    private boolean inModuleScreen() {
+        try {
+            return driver.findElements(byAppId("bottomNavigation")).isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** Navigate Tools → open the module → its chat. */
@@ -163,9 +188,19 @@ abstract class ToolChatBaseTest extends BaseTest {
         assumeTrue(page.isAttachmentPickerVisible(), "Attachment picker did not open");
         List<String> opts = page.attachmentOptions();
         System.out.println(">>> " + moduleName() + " attachment options: " + opts);
-        assertTrue(opts.size() >= 6, "Attachment picker should offer the media types. Got: " + opts);
+        assertTrue(opts.size() >= minAttachmentOptions(),
+                moduleName() + " attachment picker should offer at least " + minAttachmentOptions()
+                        + " media types. Got: " + opts);
         page.dismissAttachmentPicker();
     }
+
+    /**
+     * How many attachment options this module is expected to expose. The general
+     * Bulletin-style modules offer the full set (Photo/Gallery/Video/Video Gallery/
+     * Audio/Document/Location/Contact); modules with a restricted picker override
+     * this (e.g. Catering only allows Photo / Image Gallery / Audio / Document).
+     */
+    protected int minAttachmentOptions() { return 6; }
 
     // ---------------- long-press + reply ----------------
 
