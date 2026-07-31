@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * send screen doesn't appear in time the test skips cleanly (no false failure).
  *
  * Run:
- *   ZILLIT_UDID=<serial> ZILLIT_APP_PACKAGE=com.zillit.zillitapp.dev \
+ *   ZILLIT_UDID=<serial> ZILLIT_APP_PACKAGE=com.zillit.zillitapp.qa \
  *   ./gradlew test --tests 'com.zillit.automation.tests.ManualPickSendTest'
  */
 @Order(28)

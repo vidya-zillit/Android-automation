@@ -4,6 +4,8 @@
 #
 #   ./run-and-report.sh                    # full suite (E2E asks for manual OTP)
 #   ./run-and-report.sh --no-e2e           # skip the OTP/E2E test
+#   ./run-and-report.sh --all-in-project   # Home+Calendar+Email+C&C+Tools+Admin Settings, one report
+#   ./run-and-report.sh --admin-settings   # Settings → Admin Settings only (e.g. Department Listing Order)
 #   ./run-and-report.sh --two-device       # cross-device send/receive (two users)
 #
 # Prerequisites (once): emulator running, Appium server running
@@ -82,6 +84,12 @@ elif [[ "${1:-}" == "--tools" ]]; then
   GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.ToolsManagementTest'
                 --tests 'com.zillit.automation.tests.ConfidentialInfoTest'
                 --tests 'com.zillit.automation.tests.InfoTest')
+elif [[ "${1:-}" == "--admin-settings" ]]; then
+  # SETTINGS → ADMIN SETTINGS — every admin-settings sub-feature test class.
+  # Currently just Change Department Listing Order for Crew List; add new
+  # admin-settings test classes to this same list as they're implemented, so
+  # this one flag keeps covering the whole Admin Settings area.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DepartmentListingOrderTest')
 elif [[ "${1:-}" == "--manual-media" ]]; then
   # Interactive: YOU pick Video/Location/Contact on the device and reach the
   # send screen; automation sends + verifies. Set ZILLIT_PICK_WAIT for a longer
@@ -96,13 +104,19 @@ elif [[ "${1:-}" == "--all" ]]; then
   # Email → C&C → Tools), each run SEPARATELY so a degraded emulator on one module
   # can't kill the rest, then ONE combined HTML report for the developer.
   RUN_ALL=1
+elif [[ "${1:-}" == "--all-in-project" ]]; then
+  # Same sweep as --all but SKIPS "Project create / join / list" (needs a manual
+  # OTP, so it can't run unattended) — Home/Bulletin, Calendar, Email, C&C, Tools,
+  # each isolated, one combined report. Needs an already logged-in project.
+  RUN_ALL=1
+  SKIP_PROJECT_MODULE=1
 fi
 
 # Push test media + pre-grant permissions to the target device(s) so media-send
 # tests have content and don't stall on system permission dialogs.
 ADB="$HOME/Library/Android/sdk/platform-tools/adb"
 FX=src/test/resources/fixtures
-PKG="${ZILLIT_APP_PACKAGE:-com.zillit.zillitapp.dev}"
+PKG="${ZILLIT_APP_PACKAGE:-com.zillit.zillitapp.qa}"
 
 prep_device() {  # $1 = adb device serial (may be empty for the only device)
   local flag=""
@@ -164,7 +178,11 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"
     "Tools::ToolsManagementTest ConfidentialInfoTest InfoTest"
+    "Settings / Admin Settings::DepartmentListingOrderTest"
   )
+  if [[ "${SKIP_PROJECT_MODULE:-0}" == "1" ]]; then
+    MODULES=("${MODULES[@]:1}")  # drop "Project create / join / list"
+  fi
   TEST_EXIT=0
   for entry in "${MODULES[@]}"; do
     label="${entry%%::*}"; classes="${entry##*::}"

@@ -473,7 +473,7 @@ public class CcChatThreadPage extends BasePage {
                 String pkg = driver.getCurrentPackage();
                 if (pkg == null || !pkg.contains("zillit")) {
                     driver.executeScript("mobile: activateApp",
-                            java.util.Map.of("appId", "com.zillit.zillitapp.dev"));
+                            java.util.Map.of("appId", appPackage()));
                     sleep(1000);
                     continue;
                 }
