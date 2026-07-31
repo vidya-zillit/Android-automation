@@ -36,6 +36,11 @@ public abstract class BasePage {
         return AppiumBy.id(idPrefix + id);
     }
 
+    /** The app package resource-ids resolve against (config override or foreground app). */
+    protected String appPackage() {
+        return idPrefix.substring(0, idPrefix.indexOf(":id/"));
+    }
+
     protected WebElement waitVisible(String id) {
         return wait.until(ExpectedConditions.visibilityOfElementLocated(byId(id)));
     }

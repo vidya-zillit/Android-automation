@@ -19,7 +19,7 @@ npm install            # installs Appium + UiAutomator2 driver locally
 
 **Terminal 1 — build the app** (only when the app code changed):
 ```bash
-cd ~/StudioProjects/Zillit-Android
+cd "$HOME/Android Automation using Claude/Zillit-Android"
 ./gradlew assembleDevelopDebug
 ```
 
@@ -31,13 +31,13 @@ Wait until Android is fully booted (home screen visible).
 
 **Terminal 3 — Appium server** (leave it running):
 ```bash
-cd ~/StudioProjects/Zillit-Automation
+cd "$HOME/Android Automation using Claude/Android-automation"
 ANDROID_HOME=$HOME/Library/Android/sdk npm run appium
 ```
 
 **Terminal 4 — run everything and report to the Google Sheet:**
 ```bash
-cd ~/StudioProjects/Zillit-Automation
+cd "$HOME/Android Automation using Claude/Android-automation"
 ./run-and-report.sh            # full suite — watch the emulator, type the OTP when the sheet opens
 ./run-and-report.sh --no-e2e   # unattended run without the OTP/E2E test
 ```
