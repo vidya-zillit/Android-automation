@@ -91,28 +91,63 @@ const suites = [];
 //   status \t TestClass \t displayName \t file.png
 // We embed the PNG inline (base64) so the report stays ONE shareable file.
 const SHOTS_DIR = path.resolve('build/screenshots');
-const shotByKey = new Map();
+const shotByKey = new Map();    // key -> full-size failure/skip PNG
+const stepsByKey = new Map();   // key -> [{file,label}] evidence shots taken during the test
+const KEY = (cls, display) => `${cls} ${(display || '').trim()}`;
 try {
   const mf = path.join(SHOTS_DIR, 'manifest.tsv');
   if (fs.existsSync(mf)) {
     for (const line of fs.readFileSync(mf, 'utf8').split(/\r?\n/)) {
       if (!line.trim()) continue;
-      const [status, cls, display, file] = line.split('\t');
+      const [status, cls, display, file, label] = line.split('\t');
       if (!file) continue;
-      shotByKey.set(`${cls}\u0000${(display || '').trim()}`, file);   // later runs win
+      const key = KEY(cls, display);
+      if (status === 'STEP') {
+        // A re-run repeats the same step names, so keep only the latest pass:
+        // reset the list when step 01 comes round again.
+        const list = stepsByKey.get(key) || [];
+        if (/__01__/.test(file)) list.length = 0;
+        list.push({ file, label: label || 'step' });
+        stepsByKey.set(key, list);
+      } else {
+        shotByKey.set(key, file);   // later runs win
+      }
     }
   }
 } catch { /* screenshots are optional */ }
 
-function shotFor(suiteName, caseName) {
-  const file = shotByKey.get(`${suiteName}\u0000${(caseName || '').trim()}`);
-  if (!file) return '';
-  const full = path.join(SHOTS_DIR, file);
+function embed(file, alt) {
   try {
-    const b64 = fs.readFileSync(full).toString('base64');
-    return `<div class="shot"><div class="shotlab">Screen at the moment of failure</div>` +
-           `<img src="data:image/png;base64,${b64}" alt="failure screenshot"/></div>`;
+    const b64 = fs.readFileSync(path.join(SHOTS_DIR, file)).toString('base64');
+    const mime = file.endsWith('.jpg') ? 'image/jpeg' : 'image/png';
+    return `<img src="data:${mime};base64,${b64}" alt="${alt}"/>`;
   } catch { return ''; }
+}
+
+function shotFor(suiteName, caseName) {
+  const key = KEY(suiteName, caseName);
+  let html = '';
+
+  const failFile = shotByKey.get(key);
+  if (failFile) {
+    const img = embed(failFile, 'failure screenshot');
+    if (img) html += `<div class="shot"><div class="shotlab">Screen at the moment of failure</div>${img}</div>`;
+  }
+
+  // Evidence shots taken DURING the test - present for passing tests too, which is
+  // what lets the report prove the flow actually reached each screen.
+  const steps = stepsByKey.get(key) || [];
+  if (steps.length) {
+    const thumbs = steps.map(s => {
+      const img = embed(s.file, s.label);
+      return img ? `<figure class="stepshot">${img}<figcaption>${s.label}</figcaption></figure>` : '';
+    }).join('');
+    if (thumbs) {
+      html += `<details class="steps"><summary>${steps.length} screenshot${steps.length > 1 ? 's' : ''} from this test</summary>` +
+              `<div class="stepgrid">${thumbs}</div></details>`;
+    }
+  }
+  return html;
 }
 
 let totals = { tests: 0, passed: 0, failed: 0, skipped: 0 };
@@ -122,11 +157,15 @@ for (const f of files) {
   const suiteTag = (xml.match(/<testsuite\b[^>]*>/) || [''])[0];
   const suiteName = attr(suiteTag, 'name').replace(/^com\.zillit\.automation\.tests\./, '');
   const cases = [];
-  const caseRe = /<testcase\b([^>]*)>([\s\S]*?)<\/testcase>|<testcase\b([^>]*)\/>/g;
+  // Self-closing MUST be tried first, and its attribute run must be lazy: `[^>]*` will
+  // otherwise eat the trailing "/" of `<testcase .../>` , match the following ">", and
+  // then run `[\s\S]*?` on to the NEXT "</testcase>" — swallowing a passing test into
+  // the failing one after it (the pass vanishes, and its name shows on the failure).
+  const caseRe = /<testcase\b([^>]*?)\/>|<testcase\b([^>]*?)>([\s\S]*?)<\/testcase>/g;
   let m;
   while ((m = caseRe.exec(xml)) !== null) {
-    const head = m[1] || m[3] || '';
-    const body = m[2] || '';
+    const head = m[1] !== undefined ? m[1] : (m[2] || '');
+    const body = m[3] || '';
     const name = attr(head, 'name');
     const time = parseFloat(attr(head, 'time') || '0');
     let status = 'passed', kind = '', message = '', stack = '';
@@ -219,8 +258,13 @@ let jiraSeq = 0;
 const rows = suites.map((su) => {
   const items = su.cases.map((c) => {
     if (c.status === 'passed') {
+      // A passing test still carries its evidence shots — that is what lets the
+      // developer see the flow actually reached each screen, not just that it
+      // returned green.
+      const shots = shotFor(su.name, c.name);
       return `<tr class="passrow"><td>${badge(c.status)}</td><td>${esc(c.name)}</td>` +
-        `<td class="dur">${c.time.toFixed(1)}s</td></tr>`;
+        `<td class="dur">${c.time.toFixed(1)}s</td></tr>` +
+        (shots ? `<tr class="passshots"><td></td><td colspan="2">${shots}</td></tr>` : '');
     }
     const info = classify(c.kind, c.message, c.stack);
     const jid = 'jira' + (++jiraSeq);
@@ -284,6 +328,13 @@ pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:
 .shot{margin-top:10px}
 .shotlab{font-size:11.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
 .shot img{max-width:280px;width:100%;border:1px solid var(--line);border-radius:8px;display:block}
+.steps{margin-top:10px}
+.steps summary{cursor:pointer;font-size:12px;color:var(--mut);user-select:none}
+.steps summary:hover{color:inherit}
+.stepgrid{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px}
+.stepshot{margin:0;width:180px}
+.stepshot img{width:100%;border:1px solid var(--line);border-radius:6px;display:block}
+.stepshot figcaption{font-size:11px;color:var(--mut);margin-top:4px;word-break:break-word}
 .copybtn{margin-top:8px;border:1px solid var(--line);background:var(--card);color:var(--tx);
 border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
 .copybtn:hover{border-color:var(--env);color:var(--env)}.copybtn.done{color:var(--pass);border-color:var(--pass)}

@@ -227,8 +227,6 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"
     "Tools::ConfidentialInfoTest InfoTest CateringTest RecceTest ToolsManagementTest"
-    "Settings / Admin Settings::DepartmentListingOrderTest"
-    "Tools::ToolsManagementTest ConfidentialInfoTest InfoTest"
     "Settings / Admin Settings::DepartmentListingOrderTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest"
   )
   if [[ "${SKIP_PROJECT_MODULE:-0}" == "1" ]]; then

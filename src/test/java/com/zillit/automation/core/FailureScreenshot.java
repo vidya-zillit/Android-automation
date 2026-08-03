@@ -1,5 +1,6 @@
 package com.zillit.automation.core;
 
+import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.TestWatcher;
 
@@ -17,7 +18,21 @@ import java.util.Optional;
  * back to the failing test:
  * <pre>build/screenshots/FAILED__&lt;TestClass&gt;__&lt;testMethod&gt;.png</pre>
  */
-public class FailureScreenshot implements TestWatcher {
+public class FailureScreenshot implements TestWatcher, BeforeEachCallback {
+
+    /**
+     * Hand the running test its own identity before the body starts. Without this a
+     * mid-test {@code screenshot("some-step")} has no idea which test it belongs to,
+     * so it cannot be listed in the report and the file is effectively orphaned.
+     */
+    @Override
+    public void beforeEach(ExtensionContext context) {
+        Optional<Object> instance = context.getTestInstance();
+        if (instance.isEmpty() || !(instance.get() instanceof BaseTest test)) return;
+        test.setTestContext(
+                context.getTestClass().map(Class::getSimpleName).orElse("Unknown"),
+                context.getDisplayName());
+    }
 
     @Override
     public void testFailed(ExtensionContext context, Throwable cause) {

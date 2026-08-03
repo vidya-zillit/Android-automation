@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.CompanyDetailsPage;
 import com.zillit.automation.pages.ProjectListPage;
@@ -25,7 +26,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * matching the app's real behavior (validation only fires on Submit; fields
  * keep whatever was last typed until changed).
  */
-@Order(51)
+@Order(TestOrder.COMPANY_DETAILS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CompanyDetailsTest extends BaseTest {
 

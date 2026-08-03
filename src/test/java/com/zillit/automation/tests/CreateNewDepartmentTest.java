@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.CreateNewDepartmentPage;
 import com.zillit.automation.pages.ProjectListPage;
@@ -23,7 +24,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * A ladder walked on ONE screen instance (relaunchBetweenTests()=false): each
  * test case continues editing the same open form/list the previous one left.
  */
-@Order(53)
+@Order(TestOrder.CREATE_NEW_DEPARTMENT)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CreateNewDepartmentTest extends BaseTest {
 

@@ -96,8 +96,12 @@ public final class TestOrder {
     // free: 62–69
 
     // 70–89 · ADMIN SETTINGS · BHAVIK -----------------------------------------
-    public static final int DEPARTMENT_LISTING_ORDER = 70;
-    // free: 71–89 — next admin-settings suites go here (72, 74, 76 …)
+    public static final int DEPARTMENT_LISTING_ORDER      = 70;
+    public static final int COMPANY_DETAILS               = 72;
+    public static final int CREATE_ADDITIONAL_SHOOTING_UNIT = 74;
+    public static final int CREATE_NEW_DEPARTMENT         = 76;
+    public static final int CREATE_NEW_DESIGNATION        = 78;
+    // free: 71, 73, 75, 77, 79–89 — next admin-settings suites go here
 
     // 90–99 · destructive / global-state — always last ------------------------
     /** Disables tools and reorders groups — must not run before the tool suites. */

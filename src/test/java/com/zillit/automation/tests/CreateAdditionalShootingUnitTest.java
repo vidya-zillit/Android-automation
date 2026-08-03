@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.CreateAdditionalShootingUnitPage;
 import com.zillit.automation.pages.ProjectListPage;
@@ -25,7 +26,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * Submit keeps the form open with its native field error shown), and Test
  * Case 3 continues from there once the field is cleared and replaced.
  */
-@Order(52)
+@Order(TestOrder.CREATE_ADDITIONAL_SHOOTING_UNIT)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CreateAdditionalShootingUnitTest extends BaseTest {
 

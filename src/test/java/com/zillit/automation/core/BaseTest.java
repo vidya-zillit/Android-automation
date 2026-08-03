@@ -331,15 +331,73 @@ public abstract class BaseTest {
         }
     }
 
+    /** Set by {@link FailureScreenshot} before each test so step shots know their owner. */
+    private String currentClass = "Unknown";
+    private String currentDisplayName = "";
+    private int stepCounter;
+
+    void setTestContext(String cls, String displayName) {
+        this.currentClass = cls;
+        this.currentDisplayName = displayName == null ? "" : displayName;
+        this.stepCounter = 0;
+    }
+
+    /**
+     * Evidence screenshot for a step INSIDE a test — the "this is what the screen
+     * looked like when we asserted" shot, captured whether or not the test passes.
+     *
+     * <p>Writes two files. The full-size PNG (timestamped) is kept for local
+     * debugging. A downscaled JPEG is what the HTML report embeds: a raw device
+     * screenshot is ~2 MB, and the report inlines images as base64 to stay a single
+     * shareable file, so embedding full-size shots across ~270 calls would produce a
+     * report hundreds of megabytes large. The thumbnail keeps it in the low MBs.
+     */
     protected void screenshot(String name) {
         try {
             Path dir = Paths.get("build", "screenshots");
             Files.createDirectories(dir);
+            byte[] png = driver.getScreenshotAs(OutputType.BYTES);
             String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
-            Files.write(dir.resolve(name + "-" + stamp + ".png"),
-                    driver.getScreenshotAs(OutputType.BYTES));
+            Files.write(dir.resolve(name + "-" + stamp + ".png"), png);
+
+            String thumb = String.format("STEP__%s__%02d__%s.jpg", currentClass, ++stepCounter, safe(name));
+            if (writeThumbnail(png, dir.resolve(thumb))) {
+                String line = String.join("\t", "STEP", currentClass,
+                        currentDisplayName.replace("\t", " "), thumb, name);
+                Files.writeString(dir.resolve("manifest.tsv"), line + System.lineSeparator(),
+                        java.nio.charset.StandardCharsets.UTF_8,
+                        java.nio.file.StandardOpenOption.CREATE,
+                        java.nio.file.StandardOpenOption.APPEND);
+            }
         } catch (IOException | WebDriverException ignored) {
             // Screenshots are best-effort diagnostics; never fail a test over them.
         }
     }
+
+    private static String safe(String s) {
+        return s == null ? "shot" : s.replaceAll("[^A-Za-z0-9._-]", "-");
+    }
+
+    /** Scales the shot down to {@value #THUMB_WIDTH}px wide and writes it as JPEG. */
+    private static boolean writeThumbnail(byte[] png, Path out) {
+        try {
+            java.awt.image.BufferedImage src =
+                    javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(png));
+            if (src == null) return false;
+            int w = Math.min(THUMB_WIDTH, src.getWidth());
+            int h = Math.max(1, (int) Math.round(src.getHeight() * (w / (double) src.getWidth())));
+            java.awt.image.BufferedImage dst =
+                    new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB);
+            java.awt.Graphics2D g = dst.createGraphics();
+            g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                    java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.drawImage(src, 0, 0, w, h, null);
+            g.dispose();
+            return javax.imageio.ImageIO.write(dst, "jpg", out.toFile());
+        } catch (Exception e) {
+            return false;   // thumbnails are best-effort
+        }
+    }
+
+    private static final int THUMB_WIDTH = 420;
 }
