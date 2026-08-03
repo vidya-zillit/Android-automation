@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.core.Messages;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.HomeChatPage;
@@ -25,7 +26,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * Every case skips with a clear reason when the precondition is missing, so
  * the suite never produces false failures on an account without chat access.
  */
-@Order(20)
+@Order(TestOrder.HOME_CHAT)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class HomeChatTest extends BaseTest {
 

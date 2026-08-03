@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.core.Config;
 import com.zillit.automation.core.Messages;
 import com.zillit.automation.pages.JoinProjectPage;
@@ -29,7 +30,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * on that one screen. The final case stops at the take-a-selfie dialog — the
  * selfie/actual submission stays manual (camera + face recognition).
  */
-@Order(11)
+@Order(TestOrder.PROJECT_JOIN_E2E)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class JoinProjectE2ETest extends BaseTest {
 

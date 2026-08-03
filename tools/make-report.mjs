@@ -85,6 +85,36 @@ function classify(kind, message, stack) {
 // ---- parse all suites ------------------------------------------------------
 const files = fs.readdirSync(RESULTS_DIR).filter((f) => f.endsWith('.xml'));
 const suites = [];
+
+// ---- failure screenshots ---------------------------------------------------
+// FailureScreenshot (JUnit extension) writes build/screenshots/manifest.tsv:
+//   status \t TestClass \t displayName \t file.png
+// We embed the PNG inline (base64) so the report stays ONE shareable file.
+const SHOTS_DIR = path.resolve('build/screenshots');
+const shotByKey = new Map();
+try {
+  const mf = path.join(SHOTS_DIR, 'manifest.tsv');
+  if (fs.existsSync(mf)) {
+    for (const line of fs.readFileSync(mf, 'utf8').split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      const [status, cls, display, file] = line.split('\t');
+      if (!file) continue;
+      shotByKey.set(`${cls}\u0000${(display || '').trim()}`, file);   // later runs win
+    }
+  }
+} catch { /* screenshots are optional */ }
+
+function shotFor(suiteName, caseName) {
+  const file = shotByKey.get(`${suiteName}\u0000${(caseName || '').trim()}`);
+  if (!file) return '';
+  const full = path.join(SHOTS_DIR, file);
+  try {
+    const b64 = fs.readFileSync(full).toString('base64');
+    return `<div class="shot"><div class="shotlab">Screen at the moment of failure</div>` +
+           `<img src="data:image/png;base64,${b64}" alt="failure screenshot"/></div>`;
+  } catch { return ''; }
+}
+
 let totals = { tests: 0, passed: 0, failed: 0, skipped: 0 };
 
 for (const f of files) {
@@ -202,6 +232,7 @@ const rows = suites.map((su) => {
       (c.message ? `<div class="msg"><b>Message:</b> ${esc(c.message)}</div>` : '') +
       `<details class="jira" open><summary>📋 Jira ticket — copy &amp; paste</summary>` +
         `<button class="copybtn" data-target="${jid}">Copy to clipboard</button>` +
+        shotFor(su.name, c.name) +
         `<pre id="${jid}" class="jiratext">${esc(ticket)}</pre></details>` +
       (c.stack ? `<details><summary>Stack trace</summary><pre>${esc(c.stack)}</pre></details>` : '') +
       `</td><td class="dur">${c.time.toFixed(1)}s</td></tr>`;
@@ -250,6 +281,9 @@ pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:
 .issuerow.fail{background:color-mix(in srgb,var(--fail) 6%,transparent)}
 .jira{margin-top:8px}.jira summary{color:var(--env);font-weight:600;cursor:pointer;font-size:13px}
 .jiratext{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:8px;font-size:12.5px;white-space:pre-wrap;line-height:1.5}
+.shot{margin-top:10px}
+.shotlab{font-size:11.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.shot img{max-width:280px;width:100%;border:1px solid var(--line);border-radius:8px;display:block}
 .copybtn{margin-top:8px;border:1px solid var(--line);background:var(--card);color:var(--tx);
 border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
 .copybtn:hover{border-color:var(--env);color:var(--env)}.copybtn.done{color:var(--pass);border-color:var(--pass)}

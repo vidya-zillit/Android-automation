@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.HomeChatPage;
 import com.zillit.automation.pages.MediaPreviewPage;
@@ -32,7 +33,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * Requires a project with a call-sheet unit + posting rights. The runner pushes
  * zl_test_doc.pdf so the document send has content. Skips cleanly otherwise.
  */
-@Order(22)
+@Order(TestOrder.CALL_SHEET)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CallSheetTest extends BaseTest {
 

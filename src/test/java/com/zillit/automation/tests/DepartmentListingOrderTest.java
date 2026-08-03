@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.DepartmentListingOrderPage;
 import com.zillit.automation.pages.ProjectListPage;
@@ -26,7 +27,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * closes it). Test Case 3 taps Reset first so its "Art at position 9"
  * precondition holds regardless of what Test Case 2 changed.
  */
-@Order(50)
+@Order(TestOrder.DEPARTMENT_LISTING_ORDER)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class DepartmentListingOrderTest extends BaseTest {
 

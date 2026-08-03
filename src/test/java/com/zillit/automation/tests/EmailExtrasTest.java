@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.ComposeEmailPage;
 import com.zillit.automation.pages.EmailPage;
@@ -28,7 +29,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * (conversation view enable/disable + verify, Bcc Presets, Email Setup Externally,
  * signature add → visible in compose → remove).
  */
-@Order(32)
+@Order(TestOrder.EMAIL_EXTRAS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class EmailExtrasTest extends BaseTest {
 

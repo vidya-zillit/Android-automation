@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.openqa.selenium.By;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.WebDriverException;
@@ -32,6 +33,7 @@ import java.util.Map;
  * automatically when the app is found logged in.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(FailureScreenshot.class)
 public abstract class BaseTest {
 
     public enum Landing { START_AND_JOIN, PROJECT_LIST, BOTTOM_NAV, UNKNOWN }
@@ -296,6 +298,39 @@ public abstract class BaseTest {
     }
 
     /** Saves a screenshot under build/screenshots for debugging and reports. */
+    /**
+     * Writes a screenshot (and the page source) under a STABLE name so the report
+     * generator can match it back to the test — no timestamp. Called automatically
+     * by {@link FailureScreenshot} when a test fails or is skipped.
+     */
+    void captureDiagnostics(String status, String cls, String method, String displayName) {
+        String base = status + "__" + cls + "__" + method;
+        Path dir = Paths.get("build", "screenshots");
+        boolean shot = false;
+        try {
+            Files.createDirectories(dir);
+            Files.write(dir.resolve(base + ".png"), driver.getScreenshotAs(OutputType.BYTES));
+            shot = true;
+        } catch (Exception ignored) {
+            // diagnostics are best-effort — never mask the real failure
+        }
+        try {
+            String src = driver.getPageSource();
+            if (src != null && !src.isBlank()) Files.writeString(dir.resolve(base + ".xml"), src);
+        } catch (Exception ignored) { }
+        // Manifest the report generator reads: status, class, display name, file.
+        if (shot) {
+            try {
+                String line = String.join("\t", status, cls,
+                        displayName == null ? "" : displayName.replace("\t", " "), base + ".png");
+                Files.writeString(dir.resolve("manifest.tsv"), line + System.lineSeparator(),
+                        java.nio.charset.StandardCharsets.UTF_8,
+                        java.nio.file.StandardOpenOption.CREATE,
+                        java.nio.file.StandardOpenOption.APPEND);
+            } catch (Exception ignored) { }
+        }
+    }
+
     protected void screenshot(String name) {
         try {
             Path dir = Paths.get("build", "screenshots");

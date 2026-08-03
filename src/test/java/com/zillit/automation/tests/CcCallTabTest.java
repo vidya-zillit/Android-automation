@@ -1,5 +1,7 @@
 package com.zillit.automation.tests;
 
+import com.zillit.automation.core.TestOrder;
+
 import com.zillit.automation.pages.CcCallTabPage;
 import com.zillit.automation.pages.CcLandingPage;
 import org.junit.jupiter.api.DisplayName;
@@ -17,7 +19,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * C&C → Call tab: Recent / Missed sub-tabs, call-log rows + call-type icons,
  * search over the log, and the new-call FAB. Read-only (does not start a call).
  */
-@Order(45)
+@Order(TestOrder.CC_CALL_TAB)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CcCallTabTest extends CcBaseTest {
 

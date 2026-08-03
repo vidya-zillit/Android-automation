@@ -1,5 +1,7 @@
 package com.zillit.automation.tests;
 
+import com.zillit.automation.core.TestOrder;
+
 import com.zillit.automation.pages.CcCallPage;
 import com.zillit.automation.pages.CcChatThreadPage;
 import org.junit.jupiter.api.DisplayName;
@@ -19,7 +21,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * END the call. A fully CONNECTED call needs a 2nd party to answer (two-device),
  * so this covers initiate → outgoing UI → controls → end on one device.
  */
-@Order(43)
+@Order(TestOrder.CC_CALL)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CcCallTest extends CcBaseTest {
 

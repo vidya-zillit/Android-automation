@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.HomeChatPage;
 import com.zillit.automation.pages.HomeChatPage.Rights;
@@ -30,7 +31,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * actually has a view-only unit (an admin account may have rights everywhere) —
  * they skip with a clear message otherwise, so they never false-fail.
  */
-@Order(19)
+@Order(TestOrder.POSTING_RIGHTS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class PostingRightsTest extends BaseTest {
 

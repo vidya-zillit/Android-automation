@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.core.Config;
 import com.zillit.automation.core.Messages;
 import com.zillit.automation.pages.BottomNavPage;
@@ -36,7 +37,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * MANUAL STEP: step 1 pauses up to 5 minutes for you to type the email OTP on
  * the device and tap the sheet's Verify button. Everything else is automatic.
  */
-@Order(0)
+@Order(TestOrder.PROJECT_FLOW_E2E)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ProjectFlowE2ETest extends BaseTest {
 

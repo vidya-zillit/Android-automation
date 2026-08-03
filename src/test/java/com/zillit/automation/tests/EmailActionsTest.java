@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.EmailPage;
 import com.zillit.automation.pages.FolderSelectionPage;
@@ -26,7 +27,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * operate on the Sent folder (which has the test sends); skip cleanly when a
  * folder doesn't have enough content.
  */
-@Order(33)
+@Order(TestOrder.EMAIL_ACTIONS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class EmailActionsTest extends BaseTest {
 

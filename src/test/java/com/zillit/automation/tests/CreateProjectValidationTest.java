@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.core.Messages;
 import com.zillit.automation.pages.StartAndJoinPage;
 import com.zillit.automation.pages.StartProjectPage;
@@ -19,7 +20,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * exactly in the order the app validates (a real user fixing one error at a
  * time). If the form is ever lost, the next test recovers by relaunching.
  */
-@Order(2)
+@Order(TestOrder.PROJECT_VALIDATION)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CreateProjectValidationTest extends BaseTest {
 

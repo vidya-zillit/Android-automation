@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.HomeChatPage;
 import com.zillit.automation.pages.MediaPreviewPage;
@@ -34,7 +35,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * navigates once; preview and send are separate. Each case skips (not fails)
  * when a precondition (project / posting rights / gallery image) is missing.
  */
-@Order(23)
+@Order(TestOrder.MEDIA_PREVIEW)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class MediaPreviewTest extends BaseTest {
 

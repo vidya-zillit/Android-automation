@@ -1,5 +1,7 @@
 package com.zillit.automation.tests;
 
+import com.zillit.automation.core.TestOrder;
+
 import com.zillit.automation.pages.CcChatThreadPage;
 import com.zillit.automation.pages.CcCreateGroupPage;
 import com.zillit.automation.pages.CcGroupInfoPage;
@@ -20,7 +22,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * make/disable admin, REMOVE member (member long-press → confirm), and DELETE the
  * group (admin, confirm). Delete runs last so the earlier cases have a group.
  */
-@Order(42)
+@Order(TestOrder.CC_GROUP_MANAGE)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CcGroupManageTest extends CcBaseTest {
 

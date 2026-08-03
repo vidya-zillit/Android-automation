@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.core.Messages;
 import com.zillit.automation.pages.JoinProjectPage;
 import com.zillit.automation.pages.StartAndJoinPage;
@@ -19,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Join Project — validations chained on ONE screen instance: the app stays on
  * the join screen and each test just swaps the input, like a user retrying.
  */
-@Order(1)
+@Order(TestOrder.PROJECT_JOIN)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class JoinProjectTest extends BaseTest {
 

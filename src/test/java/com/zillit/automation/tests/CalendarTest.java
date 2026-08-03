@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.CalendarPage;
 import com.zillit.automation.pages.CalendarPage.EventFormView;
@@ -36,7 +37,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * Each event-form test reopens the form fresh via the FAB. Cases skip (not
  * fail) when a precondition (project / Calendar unit) is missing.
  */
-@Order(21)
+@Order(TestOrder.CALENDAR)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CalendarTest extends BaseTest {
 

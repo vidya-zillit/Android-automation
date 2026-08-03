@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.core.Messages;
 import com.zillit.automation.pages.StartAndJoinPage;
 import com.zillit.automation.pages.StartProjectPage;
@@ -22,7 +23,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * (storage code, phone/country pairing, terms) that is unreachable without a
  * verified email. Runs LAST — it creates a real project on the dev backend.
  */
-@Order(9)
+@Order(TestOrder.PROJECT_CREATE_E2E)
 class CreateProjectE2ETest extends BaseTest {
 
     private static final String EMAIL = "vidyasagar+01@zillit.com";
