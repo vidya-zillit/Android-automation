@@ -86,10 +86,13 @@ elif [[ "${1:-}" == "--tools" ]]; then
                 --tests 'com.zillit.automation.tests.InfoTest')
 elif [[ "${1:-}" == "--admin-settings" ]]; then
   # SETTINGS → ADMIN SETTINGS — every admin-settings sub-feature test class.
-  # Currently just Change Department Listing Order for Crew List; add new
-  # admin-settings test classes to this same list as they're implemented, so
-  # this one flag keeps covering the whole Admin Settings area.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DepartmentListingOrderTest')
+  # Add new admin-settings test classes to this same list as they're
+  # implemented, so this one flag keeps covering the whole Admin Settings area.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DepartmentListingOrderTest'
+                --tests 'com.zillit.automation.tests.CompanyDetailsTest'
+                --tests 'com.zillit.automation.tests.CreateAdditionalShootingUnitTest'
+                --tests 'com.zillit.automation.tests.CreateNewDepartmentTest'
+                --tests 'com.zillit.automation.tests.CreateNewDesignationTest')
 elif [[ "${1:-}" == "--manual-media" ]]; then
   # Interactive: YOU pick Video/Location/Contact on the device and reach the
   # send screen; automation sends + verifies. Set ZILLIT_PICK_WAIT for a longer
@@ -178,7 +181,7 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"
     "Tools::ToolsManagementTest ConfidentialInfoTest InfoTest"
-    "Settings / Admin Settings::DepartmentListingOrderTest"
+    "Settings / Admin Settings::DepartmentListingOrderTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest"
   )
   if [[ "${SKIP_PROJECT_MODULE:-0}" == "1" ]]; then
     MODULES=("${MODULES[@]:1}")  # drop "Project create / join / list"
