@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.HomeChatPage;
 import com.zillit.automation.pages.ProjectListPage;
@@ -27,7 +28,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * present and that tapping it does something (navigates / dialog / edit) without
  * crashing. Runs inside a project with posting rights; skips otherwise.
  */
-@Order(24)
+@Order(TestOrder.CHAT_OPTIONS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ChatOptionsTest extends BaseTest {
 

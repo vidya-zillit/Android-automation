@@ -1,5 +1,7 @@
 package com.zillit.automation.tests;
 
+import com.zillit.automation.core.TestOrder;
+
 import com.zillit.automation.pages.CcContactsPage;
 import com.zillit.automation.pages.CcLandingPage;
 import org.junit.jupiter.api.DisplayName;
@@ -19,7 +21,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * covered by the chat/call suites, so here we exercise the list, search,
  * favourite toggle and location tap.
  */
-@Order(46)
+@Order(TestOrder.CC_CONTACTS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CcContactsTest extends CcBaseTest {
 

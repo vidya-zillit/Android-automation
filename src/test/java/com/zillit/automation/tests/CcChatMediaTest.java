@@ -1,5 +1,7 @@
 package com.zillit.automation.tests;
 
+import com.zillit.automation.core.TestOrder;
+
 import com.zillit.automation.pages.CcChatThreadPage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
@@ -19,7 +21,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * message search (open/type/navigate/close), voice-note record+send, the camera
  * launch (Photo/Video), and best-effort media sends through the system pickers.
  */
-@Order(47)
+@Order(TestOrder.CC_CHAT_MEDIA)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CcChatMediaTest extends CcBaseTest {
 

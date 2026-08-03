@@ -1,5 +1,7 @@
 package com.zillit.automation.tests;
 
+import com.zillit.automation.core.TestOrder;
+
 import com.zillit.automation.pages.CcChatThreadPage;
 import com.zillit.automation.pages.CcLandingPage;
 import org.junit.jupiter.api.DisplayName;
@@ -23,7 +25,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * The 1-1 thread reuses ChatAndGroupPage (same code as the group thread and Home
  * chat), so send / options / reply / edit / delete mechanics match those suites.
  */
-@Order(44)
+@Order(TestOrder.CC_DIRECT_CHAT)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CcDirectChatTest extends CcBaseTest {
 

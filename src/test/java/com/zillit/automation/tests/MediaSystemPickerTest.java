@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.HomeChatPage;
 import com.zillit.automation.pages.ProjectListPage;
@@ -27,7 +28,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * fixtures (zl_test_doc.pdf → /sdcard/Documents, zl_test_audio.wav →
  * /sdcard/Music) before this suite.
  */
-@Order(25)
+@Order(TestOrder.MEDIA_SYSTEM_PICKER)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class MediaSystemPickerTest extends BaseTest {
 

@@ -1,5 +1,7 @@
 package com.zillit.automation.tests;
 
+import com.zillit.automation.core.TestOrder;
+
 import com.zillit.automation.pages.CcChatThreadPage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
@@ -17,7 +19,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * C&C group chat thread — send text, reply, long-press options, and the call
  * buttons present. Operates on a "QA Cc Grp" test group (created if missing).
  */
-@Order(41)
+@Order(TestOrder.CC_GROUP_CHAT)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CcGroupChatTest extends CcBaseTest {
 

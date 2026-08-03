@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.EmailCalendarPage;
 import com.zillit.automation.pages.EmailPage;
@@ -28,7 +29,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * calendar with its own IDs: load, month navigation, week/month toggle, and the
  * create-event FAB.
  */
-@Order(34)
+@Order(TestOrder.EMAIL_CALENDAR)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class EmailCalendarTest extends BaseTest {
 

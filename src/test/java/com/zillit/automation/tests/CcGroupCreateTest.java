@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.CcCreateGroupPage;
 import com.zillit.automation.pages.CcLandingPage;
@@ -25,7 +26,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * group creation. The created group name is shared (static) so the group-manage
  * suite can act on it.
  */
-@Order(40)
+@Order(TestOrder.CC_GROUP_CREATE)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CcGroupCreateTest extends BaseTest {
 

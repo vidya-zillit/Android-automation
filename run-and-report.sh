@@ -95,7 +95,6 @@ elif [[ "${1:-}" == "--recce-pagination" ]]; then
   #   ZILLIT_RECCE_COUNT=300 ./run-and-report.sh --recce-pagination
   #   ZILLIT_RECCE_SEED=false ./run-and-report.sh --recce-pagination   # verify only
   GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.RecceePaginationTest')
-                --tests 'com.zillit.automation.tests.InfoTest')
 elif [[ "${1:-}" == "--admin-settings" ]]; then
   # SETTINGS → ADMIN SETTINGS — every admin-settings sub-feature test class.
   # Currently just Change Department Listing Order for Crew List; add new
@@ -167,6 +166,40 @@ if ! curl -s -m 4 http://127.0.0.1:4723/status >/dev/null 2>&1; then
   exit 2
 fi
 
+# Preflight: two people add suites on separate branches, so two suites can end up
+# on the same class-level @Order — git merges both without complaining and the run
+# order silently changes. This check is pure source inspection (no device, ~1s), so
+# it catches the clash before we spend an hour running against a device.
+TESTORDER_JAVA="src/test/java/com/zillit/automation/core/TestOrder.java"
+# Suites declare @Order(TestOrder.NAME), so resolve NAME -> value via TestOrder.java.
+ORDER_MAP=$(grep -H "^@Order(TestOrder\." src/test/java/com/zillit/automation/tests/*.java 2>/dev/null \
+  | sed -E 's|.*/([A-Za-z0-9_]+)\.java:@Order\(TestOrder\.([A-Z0-9_]+)\)|\2 \1|' \
+  | while read -r name cls; do
+      val=$(sed -nE "s/.*public static final int[[:space:]]+$name[[:space:]]*=[[:space:]]*([0-9]+)[[:space:]]*;.*/\1/p" "$TESTORDER_JAVA")
+      [[ -n "$val" ]] && echo "$val $cls"
+    done)
+# A raw @Order(123) bypasses TestOrder entirely — that is how duplicates sneak in.
+RAW=$(grep -l "^@Order([0-9]" src/test/java/com/zillit/automation/tests/*.java 2>/dev/null \
+  | xargs -n1 basename 2>/dev/null | sed 's/\.java//')
+if [[ -n "$RAW" ]]; then
+  echo "✗ These suites hardcode @Order instead of using a TestOrder constant:"
+  echo "$RAW" | sed 's/^/    /'
+  echo "  A raw number bypasses TestOrder, so a duplicate merges silently."
+  echo "  Add a constant to $TESTORDER_JAVA (in your module's range) and use it."
+  exit 2
+fi
+DUPES=$(echo "$ORDER_MAP" | awk 'NF{print $1}' | sort -n | uniq -d)
+if [[ -n "$DUPES" ]]; then
+  echo "✗ @Order collision between test classes — their run order is undefined."
+  for n in $DUPES; do
+    echo "    @Order($n) → $(echo "$ORDER_MAP" | awk -v n="$n" '$1==n {printf "%s ", $2}')"
+  done
+  echo "  Fix: pick a free number from YOUR module's reserved range —"
+  echo "    src/test/java/com/zillit/automation/core/TestOrder.java"
+  echo "  (48-69 Vidya / tools · 70-89 Bhavik / admin settings · 90-99 destructive)"
+  exit 2
+fi
+
 UDID="${ZILLIT_UDID:-emulator-5554}"
 
 # Relaunch the app to the foreground (a cold Appium session fails otherwise —
@@ -190,7 +223,7 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     "Calendar::CalendarTest"
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"
-    "Tools::ToolsManagementTest ConfidentialInfoTest InfoTest CateringTest RecceTest"
+    "Tools::ConfidentialInfoTest InfoTest CateringTest RecceTest ToolsManagementTest"
     "Settings / Admin Settings::DepartmentListingOrderTest"
   )
   if [[ "${SKIP_PROJECT_MODULE:-0}" == "1" ]]; then

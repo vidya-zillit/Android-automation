@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.ComposeEmailPage;
 import com.zillit.automation.pages.EmailDetailPage;
@@ -34,7 +35,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *
  * Run: ./run-and-report.sh --email  (or --tests EmailTest)
  */
-@Order(30)
+@Order(TestOrder.EMAIL)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class EmailTest extends BaseTest {
 

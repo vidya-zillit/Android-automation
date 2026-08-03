@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.HomeChatPage;
 import com.zillit.automation.pages.MediaPreviewPage;
@@ -32,7 +33,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * The runner pushes zl_test_image.jpg (Pictures) and zl_test_doc.pdf (Documents)
  * and grants RECORD_AUDIO, so these have content to send.
  */
-@Order(27)
+@Order(TestOrder.ALL_UNITS_MEDIA)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class AllUnitsMediaTest extends BaseTest {
 

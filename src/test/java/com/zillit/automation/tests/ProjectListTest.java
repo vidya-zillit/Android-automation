@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.ProjectListPage;
 import org.junit.jupiter.api.DisplayName;
@@ -21,7 +22,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * state); every case skips with a clear message when the state is missing.
  * Runs after the E2E, on one shared session.
  */
-@Order(10)
+@Order(TestOrder.PROJECT_LIST)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ProjectListTest extends BaseTest {
 

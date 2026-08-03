@@ -1,5 +1,7 @@
 package com.zillit.automation.tests;
 
+import com.zillit.automation.core.TestOrder;
+
 import com.zillit.automation.pages.CateringPage;
 import com.zillit.automation.pages.HomeChatPage;
 import org.junit.jupiter.api.DisplayName;
@@ -23,6 +25,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * opens a usable chat, posting works in every meal, and — most importantly —
  * a message posted in one meal does NOT leak into another.
  */
+@Order(TestOrder.TOOL_CATERING)
 class CateringTest extends ToolChatBaseTest {
 
     private static final String[] MEALS = {"Breakfast", "Lunch", "Dinner"};

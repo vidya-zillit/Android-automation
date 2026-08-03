@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.ProjectListPage;
 import com.zillit.automation.pages.RecceDetailPage;
@@ -30,7 +31,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *
  * Test data uses a "QA Recce" prefix and the delete case cleans up after itself.
  */
-@Order(52)
+@Order(TestOrder.RECCE)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class RecceTest extends BaseTest {
 

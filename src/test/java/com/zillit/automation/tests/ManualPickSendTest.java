@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.core.Config;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.HomeChatPage;
@@ -33,7 +34,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *   ZILLIT_UDID=<serial> ZILLIT_APP_PACKAGE=com.zillit.zillitapp.qa \
  *   ./gradlew test --tests 'com.zillit.automation.tests.ManualPickSendTest'
  */
-@Order(28)
+@Order(TestOrder.MANUAL_PICK_SEND)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ManualPickSendTest extends BaseTest {
 

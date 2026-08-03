@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.ProjectListPage;
 import com.zillit.automation.pages.RecceFormPage;
@@ -43,7 +44,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * <p>Seeding is RESUMABLE: it counts what already exists and only creates the
  * remainder, so an emulator hiccup mid-run doesn't force a restart from zero.
  */
-@Order(53)
+@Order(TestOrder.RECCE_PAGINATION)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class RecceePaginationTest extends BaseTest {
 

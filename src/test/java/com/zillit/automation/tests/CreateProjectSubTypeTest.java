@@ -1,6 +1,7 @@
 package com.zillit.automation.tests;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.core.Messages;
 import com.zillit.automation.pages.StartAndJoinPage;
 import com.zillit.automation.pages.StartProjectPage;
@@ -17,7 +18,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * Create Project — sub-type rules per project type, on one shared screen.
  * Tests are skipped (not failed) when the backend doesn't offer that type.
  */
-@Order(3)
+@Order(TestOrder.PROJECT_SUBTYPE)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CreateProjectSubTypeTest extends BaseTest {
 
