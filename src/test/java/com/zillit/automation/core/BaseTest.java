@@ -46,12 +46,44 @@ public abstract class BaseTest {
     @BeforeAll
     void startSession() {
         driver = DriverFactory.create();
-        appPackage = driver.getCurrentPackage();
+        // The package under test comes from CONFIG, never from whatever happens to be
+        // on screen. Reading getCurrentPackage() here poisons the entire session if the
+        // app is not foreground yet (slow cold start, or the screen dropped to the
+        // launcher while Gradle compiled): appPackage becomes e.g. the launcher, so
+        // every byAppId() builds "<launcher>:id/bottomNavigation" and matches nothing,
+        // AND the settleLanding() self-heal — which only re-activates when the current
+        // package differs from appPackage — concludes it is already in the right app and
+        // never brings it up. The run then fails 90s later with a misleading
+        // "No known landing screen appeared".
+        appPackage = Config.has("zillit.appPackage")
+                ? Config.get("zillit.appPackage")
+                : driver.getCurrentPackage();
+        ensureForeground();
         // Nudge past any leftover editor/gallery/preview screen from a prior run
         // WITHOUT a full relaunch (a relaunch re-hits splash + the app-lock alert
         // + slow API routing, which stalls landing detection). A few back presses
         // unwind stray media screens; harmless on a real landing.
         unwindStrayScreens();
+    }
+
+    /**
+     * Brings the app under test to the foreground before anything else runs.
+     *
+     * <p>A session can legitimately start with the app backgrounded — the runner
+     * relaunches it, then Gradle compiles for minutes and the screen drops to the
+     * launcher. Activating here means the landing search starts from the app rather
+     * than spending its whole timeout looking at someone else's screen.
+     */
+    private void ensureForeground() {
+        for (int i = 0; i < 3; i++) {
+            if (appPackage.equals(safeCurrentPackage())) return;
+            try {
+                driver.executeScript("mobile: activateApp", Map.of("appId", appPackage));
+                Thread.sleep(1500);
+            } catch (WebDriverException | InterruptedException ignored) {
+                return;
+            }
+        }
     }
 
     /** Presses back a few times if the app is on a non-landing (media) screen. */
@@ -181,8 +213,15 @@ public abstract class BaseTest {
                 nextBack = System.currentTimeMillis() + 2500;
             }
         }
+        // Name what was actually on screen — "no landing screen" alone sends you hunting
+        // for a broken locator when the real story is usually "the app was not running".
+        String onScreen = safeCurrentPackage();
         throw new IllegalStateException(
-                "No known landing screen appeared within " + timeoutSeconds + "s");
+                "No known landing screen appeared within " + timeoutSeconds + "s"
+                        + " (app under test: " + appPackage + ", foreground: " + onScreen + ")"
+                        + (appPackage.equals(onScreen) ? ""
+                        : " — the app under test was NOT in the foreground; it may have failed"
+                        + " to launch, crashed, or the device dropped to the launcher."));
     }
 
     protected By byAppId(String id) {

@@ -84,7 +84,8 @@ elif [[ "${1:-}" == "--tools" ]]; then
   GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.ToolsManagementTest'
                 --tests 'com.zillit.automation.tests.ConfidentialInfoTest'
                 --tests 'com.zillit.automation.tests.InfoTest'
-                --tests 'com.zillit.automation.tests.CateringTest')
+                --tests 'com.zillit.automation.tests.CateringTest'
+                --tests 'com.zillit.automation.tests.RecceTest')
 elif [[ "${1:-}" == "--recce" ]]; then
   # RECCE ONLY — the location-scout module: list/search/filters, create form +
   # publish validation, drafts, stops, personnel, location picker, detail, delete.
