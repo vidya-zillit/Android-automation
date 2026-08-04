@@ -101,7 +101,9 @@ public final class TestOrder {
     public static final int CREATE_ADDITIONAL_SHOOTING_UNIT = 74;
     public static final int CREATE_NEW_DEPARTMENT         = 76;
     public static final int CREATE_NEW_DESIGNATION        = 78;
-    // free: 71, 73, 75, 77, 79–89 — next admin-settings suites go here
+    public static final int CREATE_REMOTE_SHOOTING_UNIT   = 80;
+    public static final int CREATE_UPDATE_HOME_UNIT       = 82;
+    // free: 71, 73, 75, 77, 79, 81, 83–89 — next admin-settings suites go here
 
     // 90–99 · destructive / global-state — always last ------------------------
     /** Disables tools and reorders groups — must not run before the tool suites. */
