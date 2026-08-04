@@ -108,4 +108,7 @@ public final class TestOrder {
     // 90–99 · destructive / global-state — always last ------------------------
     /** Disables tools and reorders groups — must not run before the tool suites. */
     public static final int TOOLS_MANAGEMENT    = 90;
+    /** Disables EVERY tool via Admin Settings, then re-enables all — bigger blast radius than TOOLS_MANAGEMENT's single-tool toggle. */
+    public static final int CUSTOMIZATION_OF_TOOLS_ALL = 91;
+    // free: 92–99
 }
