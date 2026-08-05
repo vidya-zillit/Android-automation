@@ -113,7 +113,9 @@ elif [[ "${1:-}" == "--admin-settings" ]]; then
                 --tests 'com.zillit.automation.tests.CreateNewDepartmentTest'
                 --tests 'com.zillit.automation.tests.CreateNewDesignationTest'
                 --tests 'com.zillit.automation.tests.CreateRemoteShootingUnitTest'
-                --tests 'com.zillit.automation.tests.CreateUpdateHomeUnitTest')
+                --tests 'com.zillit.automation.tests.CreateUpdateHomeUnitTest'
+                --tests 'com.zillit.automation.tests.EditProjectNameTest'
+                --tests 'com.zillit.automation.tests.ManageToolGroupsTest')
 elif [[ "${1:-}" == "--manual-media" ]]; then
   # Interactive: YOU pick Video/Location/Contact on the device and reach the
   # send screen; automation sends + verifies. Set ZILLIT_PICK_WAIT for a longer
@@ -251,7 +253,7 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"
     "Tools::ConfidentialInfoTest InfoTest CateringTest RecceTest ToolsManagementTest"
-    "Settings / Admin Settings::DepartmentListingOrderTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest CreateRemoteShootingUnitTest CreateUpdateHomeUnitTest"
+    "Settings / Admin Settings::DepartmentListingOrderTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest CreateRemoteShootingUnitTest CreateUpdateHomeUnitTest EditProjectNameTest ManageToolGroupsTest"
   )
   if [[ "${SKIP_PROJECT_MODULE:-0}" == "1" ]]; then
     MODULES=("${MODULES[@]:1}")  # drop "Project create / join / list"
