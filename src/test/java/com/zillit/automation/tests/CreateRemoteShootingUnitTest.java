@@ -48,6 +48,11 @@ class CreateRemoteShootingUnitTest extends BaseTest {
     // deletion yet, and Test Case 4's search/tapProject would then risk opening the
     // WRONG (stale, already-scheduled-for-deletion) one instead of this run's.
     private String unitName;
+    // The project the unit is created FROM. Captured on the way in, because the
+    // final test case has to come back to it — after scheduling the unit's
+    // deletion the session is sitting inside a workspace that is on its way out,
+    // and every later suite would otherwise run against that instead.
+    private String parentProjectName;
 
     @Override
     protected boolean relaunchBetweenTests() {
@@ -69,6 +74,10 @@ class CreateRemoteShootingUnitTest extends BaseTest {
                 assumeTrue(list.tapProject(names.get(0)), "Could not enter a project");
             }
             assumeTrue(new BottomNavPage(driver).waitUntilLoaded(Duration.ofSeconds(60)), "No project");
+            if (parentProjectName == null || parentProjectName.isBlank()) {
+                parentProjectName = new BottomNavPage(driver).currentProjectName();
+                System.out.println(">>> parent project: " + parentProjectName);
+            }
             insideProject = true;
         }
         CreateRemoteShootingUnitPage page = new CreateRemoteShootingUnitPage(driver);
@@ -216,6 +225,36 @@ class CreateRemoteShootingUnitTest extends BaseTest {
         screenshot("delete-project-scheduled");
 
         assertTrue(page.tapBackButton(), "Back button should be tappable");
+
+        // Get OUT of the unit that was just scheduled for deletion. Ending here
+        // would leave the session inside a doomed workspace, so every suite
+        // ordered after this one (CreateUpdateHomeUnitTest and on) would run
+        // against the wrong project. Toolbar arrow -> Project Listing -> parent.
+        assertTrue(new BottomNavPage(driver).waitUntilLoaded(Duration.ofSeconds(20)),
+                "Back should land on the unit's Bottom Navigation");
+        ProjectListPage projectList = new BottomNavPage(driver).tapChangeProject();
+        assertTrue(projectList.isLoaded(), "Toolbar arrow should open the Project Listing screen");
+        screenshot("delete-project-project-listing");
+
+        assumeTrue(parentProjectName != null && !parentProjectName.isBlank(),
+                "Parent project name was never captured, so there is nothing to return to");
+        projectList.search(parentProjectName);
+        assertTrue(projectList.tapProject(parentProjectName),
+                "Should be able to reopen the parent project " + parentProjectName);
+        assertTrue(new BottomNavPage(driver).waitUntilLoaded(Duration.ofSeconds(30)),
+                parentProjectName + " should finish loading");
+        screenshot("delete-project-back-in-parent");
+
+        // Walk back into Admin Settings in the PARENT project before finishing.
+        // Two reasons: it proves the area is still reachable after switching
+        // workspaces, and it hands the next admin-settings suite (order 82+) a
+        // working screen instead of letting it be the one to discover a stranded
+        // session — which would surface as an unrelated failure over there.
+        assertTrue(page.openSettingsTab(), "Settings tab should be present in " + parentProjectName);
+        assertTrue(page.openAdminSettings(), "Admin Settings should open in " + parentProjectName);
+        assertTrue(new CreateRemoteShootingUnitPage(driver).isOnAdminSettings(Duration.ofSeconds(10)),
+                "Should finish on Admin Settings in " + parentProjectName + ", ready for the next module");
+        screenshot("delete-project-parent-admin-settings");
     }
 
     private void sleep(long ms) {

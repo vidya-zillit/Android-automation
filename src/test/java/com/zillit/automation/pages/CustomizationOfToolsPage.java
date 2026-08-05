@@ -77,9 +77,55 @@ public class CustomizationOfToolsPage extends BasePage {
         }
     }
 
+    /**
+     * True only when the tools screen itself is up.
+     *
+     * <p>Deliberately does NOT look for the text "Customization of tools". The
+     * ADMIN SETTINGS screen carries a row with exactly that label — it is the
+     * entry point to this screen — and {@code textShown()} matches with
+     * textContains, so the old check answered "loaded" while still sitting on
+     * Admin Settings. Callers then hunted for tool rows that were never on
+     * screen, which is what made the re-enable loop fail on its very first tool.
+     *
+     * <p>{@code submitBtn} (Update) exists here and not on Admin Settings, so it
+     * is the honest marker. The row list is waited for separately because it
+     * arrives from an API call a beat after the button renders.
+     */
     public boolean isLoaded() {
-        return textShown("Customization of tools", Duration.ofSeconds(10))
-                || isVisible("submitBtn", Duration.ofSeconds(5));
+        // PRESENCE, not visibility. submitBtn ("Update") sits below the fold on
+        // this scrollable screen, so isVisible() answers "no" for a screen that
+        // is plainly open — which made every case skip and sent the recovery
+        // path backing out to the bottom nav (i.e. the Tools tab) instead of
+        // staying in Admin Settings -> Customization where the flow belongs.
+        long deadline = System.currentTimeMillis() + 15_000;
+        while (System.currentTimeMillis() < deadline) {
+            if (hasUpdateButton() && !toolNames().isEmpty()) {
+                return true;
+            }
+            sleep(300);
+        }
+        return false;
+    }
+
+    /** Update button present in the tree (Admin Settings has no such button). */
+    private boolean hasUpdateButton() {
+        try {
+            return !driver.findElements(byId("submitBtn")).isEmpty();
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    /** Waits until the tool rows have actually populated (they load via an API call). */
+    public boolean waitForToolsLoaded(Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            if (!toolNames().isEmpty()) {
+                return true;
+            }
+            sleep(300);
+        }
+        return false;
     }
 
     /** Tool names currently rendered (viewport only — the list scrolls). */
@@ -105,8 +151,21 @@ public class CustomizationOfToolsPage extends BasePage {
         return List.copyOf(seen);
     }
 
-    /** True if the tool's tick (infoIv) is present — absent entirely when disabled. */
+    /**
+     * True if the tool's tick (infoIv) is present — the icon is absent from the
+     * tree entirely when the tool is disabled.
+     *
+     * <p>Scrolls the row into view FIRST. UiAutomator only exposes on-screen
+     * RecyclerView rows, so a viewport-only query returns "no tick" for every
+     * tool below the fold — i.e. reports enabled tools as disabled. Both toggle
+     * loops branch on this answer, so getting it wrong either skips a tool that
+     * needed disabling or taps an already-enabled one, which opens the confirm
+     * dialog and leaves a modal blocking the next tap.
+     */
     public boolean isToolEnabled(String name) {
+        if (!scrollToTool(name)) {
+            return false;   // genuinely not in the list
+        }
         try {
             return !driver.findElements(AppiumBy.xpath(
                     "//*[contains(@resource-id,'nameTv') and @text=\"" + name
@@ -118,17 +177,40 @@ public class CustomizationOfToolsPage extends BasePage {
 
     /** Taps a tool row by name (scrolls to find it). Enabling applies instantly; disabling opens a confirm dialog. */
     public boolean tapTool(String name) {
-        String sel = "new UiSelector().resourceIdMatches(\".*:id/nameTv\").text(\"" + name + "\")";
+        if (!scrollToTool(name)) {
+            return false;
+        }
+        try {
+            driver.findElement(AppiumBy.androidUIAutomator(toolSelector(name))).click();
+            return true;
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    /** Brings the named row on screen. Cheap no-op when it is already visible. */
+    private boolean scrollToTool(String name) {
+        String sel = toolSelector(name);
+        try {
+            driver.findElement(AppiumBy.androidUIAutomator(sel));
+            return true;                     // already on screen — don't disturb the scroll
+        } catch (WebDriverException notYet) {
+            // fall through and go looking for it
+        }
         scrollToBeginning();
         for (int i = 0; i < 20; i++) {
             try {
-                driver.findElement(AppiumBy.androidUIAutomator(sel)).click();
+                driver.findElement(AppiumBy.androidUIAutomator(sel));
                 return true;
             } catch (WebDriverException notVisible) {
                 swipeUp();
             }
         }
         return false;
+    }
+
+    private String toolSelector(String name) {
+        return "new UiSelector().resourceIdMatches(\".*:id/nameTv\").text(\"" + name + "\")";
     }
 
     public boolean isDisableConfirmDialogOpen(Duration timeout) {
@@ -205,8 +287,12 @@ public class CustomizationOfToolsPage extends BasePage {
                 org.openqa.selenium.interactions.PointerInput.Origin.viewport(), x, yTo));
         seq.addAction(finger.createPointerUp(0));
         driver.perform(java.util.Collections.singletonList(seq));
+        sleep(400);
+    }
+
+    private void sleep(long ms) {
         try {
-            Thread.sleep(400);
+            Thread.sleep(ms);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

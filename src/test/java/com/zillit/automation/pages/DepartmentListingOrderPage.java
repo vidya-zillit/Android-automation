@@ -83,8 +83,26 @@ public class DepartmentListingOrderPage extends BasePage {
      * priority numbers; "position" here just means list order.
      */
     public List<String> referenceDepartmentNames() {
+        // This runs immediately after openCreateNewDepartment(), i.e. straight
+        // after an Activity transition. An instant findElements() can fire
+        // before the RecyclerView has rendered and returns NOTHING — which
+        // shows up downstream as indexOf(name) == -1, i.e. "position 0", and
+        // reads as a reordering bug rather than the timing artefact it is.
+        // Poll until the list has rendered (same guard the row-tap helper below
+        // already uses for exactly this reason).
+        long deadline = System.currentTimeMillis() + 10_000;
+        List<WebElement> rows = driver.findElements(byId("memberNameTv"));
+        while (rows.isEmpty() && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            rows = driver.findElements(byId("memberNameTv"));
+        }
         List<String> out = new ArrayList<>();
-        for (WebElement e : driver.findElements(byId("memberNameTv"))) {
+        for (WebElement e : rows) {
             try {
                 out.add(e.getText());
             } catch (WebDriverException ignored) {
