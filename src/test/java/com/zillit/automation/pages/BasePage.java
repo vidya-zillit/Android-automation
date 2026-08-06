@@ -123,7 +123,8 @@ public abstract class BasePage {
         while (true) {
             try {
                 if (!driver.findElements(byId("adminSettingsRecyclerView")).isEmpty()
-                        && driver.findElements(byId("bottomNavigation")).isEmpty()) {
+                        && driver.findElements(byId("bottomNavigation")).isEmpty()
+                        && "ADMIN SETTINGS".equalsIgnoreCase(headerTextOrEmpty())) {
                     return true;
                 }
             } catch (WebDriverException ignored) {
@@ -159,6 +160,27 @@ public abstract class BasePage {
                 return false;
             }
             pause(200);
+        }
+    }
+
+    /**
+     * The screen's header, or "" when it has none.
+     *
+     * <p>Needed because {@code adminSettingsRecyclerView} is NOT unique to Admin
+     * Settings — the USER MANAGEMENT screen reuses the same id and also has no
+     * bottom nav, so without the header those two screens are indistinguishable
+     * and a caller standing in User Management is told it is on Admin Settings.
+     */
+    private String headerTextOrEmpty() {
+        try {
+            var found = driver.findElements(byId("headerText"));
+            if (found.isEmpty()) {
+                return "";
+            }
+            String t = found.get(0).getText();
+            return t == null ? "" : t.trim();
+        } catch (WebDriverException e) {
+            return "";
         }
     }
 

@@ -104,7 +104,23 @@ public final class TestOrder {
     public static final int CREATE_REMOTE_SHOOTING_UNIT   = 80;
     public static final int CREATE_UPDATE_HOME_UNIT       = 82;
     public static final int EDIT_PROJECT_NAME             = 84;
+    /**
+     * Uploads a watermark from the camera and from the gallery, deleting it in
+     * between. Self-normalising — it clears any watermark left by a previous run
+     * before asserting the empty state — and no other suite reads the watermark.
+     */
+    public static final int WATERMARK_LOGO                = 83;
     public static final int MANAGE_TOOL_GROUPS            = 86;
+    /**
+     * Changes a user's department/designation, grants Admin Access, and toggles
+     * their Status off and back on.
+     *
+     * <p>Sits before the suites that read C&amp;C → Contacts. It restores Status
+     * itself, so by the time APPROVE_NEW_USER_REQUEST inspects Contacts the user
+     * is visible again — and that suite checks a different user in any case. The
+     * department and Admin Access changes persist, but nothing else reads them.
+     */
+    public static final int USER_MANAGEMENT               = 85;
     /**
      * Adds an SOS receiver, edits, deletes and re-adds it. Self-restoring, and it
      * touches no other suite's data, so its slot here is not load-bearing.
@@ -117,12 +133,19 @@ public final class TestOrder {
      * because both consume the project's pending-request queue.
      */
     public static final int APPROVE_NEW_USER_REQUEST      = 89;
-    // free: 71, 73, 75, 77, 79, 81, 83, 85 — next admin-settings suites go here
+    // free: 71, 73, 75, 77, 79, 81 — next admin-settings suites go here
 
     // 90–99 · destructive / global-state — always last ------------------------
     /** Disables tools and reorders groups — must not run before the tool suites. */
     public static final int TOOLS_MANAGEMENT    = 90;
     /** Disables EVERY tool via Admin Settings, then re-enables all — bigger blast radius than TOOLS_MANAGEMENT's single-tool toggle. */
     public static final int CUSTOMIZATION_OF_TOOLS_ALL = 91;
-    // free: 92–99
+    /**
+     * Schedules the project for real deletion and LEAVES IT SCHEDULED — the
+     * specified flow ends after confirming the countdown. Last of everything by
+     * design: any suite running after it would work against a project that is
+     * counting down to destruction.
+     */
+    public static final int DELETE_PROJECT      = 99;
+    // free: 92–98
 }

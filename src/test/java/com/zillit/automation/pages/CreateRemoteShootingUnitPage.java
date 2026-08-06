@@ -56,6 +56,60 @@ public class CreateRemoteShootingUnitPage extends BasePage {
         return tapListRow("Admin Settings");
     }
 
+    /**
+     * Gets to ADMIN SETTINGS from wherever the app is, and confirms it arrived.
+     *
+     * <p>Replaces a pair of blind calls — {@code openSettingsTab()} then
+     * {@code openAdminSettings()} — that assumed the app was already on the
+     * bottom nav. Starting from the SETTINGS TAB, tapping "Settings" again does
+     * not renavigate, and a row tap that missed left the flow stranded; because
+     * the callers guarded those calls with assumptions, the case then SKIPPED
+     * instead of failing, so it looked like nothing had gone wrong.
+     *
+     * <p>Each pass re-reads the current screen and takes one step, so a tap that
+     * does not land is simply retried.
+     */
+    public boolean ensureOnAdminSettings(Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            if (isOnAdminSettings(Duration.ofMillis(800))) {
+                return true;
+            }
+            if (onSettingsTabScreen(Duration.ofMillis(500))) {
+                openAdminSettings();
+                sleep(1500);
+                continue;
+            }
+            if (hasBottomNav()) {
+                openSettingsTab();
+                sleep(1500);
+                continue;
+            }
+            try {
+                driver.navigate().back();
+            } catch (WebDriverException ignored) {
+            }
+            sleep(900);
+        }
+        return false;
+    }
+
+    private boolean hasBottomNav() {
+        try {
+            return !driver.findElements(byId("bottomNavigation")).isEmpty();
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    private void sleep(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     public boolean openCreateRemoteShootingUnits() {
         return tapListRow("Create Remote Shooting Units");
     }

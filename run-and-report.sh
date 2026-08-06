@@ -116,9 +116,12 @@ elif [[ "${1:-}" == "--admin-settings" ]]; then
                 --tests 'com.zillit.automation.tests.CreateUpdateHomeUnitTest'
                 --tests 'com.zillit.automation.tests.EditProjectNameTest'
                 --tests 'com.zillit.automation.tests.ManageToolGroupsTest'
+                --tests 'com.zillit.automation.tests.WatermarkLogoTest'
+                --tests 'com.zillit.automation.tests.UserManagementTest'
                 --tests 'com.zillit.automation.tests.SosReceiversTest'
                 --tests 'com.zillit.automation.tests.PreApprovedUsersTest'
-                --tests 'com.zillit.automation.tests.ApproveNewUserRequestTest')
+                --tests 'com.zillit.automation.tests.ApproveNewUserRequestTest'
+                --tests 'com.zillit.automation.tests.DeleteProjectTest')
 elif [[ "${1:-}" == "--manual-media" ]]; then
   # Interactive: YOU pick Video/Location/Contact on the device and reach the
   # send screen; automation sends + verifies. Set ZILLIT_PICK_WAIT for a longer
@@ -256,7 +259,7 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"
     "Tools::ConfidentialInfoTest InfoTest CateringTest RecceTest ToolsManagementTest"
-    "Settings / Admin Settings::DepartmentListingOrderTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest CreateRemoteShootingUnitTest CreateUpdateHomeUnitTest EditProjectNameTest ManageToolGroupsTest SosReceiversTest PreApprovedUsersTest ApproveNewUserRequestTest"
+    "Settings / Admin Settings::DepartmentListingOrderTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest CreateRemoteShootingUnitTest CreateUpdateHomeUnitTest EditProjectNameTest WatermarkLogoTest ManageToolGroupsTest UserManagementTest SosReceiversTest PreApprovedUsersTest ApproveNewUserRequestTest DeleteProjectTest"
   )
   if [[ "${SKIP_PROJECT_MODULE:-0}" == "1" ]]; then
     MODULES=("${MODULES[@]:1}")  # drop "Project create / join / list"

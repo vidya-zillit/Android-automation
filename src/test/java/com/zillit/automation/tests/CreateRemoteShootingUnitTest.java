@@ -92,8 +92,10 @@ class CreateRemoteShootingUnitTest extends BaseTest {
             }
             sleep(500);
         }
-        assumeTrue(page.openSettingsTab(), "Settings tab not present");
-        assumeTrue(page.openAdminSettings(), "Admin Settings not present");
+        // One retrying hop instead of two blind taps: from the Settings tab the
+        // old pair could miss and, being assumptions, SKIP the case silently.
+        assumeTrue(page.ensureOnAdminSettings(Duration.ofSeconds(60)),
+                "Could not reach Settings -> Admin Settings");
         assumeTrue(page.openCreateRemoteShootingUnits(), "Create Remote Shooting Units not present");
         assumeTrue(page.isLoaded(), "Create Remote Shooting Units screen did not open");
         return page;
@@ -195,8 +197,8 @@ class CreateRemoteShootingUnitTest extends BaseTest {
     @DisplayName("Test Case 5: Delete Project dialog shows all options and Cancel dismisses it")
     void deleteProjectDialogCancel() {
         DeleteProjectPage page = new DeleteProjectPage(driver);
-        assertTrue(page.openSettingsTab(), "Settings tab not present");
-        assertTrue(page.openAdminSettings(), "Admin Settings not present");
+        assertTrue(page.ensureOnAdminSettings(Duration.ofSeconds(60)),
+                "Could not reach Settings -> Admin Settings");
 
         assertTrue(page.tapDeleteProject(), "Delete Project row should be tappable");
         assertTrue(page.isConfirmDialogOpen(Duration.ofSeconds(10)), "Delete confirmation dialog should be open");
@@ -238,9 +240,15 @@ class CreateRemoteShootingUnitTest extends BaseTest {
 
         assumeTrue(parentProjectName != null && !parentProjectName.isBlank(),
                 "Parent project name was never captured, so there is nothing to return to");
+
+        // Search, then match the name EXACTLY. The remote unit just created carries
+        // a name containing the parent's, so both survive the filter — and
+        // tapProject() takes the first "contains" hit, which opened the unit again
+        // instead of the parent, leaving every later suite in the wrong workspace.
         projectList.search(parentProjectName);
-        assertTrue(projectList.tapProject(parentProjectName),
-                "Should be able to reopen the parent project " + parentProjectName);
+        assertTrue(projectList.tapProjectExact(parentProjectName),
+                "Should be able to reopen the parent project " + parentProjectName
+                        + "; search listed " + projectList.listedProjectNames());
         assertTrue(new BottomNavPage(driver).waitUntilLoaded(Duration.ofSeconds(30)),
                 parentProjectName + " should finish loading");
         screenshot("delete-project-back-in-parent");
@@ -250,9 +258,7 @@ class CreateRemoteShootingUnitTest extends BaseTest {
         // workspaces, and it hands the next admin-settings suite (order 82+) a
         // working screen instead of letting it be the one to discover a stranded
         // session — which would surface as an unrelated failure over there.
-        assertTrue(page.openSettingsTab(), "Settings tab should be present in " + parentProjectName);
-        assertTrue(page.openAdminSettings(), "Admin Settings should open in " + parentProjectName);
-        assertTrue(new CreateRemoteShootingUnitPage(driver).isOnAdminSettings(Duration.ofSeconds(10)),
+        assertTrue(page.ensureOnAdminSettings(Duration.ofSeconds(60)),
                 "Should finish on Admin Settings in " + parentProjectName + ", ready for the next module");
         screenshot("delete-project-parent-admin-settings");
     }
