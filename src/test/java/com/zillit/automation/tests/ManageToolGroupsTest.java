@@ -95,6 +95,19 @@ class ManageToolGroupsTest extends BaseTest {
             assumeTrue(page.isLoaded(), "Manage Tool Groups screen did not open");
             return page;
         }
+
+        // On the SETTINGS TAB: open Admin Settings first, then the screen. Without
+        // this the caller falls through to the unwind below, which tries to back out
+        // to the bottom nav — but we are ALREADY on it, so the loop exits at once and
+        // the recovery never really happens.
+        if (page.isOnSettingsTab(Duration.ofSeconds(2))) {
+            assumeTrue(page.openAdminSettings(), "Admin Settings row not present on the Settings tab");
+            assumeTrue(page.isOnAdminSettings(Duration.ofSeconds(10)), "Admin Settings did not open");
+            assumeTrue(page.openManageToolGroups(), "Manage Tool Groups row not present");
+            assumeTrue(page.isLoaded(), "Manage Tool Groups screen did not open");
+            return page;
+        }
+
         // Recover: back out until Bottom Nav is visible again, then re-navigate.
         for (int i = 0; i < 8 && !new BottomNavPage(driver).waitUntilLoaded(Duration.ofSeconds(1)); i++) {
             try {

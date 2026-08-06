@@ -118,6 +118,18 @@ public class DepartmentListingOrderPage extends BasePage {
      * screen's RecyclerView has finished rendering.
      */
     private boolean tapListRow(String label) {
+        // Bring the row on screen FIRST. Admin Settings is a long list and it keeps
+        // its scroll position, so after opening "Create New Department" (6th row)
+        // and coming back, "Change Department Listing Order for Crew List" (3rd row)
+        // has scrolled off the top. Without this the lookup below simply times out
+        // and the flow stops on Admin Settings having never reopened the screen.
+        try {
+            driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiScrollable(new UiSelector().scrollable(true))"
+                            + ".scrollIntoView(new UiSelector().textContains(\"" + label + "\"))"));
+        } catch (WebDriverException notScrollable) {
+            // Short list, or already visible — the lookup below decides.
+        }
         try {
             new WebDriverWait(driver, Duration.ofSeconds(10))
                     .until(ExpectedConditions.elementToBeClickable(AppiumBy.xpath(
@@ -204,7 +216,7 @@ public class DepartmentListingOrderPage extends BasePage {
 
     /** True once Save has redirected back to the Admin Settings list. */
     public boolean isOnAdminSettings(Duration timeout) {
-        return textShown("ADMIN SETTINGS", timeout);
+        return onAdminSettingsScreen(timeout);
     }
 
     public boolean tapReset() {

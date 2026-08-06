@@ -105,7 +105,8 @@ public final class TestOrder {
     public static final int CREATE_UPDATE_HOME_UNIT       = 82;
     public static final int EDIT_PROJECT_NAME             = 84;
     public static final int MANAGE_TOOL_GROUPS            = 86;
-    // free: 71, 73, 75, 77, 79, 81, 83, 85, 87–89 — next admin-settings suites go here
+    public static final int PRE_APPROVED_USERS            = 88;
+    // free: 71, 73, 75, 77, 79, 81, 83, 85, 87, 89 — next admin-settings suites go here
 
     // 90–99 · destructive / global-state — always last ------------------------
     /** Disables tools and reorders groups — must not run before the tool suites. */

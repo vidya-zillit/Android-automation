@@ -91,6 +91,19 @@ class CustomizationOfToolsTest extends BaseTest {
         if (page.isLoaded()) {
             return page;
         }
+
+        // On the SETTINGS TAB: open Admin Settings first, then the screen. Without
+        // this the caller falls through to the unwind below, which tries to back out
+        // to the bottom nav — but we are ALREADY on it, so the loop exits at once and
+        // the recovery never really happens.
+        if (page.isOnSettingsTab(Duration.ofSeconds(2))) {
+            assumeTrue(page.openAdminSettings(), "Admin Settings row not present on the Settings tab");
+            assumeTrue(page.isOnAdminSettings(Duration.ofSeconds(10)), "Admin Settings did not open");
+            assumeTrue(page.openCustomizationOfTools(), "Customization of tools row not present");
+            assumeTrue(page.isLoaded(), "Customization of tools screen did not open");
+            return page;
+        }
+
         for (int i = 0; i < 6 && !new BottomNavPage(driver).waitUntilLoaded(Duration.ofSeconds(1)); i++) {
             try {
                 driver.navigate().back();

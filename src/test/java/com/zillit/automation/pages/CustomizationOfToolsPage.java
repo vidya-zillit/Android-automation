@@ -65,6 +65,17 @@ public class CustomizationOfToolsPage extends BasePage {
     }
 
     private boolean tapListRow(String label) {
+        // Bring the row on screen FIRST. Admin Settings is a long list and it keeps
+        // its scroll position, so after visiting another screen and coming back a
+        // row can sit off-screen — an unscrolled lookup then just times out and the
+        // flow stops without ever opening the screen it was asked for.
+        try {
+            driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiScrollable(new UiSelector().scrollable(true))"
+                            + ".scrollIntoView(new UiSelector().textContains(\"" + label + "\"))"));
+        } catch (WebDriverException notScrollable) {
+            // Short list, or already visible - the lookup below decides.
+        }
         try {
             new WebDriverWait(driver, Duration.ofSeconds(10))
                     .until(ExpectedConditions.elementToBeClickable(AppiumBy.xpath(
@@ -252,8 +263,22 @@ public class CustomizationOfToolsPage extends BasePage {
     }
 
     public boolean isOnAdminSettings(Duration timeout) {
-        return textShown("ADMIN SETTINGS", timeout);
+        return onAdminSettingsScreen(timeout);
     }
+
+    /**
+     * True when the SETTINGS TAB is showing — the bottom-nav screen whose list
+     * carries the "Admin Settings" row.
+     *
+     * <p>Mutually exclusive with {@link #isOnAdminSettings}: this screen has the
+     * bottom nav, that one does not. Without separating the two, a caller sitting
+     * on the Settings tab looks like it is somewhere unknown and gets sent through
+     * a full unwind instead of simply opening Admin Settings.
+     */
+    public boolean isOnSettingsTab(Duration timeout) {
+        return onSettingsTabScreen(timeout);
+    }
+
 
     public boolean tapBackButton() {
         try {

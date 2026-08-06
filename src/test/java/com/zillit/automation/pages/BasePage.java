@@ -102,4 +102,76 @@ public abstract class BasePage {
     public boolean textShown(String text) {
         return textShown(text, Duration.ofSeconds(10));
     }
+
+    /**
+     * True only when the ADMIN SETTINGS screen itself is up.
+     *
+     * <p>Do NOT implement this as {@code textShown("ADMIN SETTINGS")}.
+     * {@code UiSelector.textContains()} is case-INSENSITIVE, so that check also
+     * matches the Settings tab's row labelled "Admin Settings" — verified on
+     * device, where it returned the {@code nameTv} whose text is "Admin
+     * Settings". Every page object carried that version, so a caller standing on
+     * the Settings tab was told it had already arrived, skipped tapping the row,
+     * and then hunted for Admin Settings entries that were never on screen.
+     *
+     * <p>The two screens are separated on structure instead:
+     * {@code adminSettingsRecyclerView} exists only here, and the bottom nav is
+     * absent here but always present on the Settings tab.
+     */
+    protected boolean onAdminSettingsScreen(Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (true) {
+            try {
+                if (!driver.findElements(byId("adminSettingsRecyclerView")).isEmpty()
+                        && driver.findElements(byId("bottomNavigation")).isEmpty()) {
+                    return true;
+                }
+            } catch (WebDriverException ignored) {
+                // Tree in flux mid-transition — retry until the budget runs out.
+            }
+            if (System.currentTimeMillis() >= deadline) {
+                return false;
+            }
+            pause(200);
+        }
+    }
+
+    /**
+     * True when the SETTINGS TAB is up — the bottom-nav screen carrying the
+     * "Admin Settings" row. Mutually exclusive with
+     * {@link #onAdminSettingsScreen} by construction: this one requires the
+     * bottom nav, that one requires its absence.
+     */
+    protected boolean onSettingsTabScreen(Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (true) {
+            try {
+                boolean bottomNav = !driver.findElements(byId("bottomNavigation")).isEmpty();
+                boolean adminRow = !driver.findElements(AppiumBy.androidUIAutomator(
+                        "new UiSelector().resourceIdMatches(\".*:id/nameTv\")"
+                                + ".textMatches(\"(?i)Admin Settings\")")).isEmpty();
+                if (bottomNav && adminRow) {
+                    return true;
+                }
+            } catch (WebDriverException ignored) {
+            }
+            if (System.currentTimeMillis() >= deadline) {
+                return false;
+            }
+            pause(200);
+        }
+    }
+
+    /**
+     * Private on purpose: JoinUserDetailPage and StartProjectPage already declare
+     * their own private pause(long), and a protected one here would clash with
+     * both as a weaker-access override.
+     */
+    private void pause(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
 }

@@ -543,8 +543,22 @@ public class ManageToolGroupsPage extends BasePage {
     }
 
     public boolean isOnAdminSettings(Duration timeout) {
-        return textShown("ADMIN SETTINGS", timeout);
+        return onAdminSettingsScreen(timeout);
     }
+
+    /**
+     * True when the SETTINGS TAB is showing — the bottom-nav screen whose list
+     * carries the "Admin Settings" row.
+     *
+     * <p>Mutually exclusive with {@link #isOnAdminSettings}: this screen has the
+     * bottom nav, that one does not. Without separating the two, a caller sitting
+     * on the Settings tab looks like it is somewhere unknown and gets sent through
+     * a full unwind instead of simply opening Admin Settings.
+     */
+    public boolean isOnSettingsTab(Duration timeout) {
+        return onSettingsTabScreen(timeout);
+    }
+
 
     // ---------------- scrolling ----------------
 
