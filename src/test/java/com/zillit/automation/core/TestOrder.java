@@ -105,8 +105,19 @@ public final class TestOrder {
     public static final int CREATE_UPDATE_HOME_UNIT       = 82;
     public static final int EDIT_PROJECT_NAME             = 84;
     public static final int MANAGE_TOOL_GROUPS            = 86;
+    /**
+     * Adds an SOS receiver, edits, deletes and re-adds it. Self-restoring, and it
+     * touches no other suite's data, so its slot here is not load-bearing.
+     */
+    public static final int SOS_RECEIVERS                 = 87;
     public static final int PRE_APPROVED_USERS            = 88;
-    // free: 71, 73, 75, 77, 79, 81, 83, 85, 87, 89 — next admin-settings suites go here
+    /**
+     * Approves one pending join request and declines another, then checks the
+     * approved user reached C&amp;C → Contacts. Runs after PRE_APPROVED_USERS
+     * because both consume the project's pending-request queue.
+     */
+    public static final int APPROVE_NEW_USER_REQUEST      = 89;
+    // free: 71, 73, 75, 77, 79, 81, 83, 85 — next admin-settings suites go here
 
     // 90–99 · destructive / global-state — always last ------------------------
     /** Disables tools and reorders groups — must not run before the tool suites. */
