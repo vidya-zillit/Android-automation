@@ -88,12 +88,39 @@ public final class TestOrder {
     public static final int TOOL_CONFIDENTIAL   = 48;
     public static final int TOOL_INFO           = 49;
     public static final int TOOL_CATERING       = 51;
-    // free: 50, 52–59
+
+    // Drive OVERFLOW — 62–69 (Drive's own range) is full, and renumbering an existing
+    // suite to make room is exactly what this file forbids. These four claim the next
+    // free slots instead. They are independent of the 62–69 suites (each seeds and
+    // cleans up its own folder / file / comments), so running earlier is harmless.
+    public static final int DRIVE_COMMENTS      = 52;
+    public static final int DRIVE_REQUESTS      = 53;
+    public static final int DRIVE_ACTIVITY      = 54;
+    public static final int DRIVE_SETTINGS      = 55;
+    /** Two devices — isolates the folder-sharing failure (plan §2.1). */
+    public static final int DRIVE_FOLDER_SHARE  = 56;
+    /** Experiment harness for the editor cell-write failure (plan §2.2), not coverage. */
+    public static final int DRIVE_EDITOR_PROBE  = 57;
+    // free: 50, 58–59
 
     // 60–69 · tools — standalone modules · VIDYA ------------------------------
     public static final int RECCE               = 60;
     public static final int RECCE_PAGINATION    = 61;
-    // free: 62–69
+    public static final int DRIVE               = 62;
+    public static final int DRIVE_UPLOAD        = 63;
+    public static final int DRIVE_SHARE         = 64;
+    /** Recipient side — runs on the SECOND device, after DRIVE_SHARE has granted access. */
+    public static final int DRIVE_SHARED_WITH_ME = 65;
+    public static final int DRIVE_EDITOR        = 66;
+    public static final int DRIVE_VIEW          = 67;
+    /** Two devices editing one document — needs a SECOND device. */
+    public static final int DRIVE_COLLAB        = 68;
+    public static final int DRIVE_ORGANISE      = 69;
+    // 62–69 full — Drive's symmetric two-device journey continues the tools range.
+
+    // 80–89 · cross-cutting / two-device ---------------------------------------
+    /** Both devices upload, share, receive and edit — the full symmetric loop. */
+    public static final int DRIVE_E2E           = 80;
 
     // 70–89 · ADMIN SETTINGS · BHAVIK -----------------------------------------
     public static final int DEPARTMENT_LISTING_ORDER      = 70;

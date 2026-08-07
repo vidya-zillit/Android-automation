@@ -15,6 +15,15 @@ public final class DriverFactory {
     private DriverFactory() {
     }
 
+    /** Seconds a session may sit idle before Appium reaps it. */
+    private static long newCommandTimeoutSeconds() {
+        String v = Config.get("zillit.newCommandTimeout");
+        if (v != null && !v.isBlank()) {
+            try { return Long.parseLong(v.trim()); } catch (NumberFormatException ignored) { }
+        }
+        return 900;   // 15 min — covers a long stretch of work on the OTHER device
+    }
+
     public static AndroidDriver create() {
         return create(Config.has("zillit.udid") ? Config.get("zillit.udid") : null, 0);
     }
@@ -35,8 +44,26 @@ public final class DriverFactory {
 
         UiAutomator2Options options = new UiAutomator2Options()
                 .setDeviceName(Config.get("zillit.deviceName"))
-                .setNewCommandTimeout(Duration.ofSeconds(120))
-                .setAdbExecTimeout(Duration.ofSeconds(60))
+                // Appium kills a session that receives no commands for this long. In a
+                // TWO-DEVICE suite one driver is always idle while the test drives the
+                // other, and those stretches are long (an editor load alone allows 150s)
+                // — at 120s session A died mid-run and every later case failed with
+                // NoSuchSessionException. Generous by default; override with
+                // zillit.newCommandTimeout / ZILLIT_NEW_COMMAND_TIMEOUT.
+                .setNewCommandTimeout(Duration.ofSeconds(newCommandTimeoutSeconds()))
+                // 120s, not 60: on the Pixel over USB an adb call late in a long
+                // two-device run has timed out and taken the UiAutomator2 instrumentation
+                // with it — "instrumentation process is not running (probably crashed)",
+                // after which every later command on that device fails.
+                .setAdbExecTimeout(Duration.ofSeconds(120))
+                // Same story for the server's own launch/read: the defaults are tuned for
+                // a fresh, idle device, and this suite asks for the opposite.
+                .setUiautomator2ServerLaunchTimeout(Duration.ofSeconds(120))
+                .setUiautomator2ServerInstallTimeout(Duration.ofSeconds(120))
+                .setUiautomator2ServerReadTimeout(Duration.ofSeconds(300))
+                // Animations add nothing here and cost stability: a gesture that lands
+                // mid-transition is the single most common "the tap was swallowed".
+                .setDisableWindowAnimation(true)
                 .setAutoGrantPermissions(true)
                 .setNoReset(noReset);
 

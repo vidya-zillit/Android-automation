@@ -90,6 +90,99 @@ elif [[ "${1:-}" == "--recce" ]]; then
   # RECCE ONLY — the location-scout module: list/search/filters, create form +
   # publish validation, drafts, stops, personnel, location picker, detail, delete.
   GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.RecceTest')
+elif [[ "${1:-}" == "--drive" ]]; then
+  # DRIVE ONLY — Tools → ADMIN → Drive: home shell (tabs/chips/select/drawer),
+  # create-folder validation + access control, folder navigation and cleanup.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveTest')
+elif [[ "${1:-}" == "--drive-e2e" ]]; then
+  # SYMMETRIC TWO-DEVICE JOURNEY — A uploads/shares → B receives and verifies rights →
+  # B uploads INTO A's folder → B shares back → A receives → both edit → both edits
+  # survive → A revokes and it disappears from B.
+  #   ZILLIT_SENDER_UDID=<A> ZILLIT_RECEIVER_UDID=<B> ./run-and-report.sh --drive-e2e
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveTwoDeviceE2ETest')
+elif [[ "${1:-}" == "--drive-two-device" ]]; then
+  # FULL TWO-DEVICE DRIVE SWEEP — the owner suites on device A, then the recipient
+  # suites on device B, then collaborative editing across both. Each phase is its own
+  # Gradle run against its own device, so a failure on one side cannot mask the other.
+  #
+  #   ZILLIT_SENDER_UDID=emulator-5554 ZILLIT_RECEIVER_UDID=<serial> \
+  #     ./run-and-report.sh --drive-two-device
+  #
+  # Both devices must be in the SAME project as DIFFERENT users, and the shared file
+  # must already be granted to device B's user (the owner phase does this).
+  DRIVE_TWO_DEVICE=1
+elif [[ "${1:-}" == "--drive-collab" ]]; then
+  # COLLABORATIVE EDITING — the SAME document open on TWO devices as two users.
+  # Proves live sync and that concurrent edits to different cells both survive.
+  #   ZILLIT_SENDER_UDID=<devA> ZILLIT_RECEIVER_UDID=<devB> ./run-and-report.sh --drive-collab
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveCollabEditTest')
+elif [[ "${1:-}" == "--drive-editor" ]]; then
+  # DOCUMENT EDITING — the Collabora editor: the Edit gate (editable type + canEdit +
+  # posting access), read-only vs edit mode, the full toolbar, and Leave confirmation.
+  # Needs the editable fixtures (zl_drive_book.xlsx) pushed by prep_device.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveEditorTest')
+elif [[ "${1:-}" == "--drive-organise" ]]; then
+  # ORGANISING — move an item into a folder, bulk select + bulk delete, and the Trash
+  # lifecycle. The destructive operations, each verified by where the item ENDS UP.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveOrganiseTest')
+elif [[ "${1:-}" == "--drive-view" ]]; then
+  # VIEW CONTROLS — list/grid toggle, favourites-only, sort, tag filter, kind tabs,
+  # and the Search screen with its type chips.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveViewTest')
+elif [[ "${1:-}" == "--drive-upload" ]]; then
+  # DRIVE UPLOADS — file to root, file INSIDE a folder, whole-folder upload, staging
+  # options, cancel, and the offline/retry path.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveUploadTest')
+elif [[ "${1:-}" == "--drive-share" ]]; then
+  # DRIVE SHARING (OWNER side) — grant a project user View/Edit/Download, share a
+  # folder, and the share-by-link flow. Set ZILLIT_SHARE_USER to the other user.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveShareTest')
+elif [[ "${1:-}" == "--drive-shared" ]]; then
+  # DRIVE SHARING (RECIPIENT side) — run on the SECOND device, signed in as the user
+  # --drive-share shared with. Proves the share actually arrived and that the
+  # recipient's rights are enforced.
+  #   ZILLIT_UDID=<second-device> ./run-and-report.sh --drive-shared
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveSharedWithMeTest')
+elif [[ "${1:-}" == "--drive-comments" ]]; then
+  # COMMENTS (area P) — the comments block on a file's detail screen and the full
+  # "View all N comments" screen: post, edit, delete, empty-comment guard.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveCommentsTest')
+elif [[ "${1:-}" == "--drive-requests" ]]; then
+  # FILE REQUESTS (area S) — the folder-scoped "Request Files" sheet (form, validation,
+  # recipient chips, created link, copy) and "View File Requests" (list + revoke).
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveRequestFilesTest')
+elif [[ "${1:-}" == "--drive-activity" ]]; then
+  # ACTIVITY LOG (area M) — drawer → Activity: the log opens, a create is recorded,
+  # swipe-refresh reloads it.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveActivityTest')
+elif [[ "${1:-}" == "--drive-settings" ]]; then
+  # SETTINGS / "More" (area N) — mostly a GUARD: the screen is built but nothing
+  # navigates to it in this build, so the suite asserts it is still unreachable and
+  # covers Trash/Activity via the drawer entry points that do ship.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveSettingsTest')
+elif [[ "${1:-}" == "--drive-editor-probe" ]]; then
+  # EXPERIMENT HARNESS (plan §2.2), not coverage — writes a marker to a cell with each
+  # candidate strategy and reports which ones survive a write → move away → return read.
+  # Needs Appium with --relaxed-security.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveEditorWriteProbeTest')
+elif [[ "${1:-}" == "--drive-folder-share" ]]; then
+  # FOLDER SHARING, isolated (plan §2.1) — splits "A shares a folder with B" into its two
+  # links: did the grant SAVE (re-read on the owner's own Share screen), and did it REACH
+  # the recipient. Reports what the recipient can see when it does not arrive.
+  #   ZILLIT_SENDER_UDID=<A> ZILLIT_RECEIVER_UDID=<B> ./run-and-report.sh --drive-folder-share
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveFolderShareTest')
+elif [[ "${1:-}" == "--drive-all" ]]; then
+  # Every OWNER-side Drive suite in order (recipient side needs the 2nd device).
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveTest'
+                --tests 'com.zillit.automation.tests.DriveUploadTest'
+                --tests 'com.zillit.automation.tests.DriveShareTest'
+                --tests 'com.zillit.automation.tests.DriveEditorTest'
+                --tests 'com.zillit.automation.tests.DriveViewTest'
+                --tests 'com.zillit.automation.tests.DriveOrganiseTest'
+                --tests 'com.zillit.automation.tests.DriveCommentsTest'
+                --tests 'com.zillit.automation.tests.DriveRequestFilesTest'
+                --tests 'com.zillit.automation.tests.DriveActivityTest'
+                --tests 'com.zillit.automation.tests.DriveSettingsTest')
 elif [[ "${1:-}" == "--recce-pagination" ]]; then
   # PAGINATION stress: seed N recces (ZILLIT_RECCE_COUNT, default 120) then verify
   # every one is reachable by scrolling. Black-box — needs only the APK.
@@ -125,6 +218,20 @@ elif [[ "${1:-}" == "--all-in-project" ]]; then
   # each isolated, one combined report. Needs an already logged-in project.
   RUN_ALL=1
   SKIP_PROJECT_MODULE=1
+elif [[ "${1:-}" == -* ]]; then
+  # An unrecognised flag used to fall through to "no --tests filter", which runs EVERY
+  # suite in the project — a single typo ('--drive-editor-probe' before it existed)
+  # started a multi-hour sweep of an unrelated module. Fail loudly instead.
+  echo "✗ Unknown option: $1"
+  echo "  Available: --no-e2e --flow --sweep --home --calendar --chat --email --cc --tools"
+  echo "             --recce --recce-pagination --drive --drive-upload --drive-share"
+  echo "             --drive-shared --drive-editor --drive-editor-probe --drive-view"
+  echo "             --drive-organise --drive-comments --drive-requests --drive-activity"
+  echo "             --drive-settings --drive-folder-share --drive-collab --drive-e2e"
+  echo "             --drive-two-device --drive-all --admin-settings --manual-media"
+  echo "             --two-device --all --all-in-project"
+  echo "  (no option at all = the full suite, including the manual-OTP E2E)"
+  exit 2
 fi
 
 # Push test media + pre-grant permissions to the target device(s) so media-send
@@ -143,6 +250,18 @@ prep_device() {  # $1 = adb device serial (may be empty for the only device)
   done
   [[ -f "$FX/zl_test_doc.pdf" ]] && $ADB $flag push "$FX/zl_test_doc.pdf" /sdcard/Documents/zl_test_doc.pdf >/dev/null 2>&1
   [[ -f "$FX/zl_test_audio.wav" ]] && $ADB $flag push "$FX/zl_test_audio.wav" /sdcard/Music/zl_test_audio.wav >/dev/null 2>&1
+  # Drive upload fixtures: a single file, plus a TREE for the whole-folder upload.
+  [[ -f "$FX/zl_test_doc.pdf" ]] && $ADB $flag push "$FX/zl_test_doc.pdf" /sdcard/Download/zl_drive_doc.pdf >/dev/null 2>&1
+  [[ -f "$FX/zl_test_image.jpg" ]] && $ADB $flag push "$FX/zl_test_image.jpg" /sdcard/Download/zl_drive_pic.jpg >/dev/null 2>&1
+  # EDITABLE office fixtures — the Drive editor only appears for docx/xlsx/pptx/csv/txt,
+  # so a PDF or JPG can never exercise it.
+  for ed in zl_drive_book.xlsx zl_drive_doc.docx zl_drive_sheet.csv zl_drive_note.txt; do
+    [[ -f "$FX/$ed" ]] && $ADB $flag push "$FX/$ed" "/sdcard/Download/$ed" >/dev/null 2>&1
+  done
+  if [[ -d "$FX/drive_tree" ]]; then
+    $ADB $flag shell mkdir -p /sdcard/Download/zl_drive_tree/sub_a /sdcard/Download/zl_drive_tree/sub_b >/dev/null 2>&1
+    $ADB $flag push "$FX/drive_tree/." /sdcard/Download/zl_drive_tree/ >/dev/null 2>&1
+  fi
   for f in Pictures/zl_test_1.jpg Documents/zl_test_doc.pdf Music/zl_test_audio.wav; do
     $ADB $flag shell "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/$f" >/dev/null 2>&1
   done
@@ -214,6 +333,64 @@ relaunch_app() {
   sleep 7
 }
 
+if [[ "${DRIVE_TWO_DEVICE:-0}" == "1" ]]; then
+  DEV_A="${ZILLIT_SENDER_UDID:-emulator-5554}"
+  DEV_B="${ZILLIT_RECEIVER_UDID:-}"
+  if [[ -z "$DEV_B" ]]; then
+    echo "✗ ZILLIT_RECEIVER_UDID is required for --drive-two-device"
+    echo "  e.g. ZILLIT_SENDER_UDID=emulator-5554 ZILLIT_RECEIVER_UDID=<serial> $0 --drive-two-device"
+    exit 2
+  fi
+  if [[ "$DEV_A" == "$DEV_B" ]]; then
+    echo "✗ The two devices must be different (both were '$DEV_A')"
+    exit 2
+  fi
+  for d in "$DEV_A" "$DEV_B"; do
+    if ! $ADB -s "$d" shell true >/dev/null 2>&1; then
+      echo "✗ Device '$d' is not reachable — check 'adb devices'"
+      exit 2
+    fi
+  done
+
+  ACC="build/allresults"
+  rm -rf "$ACC"; mkdir -p "$ACC"
+  prep_device "$DEV_A"
+  prep_device "$DEV_B"
+
+  # "Label::device::classes" — device A owns the content, device B receives it.
+  DRIVE_PHASES=(
+    "Drive — owner side (device A)::$DEV_A::DriveTest DriveUploadTest DriveViewTest DriveOrganiseTest DriveEditorTest DriveCommentsTest DriveRequestFilesTest DriveActivityTest DriveSettingsTest DriveShareTest"
+    "Drive — recipient side (device B)::$DEV_B::DriveSharedWithMeTest"
+    "Drive — collaborative editing (both)::$DEV_A::DriveCollabEditTest"
+    "Drive — symmetric E2E (both)::$DEV_A::DriveTwoDeviceE2ETest"
+  )
+  TEST_EXIT=0
+  for entry in "${DRIVE_PHASES[@]}"; do
+    label="${entry%%::*}"; rest="${entry#*::}"
+    dev="${rest%%::*}"; classes="${rest#*::}"
+    echo ""
+    echo "════════════════════════════════════════════════════════════"
+    echo "▶ $label   [$dev]"
+    echo "════════════════════════════════════════════════════════════"
+    args=(cleanTest test --continue)
+    for c in $classes; do args+=(--tests "com.zillit.automation.tests.$c"); done
+    ZILLIT_UDID="$dev" ZILLIT_SENDER_UDID="$DEV_A" ZILLIT_RECEIVER_UDID="$DEV_B" \
+      ./gradlew "${args[@]}"
+    [[ $? -ne 0 ]] && TEST_EXIT=1
+    if ls build/test-results/test/*.xml >/dev/null 2>&1; then
+      for f in build/test-results/test/*.xml; do
+        cp "$f" "$ACC/$(basename "${label// /_}")__$(basename "$f")" 2>/dev/null || true
+      done
+    fi
+  done
+  if ls "$ACC"/*.xml >/dev/null 2>&1; then
+    rm -f build/test-results/test/*.xml 2>/dev/null || true
+    cp "$ACC"/*.xml build/test-results/test/ 2>/dev/null || true
+  fi
+  node tools/make-report.mjs || true
+  exit $TEST_EXIT
+fi
+
 if [[ "${RUN_ALL:-0}" == "1" ]]; then
   # ---- FULL SWEEP: each module as its own gradle run, results accumulated ----
   ACC="build/allresults"
@@ -227,7 +404,7 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     "Calendar::CalendarTest"
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"
-    "Tools::ConfidentialInfoTest InfoTest CateringTest RecceTest ToolsManagementTest"
+    "Tools::ConfidentialInfoTest InfoTest CateringTest RecceTest DriveTest ToolsManagementTest"
     "Settings / Admin Settings::DepartmentListingOrderTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest"
   )
   if [[ "${SKIP_PROJECT_MODULE:-0}" == "1" ]]; then
