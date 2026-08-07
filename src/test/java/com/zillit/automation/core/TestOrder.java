@@ -21,8 +21,10 @@ package com.zillit.automation.core;
  *   40–47   C&amp;C (chat &amp; calling)
  *   48–59   tools                                  ← VIDYA
  *   60–69   tools: standalone modules (Recce, …)   ← VIDYA
- *   70–89   ADMIN SETTINGS                         ← BHAVIK
- *   90–99   destructive / global-state — MUST run last
+ *   90–99   destructive / global-state (tools)     ← VIDYA
+ *  100–149  ADMIN SETTINGS                         ← BHAVIK
+ *  150–169  SETTINGS TAB (non-admin)               ← BHAVIK
+ *   (70–89 retired — the admin block moved to 100+ to make room)
  * </pre>
  *
  * <p><b>Leave gaps.</b> Inside your range, jump by 2–3 (70, 72, 74…) so a suite can
@@ -95,57 +97,41 @@ public final class TestOrder {
     public static final int RECCE_PAGINATION    = 61;
     // free: 62–69
 
-    // 70–89 · ADMIN SETTINGS · BHAVIK -----------------------------------------
-    public static final int DEPARTMENT_LISTING_ORDER      = 70;
-    public static final int COMPANY_DETAILS               = 72;
-    public static final int CREATE_ADDITIONAL_SHOOTING_UNIT = 74;
-    public static final int CREATE_NEW_DEPARTMENT         = 76;
-    public static final int CREATE_NEW_DESIGNATION        = 78;
-    public static final int CREATE_REMOTE_SHOOTING_UNIT   = 80;
-    public static final int CREATE_UPDATE_HOME_UNIT       = 82;
-    public static final int EDIT_PROJECT_NAME             = 84;
-    /**
-     * Uploads a watermark from the camera and from the gallery, deleting it in
-     * between. Self-normalising — it clears any watermark left by a previous run
-     * before asserting the empty state — and no other suite reads the watermark.
-     */
-    public static final int WATERMARK_LOGO                = 83;
-    public static final int MANAGE_TOOL_GROUPS            = 86;
-    /**
-     * Changes a user's department/designation, grants Admin Access, and toggles
-     * their Status off and back on.
-     *
-     * <p>Sits before the suites that read C&amp;C → Contacts. It restores Status
-     * itself, so by the time APPROVE_NEW_USER_REQUEST inspects Contacts the user
-     * is visible again — and that suite checks a different user in any case. The
-     * department and Admin Access changes persist, but nothing else reads them.
-     */
-    public static final int USER_MANAGEMENT               = 85;
-    /**
-     * Adds an SOS receiver, edits, deletes and re-adds it. Self-restoring, and it
-     * touches no other suite's data, so its slot here is not load-bearing.
-     */
-    public static final int SOS_RECEIVERS                 = 87;
-    public static final int PRE_APPROVED_USERS            = 88;
-    /**
-     * Approves one pending join request and declines another, then checks the
-     * approved user reached C&amp;C → Contacts. Runs after PRE_APPROVED_USERS
-     * because both consume the project's pending-request queue.
-     */
-    public static final int APPROVE_NEW_USER_REQUEST      = 89;
-    // free: 71, 73, 75, 77, 79, 81 — next admin-settings suites go here
-
-    // 90–99 · destructive / global-state — always last ------------------------
+    // 90–99 · destructive / global-state · VIDYA -----------------------------
     /** Disables tools and reorders groups — must not run before the tool suites. */
-    public static final int TOOLS_MANAGEMENT    = 90;
-    /** Disables EVERY tool via Admin Settings, then re-enables all — bigger blast radius than TOOLS_MANAGEMENT's single-tool toggle. */
-    public static final int CUSTOMIZATION_OF_TOOLS_ALL = 91;
-    /**
-     * Schedules the project for real deletion and LEAVES IT SCHEDULED — the
-     * specified flow ends after confirming the countdown. Last of everything by
-     * design: any suite running after it would work against a project that is
-     * counting down to destruction.
-     */
-    public static final int DELETE_PROJECT      = 99;
-    // free: 92–98
+    public static final int TOOLS_MANAGEMENT             = 90;
+    // free: 91–99
+
+    // 100–149 · ADMIN SETTINGS · BHAVIK ---------------------------------------
+    // This list IS the run order for --admin-settings. Steps of 3 leave two free
+    // numbers between every pair, so a new admin module can be slotted anywhere
+    // without renumbering its neighbours.
+    //
+    // CUSTOMIZATION_OF_TOOLS_ALL lives here, not in the destructive range: it is
+    // an Admin Settings screen, and its position is fixed by the agreed sequence.
+    //
+    // DELETE_PROJECT is last because it schedules the project for real deletion
+    // and leaves the timer armed.
+    public static final int DEPARTMENT_LISTING_ORDER        = 100;
+    public static final int COMPANY_DETAILS                 = 103;
+    public static final int CREATE_ADDITIONAL_SHOOTING_UNIT = 106;
+    public static final int CREATE_NEW_DEPARTMENT           = 109;
+    public static final int CREATE_NEW_DESIGNATION          = 112;
+    public static final int CREATE_REMOTE_SHOOTING_UNIT     = 115;
+    public static final int CREATE_UPDATE_HOME_UNIT         = 118;
+    public static final int CUSTOMIZATION_OF_TOOLS_ALL      = 121;
+    public static final int EDIT_PROJECT_NAME               = 124;
+    public static final int MANAGE_TOOL_GROUPS              = 127;
+    public static final int PRE_APPROVED_USERS              = 130;
+    public static final int APPROVE_NEW_USER_REQUEST        = 133;
+    public static final int SOS_RECEIVERS                   = 136;
+    public static final int USER_MANAGEMENT                 = 139;
+    public static final int WATERMARK_LOGO                  = 142;
+    public static final int DELETE_PROJECT                  = 145;
+    // free: 101–102, 104–105, 107–108, … 146–149 — new admin modules go here
+
+    // 150–169 · SETTINGS TAB (non-admin) · BHAVIK -----------------------------
+    // NOT part of Admin Settings — its own --settings flag, run after that block.
+    public static final int EDIT_MY_PROFILE              = 150;
+    // free: 151–169
 }

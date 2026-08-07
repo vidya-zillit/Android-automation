@@ -6,6 +6,7 @@
 #   ./run-and-report.sh --no-e2e           # skip the OTP/E2E test
 #   ./run-and-report.sh --all-in-project   # Home+Calendar+Email+C&C+Tools+Admin Settings, one report
 #   ./run-and-report.sh --admin-settings   # Settings → Admin Settings only (e.g. Department Listing Order)
+#   ./run-and-report.sh --settings         # Settings tab (non-admin), e.g. Edit My Profile
 #   ./run-and-report.sh --two-device       # cross-device send/receive (two users)
 #
 # Prerequisites (once): emulator running, Appium server running
@@ -104,9 +105,9 @@ elif [[ "${1:-}" == "--recce-pagination" ]]; then
   #   ZILLIT_RECCE_SEED=false ./run-and-report.sh --recce-pagination   # verify only
   GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.RecceePaginationTest')
 elif [[ "${1:-}" == "--admin-settings" ]]; then
-  # SETTINGS → ADMIN SETTINGS — every admin-settings sub-feature test class.
-  # Add new admin-settings test classes to this same list as they're
-  # implemented, so this one flag keeps covering the whole Admin Settings area.
+  # SETTINGS → ADMIN SETTINGS — every admin-settings sub-feature test class, in the
+  # agreed running order (that order lives in TestOrder, 100–149).
+  # Add new admin-settings classes here AND give them a TestOrder constant.
   GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DepartmentListingOrderTest'
                 --tests 'com.zillit.automation.tests.CompanyDetailsTest'
                 --tests 'com.zillit.automation.tests.CreateAdditionalShootingUnitTest'
@@ -114,14 +115,19 @@ elif [[ "${1:-}" == "--admin-settings" ]]; then
                 --tests 'com.zillit.automation.tests.CreateNewDesignationTest'
                 --tests 'com.zillit.automation.tests.CreateRemoteShootingUnitTest'
                 --tests 'com.zillit.automation.tests.CreateUpdateHomeUnitTest'
+                --tests 'com.zillit.automation.tests.CustomizationOfToolsTest'
                 --tests 'com.zillit.automation.tests.EditProjectNameTest'
                 --tests 'com.zillit.automation.tests.ManageToolGroupsTest'
-                --tests 'com.zillit.automation.tests.WatermarkLogoTest'
-                --tests 'com.zillit.automation.tests.UserManagementTest'
-                --tests 'com.zillit.automation.tests.SosReceiversTest'
                 --tests 'com.zillit.automation.tests.PreApprovedUsersTest'
                 --tests 'com.zillit.automation.tests.ApproveNewUserRequestTest'
+                --tests 'com.zillit.automation.tests.SosReceiversTest'
+                --tests 'com.zillit.automation.tests.UserManagementTest'
+                --tests 'com.zillit.automation.tests.WatermarkLogoTest'
                 --tests 'com.zillit.automation.tests.DeleteProjectTest')
+elif [[ "${1:-}" == "--settings" ]]; then
+  # SETTINGS TAB (non-admin) — separate from Admin Settings. Run this after
+  # --admin-settings. TestOrder range 150–169.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.EditMyProfileTest')
 elif [[ "${1:-}" == "--manual-media" ]]; then
   # Interactive: YOU pick Video/Location/Contact on the device and reach the
   # send screen; automation sends + verifies. Set ZILLIT_PICK_WAIT for a longer
@@ -259,7 +265,8 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"
     "Tools::ConfidentialInfoTest InfoTest CateringTest RecceTest ToolsManagementTest"
-    "Settings / Admin Settings::DepartmentListingOrderTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest CreateRemoteShootingUnitTest CreateUpdateHomeUnitTest EditProjectNameTest WatermarkLogoTest ManageToolGroupsTest UserManagementTest SosReceiversTest PreApprovedUsersTest ApproveNewUserRequestTest DeleteProjectTest"
+    "Settings / Admin Settings::DepartmentListingOrderTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest CreateRemoteShootingUnitTest CreateUpdateHomeUnitTest CustomizationOfToolsTest EditProjectNameTest ManageToolGroupsTest PreApprovedUsersTest ApproveNewUserRequestTest SosReceiversTest UserManagementTest WatermarkLogoTest DeleteProjectTest"
+    "Settings (tab)::EditMyProfileTest"
   )
   if [[ "${SKIP_PROJECT_MODULE:-0}" == "1" ]]; then
     MODULES=("${MODULES[@]:1}")  # drop "Project create / join / list"

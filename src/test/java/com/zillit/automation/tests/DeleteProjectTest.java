@@ -29,8 +29,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * flow ends after confirming the countdown, so the project stays scheduled for
  * destruction roughly twelve hours later. It is recoverable — "Stop Project
  * Deletion" cancels it — but the timer is live once the run finishes, and it is
- * re-armed by every run. That is why this sits at the very end of the destructive
- * range: nothing may run after it.
+ * re-armed by every run. It runs immediately after the watermark suite, so every
+ * later admin-settings suite works against a project that is counting down.
  *
  * <p>Behaviour confirmed on the device while building this:
  * <ul>
