@@ -105,7 +105,7 @@ public class ProjectListPage extends BasePage {
         String wanted = name.trim().toLowerCase();
         for (WebElement label : driver.findElements(byId("projectNameText"))) {
             String shown = label.getText();
-            if (shown == null || !shown.trim().toLowerCase().equals(wanted)) {
+            if (shown == null || !matchesProject(shown, wanted)) {
                 continue;
             }
             try {
@@ -119,6 +119,26 @@ public class ProjectListPage extends BasePage {
             return true;
         }
         return false;
+    }
+
+    /**
+     * True when a listed row names this project.
+     *
+     * <p>Rows carry the viewer's ROLE as a suffix — "ZL TESTING 01 AUGUST - Admin"
+     * — while the in-project header shows the bare name, so a plain equality test
+     * never matches. Exactly one trailing " - token" is stripped before comparing,
+     * which keeps the match tight: a shooting unit listed as
+     * "Parent - Unit A - Admin" strips to "Parent - Unit A" and correctly fails to
+     * match its parent, which is the confusion that opened the wrong project
+     * before.
+     */
+    private boolean matchesProject(String shown, String wantedLower) {
+        String t = shown.trim();
+        if (t.equalsIgnoreCase(wantedLower)) {
+            return true;
+        }
+        String stripped = t.replaceFirst("\\s+-\\s+\\S+$", "").trim();
+        return stripped.equalsIgnoreCase(wantedLower);
     }
 
     /** Project names currently listed — useful for diagnosing a failed pick. */

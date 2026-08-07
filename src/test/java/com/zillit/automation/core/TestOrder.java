@@ -133,5 +133,11 @@ public final class TestOrder {
     // 150–169 · SETTINGS TAB (non-admin) · BHAVIK -----------------------------
     // NOT part of Admin Settings — its own --settings flag, run after that block.
     public static final int EDIT_MY_PROFILE              = 150;
-    // free: 151–169
+    /**
+     * Chat font size, theme and default home unit. Measures the EFFECT of each
+     * setting rather than its stored value, and restarts the app to prove the
+     * default unit persists.
+     */
+    public static final int APP_PREFERENCES              = 153;
+    // free: 151–152, 154–169
 }
