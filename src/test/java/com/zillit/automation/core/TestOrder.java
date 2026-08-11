@@ -139,5 +139,26 @@ public final class TestOrder {
      * default unit persists.
      */
     public static final int APP_PREFERENCES              = 153;
-    // free: 151–152, 154–169
+    /**
+     * Read-only: shows the laptop-linking instructions and confirms Link Device
+     * opens the QR scanner. Never actually links a device — that needs a QR code
+     * from a browser — so it changes nothing.
+     */
+    public static final int LINKED_DEVICE                = 156;
+    /**
+     * Read-only: shows the project invitation text and code. Never presses
+     * Share, so no invitation is sent and nothing changes.
+     */
+    public static final int INVITE_USERS                 = 159;
+    /**
+     * The whole ZILLIT GUIDE, entry by entry: Contact us (including Email Us),
+     * FAQ, Privacy Policy, Terms of Use, and the Tutorial for Admin tour.
+     * Tutorial for Admin is a row in that guide, so it lives here rather than in
+     * a suite of its own.
+     *
+     * <p>SENDS A REAL EMAIL every run: the composer arrives addressed to Zillit
+     * Support, so the message reaches their inbox as well as the BCC address.
+     */
+    public static final int ZILLIT_HELP                  = 162;
+    // free: 151–152, 154–155, 157–158, 160–161, 163–169
 }

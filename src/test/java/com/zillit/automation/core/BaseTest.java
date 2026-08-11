@@ -46,7 +46,25 @@ public abstract class BaseTest {
     @BeforeAll
     void startSession() {
         driver = DriverFactory.create();
-        appPackage = driver.getCurrentPackage();
+        // From config, NOT from whatever is in front. Reading the foreground app
+        // here is only right when the app under test happens to be there — it is
+        // not after a suite that opened the camera/gallery/QR scanner, or when a
+        // previous run left the launcher up. Getting it wrong disabled the
+        // re-foreground self-heal below (the app "matched" the launcher) and built
+        // every byAppId() against the wrong package, so the suite hung on full
+        // timeouts rather than failing.
+        appPackage = Config.configuredAppPackage();
+        if (appPackage.isEmpty()) {
+            appPackage = driver.getCurrentPackage();
+        }
+        // If the app is not in front, put it there before reading any screen.
+        if (!appPackage.equals(safeCurrentPackage())) {
+            try {
+                driver.executeScript("mobile: activateApp", Map.of("appId", appPackage));
+                Thread.sleep(2000);
+            } catch (WebDriverException | InterruptedException ignored) {
+            }
+        }
         // Nudge past any leftover editor/gallery/preview screen from a prior run
         // WITHOUT a full relaunch (a relaunch re-hits splash + the app-lock alert
         // + slow API routing, which stalls landing detection). A few back presses

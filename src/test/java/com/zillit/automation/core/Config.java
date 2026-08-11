@@ -49,4 +49,27 @@ public final class Config {
     public static boolean has(String key) {
         return !get(key).isEmpty();
     }
+
+    /**
+     * The package resource-ids belong to, from configuration alone — "" if nothing
+     * is set.
+     *
+     * <p><b>Why this is not read from the foreground app.</b> Asking the device
+     * which package is in front only gives the right answer when the app under
+     * test happens to BE in front. It is not, for instance, right after a suite
+     * that opened the camera, the gallery or a QR scanner, or when a previous run
+     * left the launcher up. Resolving ids from whatever was on screen at that
+     * moment silently builds every locator against the wrong package — nothing
+     * matches, and every wait burns its full timeout instead of failing fast.
+     *
+     * <p>{@code zillit.resourcePackage} wins so a flavour whose resource ids differ
+     * from its application id can still be pointed somewhere else;
+     * {@code zillit.appPackage} is the ordinary answer and is already set.
+     */
+    public static String configuredAppPackage() {
+        if (has("zillit.resourcePackage")) {
+            return get("zillit.resourcePackage");
+        }
+        return has("zillit.appPackage") ? get("zillit.appPackage") : "";
+    }
 }

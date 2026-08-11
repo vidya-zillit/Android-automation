@@ -14,7 +14,16 @@ public abstract class BasePage {
 
     /**
      * Runtime resource-id prefix. Flavors rewrite it to the full application id
-     * (e.g. com.zillit.zillitapp.dev), so resolve it from the foreground app.
+     * (e.g. com.zillit.zillitapp.dev), so it comes from configuration.
+     *
+     * <p><b>Deliberately NOT the foreground package.</b> This field is static, so
+     * it is resolved once and reused by every page in the run — which means one
+     * bad reading poisons everything after it. It used to fall back to
+     * {@code getCurrentPackage()}, and whenever the app happened to be backgrounded
+     * at that moment (launcher up, camera or QR scanner still in front) every
+     * locator was built against that other package. Nothing matched, and because
+     * the ids were merely WRONG rather than absent, each lookup ran its full
+     * timeout — the suite appeared to hang instead of failing.
      */
     private static String idPrefix;
 
@@ -25,9 +34,11 @@ public abstract class BasePage {
         this.driver = driver;
         this.wait = new WebDriverWait(driver, Duration.ofSeconds(30));
         if (idPrefix == null) {
-            String pkg = com.zillit.automation.core.Config.has("zillit.resourcePackage")
-                    ? com.zillit.automation.core.Config.get("zillit.resourcePackage")
-                    : driver.getCurrentPackage();
+            String pkg = com.zillit.automation.core.Config.configuredAppPackage();
+            if (pkg.isEmpty()) {
+                // Nothing configured — the foreground app is the only clue left.
+                pkg = driver.getCurrentPackage();
+            }
             idPrefix = pkg + ":id/";
         }
     }
