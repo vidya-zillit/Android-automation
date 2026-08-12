@@ -86,6 +86,86 @@ public abstract class BasePage {
         }
     }
 
+    /**
+     * Dismisses the soft keyboard ONLY when one is actually up.
+     *
+     * <p>{@link #hideKeyboard()} is not safe to call blindly: UiAutomator2 implements it
+     * by pressing BACK, and {@code sendKeys} frequently types without ever raising the
+     * soft keyboard — so the BACK lands on the ACTIVITY instead and navigates away. That
+     * is how a search case ended up asserting against the Tools screen: it typed a query,
+     * "hid" a keyboard that was never shown, and the BACK press closed Document
+     * Distribution entirely. The failure then read as "the empty state did not appear",
+     * which is true but says nothing about search.
+     *
+     * <p>Prefer this in any page where a stray BACK would leave the screen under test.
+     */
+    protected void hideKeyboardIfShown() {
+        try {
+            if (driver.isKeyboardShown()) driver.hideKeyboard();
+        } catch (WebDriverException ignored) {
+            // No keyboard, or the driver cannot tell — either way, do NOT press BACK.
+        }
+    }
+
+    /**
+     * Settles the IME WITHOUT any possibility of a BACK press.
+     *
+     * <p>Use this inside dialogs and bottom sheets. {@link #hideKeyboardIfShown()} only
+     * narrows the window rather than closing it: {@code isKeyboardShown()} still reports
+     * true for a moment after the IME has begun animating away, so the guarded
+     * {@code hideKeyboard()} can still fire a BACK — and in a cancelable
+     * {@code BottomSheetDialog} that BACK dismisses the SHEET. The symptom is brutal to
+     * read: the next field lookup reports "field missing" and the Save button reports
+     * "disabled", for a sheet that no longer exists.
+     *
+     * <p>{@code performEditorAction done} is consumed by the focused editor and never
+     * reaches the dialog. Leaving the keyboard up afterwards is harmless — a
+     * {@code BottomSheetDialog} uses {@code SOFT_INPUT_ADJUST_RESIZE}, so its buttons sit
+     * above the IME.
+     */
+    /**
+     * Closes the soft keyboard with BACK — but ONLY when it is stably up.
+     *
+     * <p>Needed because a covered view is not merely off-screen, it is absent from the
+     * accessibility tree: with the IME up, {@code dd_recipients_recycler} disappears from
+     * the dump entirely, so scrolling for it cannot help and a recipient that was added
+     * perfectly well reads back as zero rows.
+     *
+     * <p>BACK is safe HERE and nowhere else: with the IME showing, Android gives the BACK
+     * to the input method, which closes it and never reaches the dialog. The danger is
+     * firing BACK when the keyboard is already going away — then the dialog takes it and
+     * dismisses. {@code isKeyboardShown()} briefly reports true during that animation, so
+     * this samples it TWICE with a gap and only acts when both agree.
+     */
+    protected boolean closeKeyboardIfStablyShown() {
+        try {
+            if (!driver.isKeyboardShown()) return false;
+            Thread.sleep(400);
+            if (!driver.isKeyboardShown()) return false;   // it was already closing
+            driver.navigate().back();
+            Thread.sleep(500);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    protected void settleImeSafely() {
+        // DELIBERATELY A NO-OP. Both ways of dismissing the IME after typing turned out to
+        // corrupt the test:
+        //   • driver.hideKeyboard() is a BACK press on UiAutomator2 — inside a cancelable
+        //     dialog it dismisses the SHEET, after which every field reads as "missing"
+        //     and every button as "disabled".
+        //   • mobile: performEditorAction {done} appends literal text to the focused
+        //     field. Observed on device: an address typed as "not-an-email" read back as
+        //     "not-an-email/done/" immediately before the Add tap.
+        // Leaving the keyboard up is harmless — dialogs use SOFT_INPUT_ADJUST_RESIZE, so
+        // their buttons stay reachable — and anything the IME covers is brought back by
+        // the pages' explicit reveal helpers (revealRecipients / revealBodyEditor), which
+        // is the honest fix: scroll to what you need instead of relying on a side effect.
+        // Kept as a named method so the reasoning stays attached to the call sites.
+    }
+
     /** True when any element containing the text (snackbar, toast, label) appears. */
     public boolean textShown(String text, Duration timeout) {
         try {

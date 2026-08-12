@@ -91,7 +91,15 @@ class AllUnitsMediaTest extends BaseTest {
         for (int i = 0; i < n; i++) {
             String m = tag + "-txt-" + (System.currentTimeMillis() % 100000) + "-" + i;
             home.sendMessage(m);
-            if (home.messageShown(m, Duration.ofSeconds(15))) { sent++; lastTextMarker = m; }
+            // Count it only if it actually REACHED the server — a bubble with a pending
+            // clock or a Retry on it is not a sent message, and counting those is how a
+            // sweep reported "N sent" for messages the recipient never got.
+            if (home.waitMessageSent(m, Duration.ofSeconds(30))) {
+                sent++;
+                lastTextMarker = m;
+            } else {
+                System.out.println(">>> NOT SENT: " + m + " — " + home.sendStateOf(m));
+            }
         }
         return sent;
     }

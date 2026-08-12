@@ -1,0 +1,9 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Tester;QA;;;
+FN:QA Tester
+ORG:Zillit Automation
+TITLE:Test Fixture
+EMAIL;TYPE=INTERNET:qa.vcard@example.com
+TEL;TYPE=WORK,VOICE:+1-555-0100
+END:VCARD

@@ -287,13 +287,68 @@ public abstract class BaseTest {
         return any;
     }
 
+    // ---------------- the app's own confirmation popup ----------------
+    //
+    // Nearly every destructive or outward-facing action in this app — delete a message,
+    // forward it, share it, empty a list — routes through ONE dialog:
+    // `common_dialog_layout_with_button`, with `leftButton` (No / Cancel) and
+    // `rightButton` (Yes / Confirm / Delete). It is used in ~200 places.
+    //
+    // It is a custom Dialog, NOT an AlertDialog, so it has no `android:id/button1`. Any
+    // helper that only looks for the framework button ids sails straight past it, the
+    // popup stays on screen, and every following case fails or skips against a blocked
+    // UI — which is exactly the cascade this suite kept producing after a Delete.
+
+    private com.zillit.automation.pages.ConfirmPopupPage popup() {
+        return new com.zillit.automation.pages.ConfirmPopupPage(driver);
+    }
+
+    /** True while the app's confirm popup is on screen. */
+    protected boolean confirmPopupShown(Duration timeout) {
+        return popup().isShown(timeout);
+    }
+
+    /** What the popup is asking — for assertions and readable failure messages. */
+    protected String confirmPopupMessage() {
+        return popup().text();
+    }
+
+    /** Confirms it (Yes / Confirm / Delete) and waits for it to close. */
+    protected boolean confirmPopupAccept(Duration timeout) {
+        return popup().accept(timeout);
+    }
+
+    /** Declines it (No / Cancel). */
+    protected boolean confirmPopupCancel(Duration timeout) {
+        return popup().cancel(timeout);
+    }
+
+    /**
+     * Safety net for recovery paths: clears a confirmation left blocking the screen, by
+     * DECLINING it, so a popup from one case cannot swallow the next.
+     */
+    protected boolean clearBlockingPopup() {
+        return popup().clearIfBlocking();
+    }
+
     /**
      * WAITS for and confirms a "Are you sure you want to delete?" (No / Yes)
      * style dialog — the button appears a beat after Delete is tapped, so an
      * instant lookup misses it and leaves the popup stuck. Prefers "Yes" (the
      * confirm), then Delete / OK / Confirm. Returns true if it clicked one.
+     *
+     * <p>Tries the app's OWN popup ids first ({@link #confirmPopupAccept}); the text
+     * search below only covers framework dialogs and silently missed every
+     * {@code showDialogWithButton} confirmation in the app.
      */
     protected boolean confirmYesDialog(Duration total) {
+        if (confirmPopupAccept(Duration.ofSeconds(Math.min(6, Math.max(1, total.toSeconds()))))) {
+            return true;
+        }
+        return confirmYesDialogByText(total);
+    }
+
+    private boolean confirmYesDialogByText(Duration total) {
         // Poll ONLY for the confirm button ("Yes"/"Confirm"/"OK"). Deliberately
         // NOT "Delete": that is the *trigger* (long-press menu / multi-select
         // top-bar) that OPENS this dialog — clicking it just re-opens the popup

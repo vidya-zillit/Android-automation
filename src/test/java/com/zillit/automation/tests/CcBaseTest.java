@@ -29,7 +29,9 @@ abstract class CcBaseTest extends BaseTest {
 
     @BeforeEach
     void reachCc() {
-        if (onCc) { dismissPermissionPrompts(); recoverToCcLanding(); return; }
+        // clearBlockingPopup(): a leftover modal confirmation (leave group, delete
+        // chat, end call) swallows taps, so recovery must clear it first.
+        if (onCc) { dismissPermissionPrompts(); clearBlockingPopup(); recoverToCcLanding(); return; }
         if (landing == Landing.PROJECT_LIST) {
             ProjectListPage list = new ProjectListPage(driver);
             List<String> names = list.visibleProjectNames();

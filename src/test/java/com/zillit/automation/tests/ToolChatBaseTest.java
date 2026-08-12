@@ -53,6 +53,10 @@ abstract class ToolChatBaseTest extends BaseTest {
             insideProject = true;
         }
         dismissPermissionPrompts();
+        // A confirmation left open by the previous case is MODAL: it swallows every tap
+        // and back-press, so the next case cannot even reach the chat and the whole
+        // remainder of the suite skips. Clear it before anything else.
+        clearBlockingPopup();
         HomeChatPage chat = new HomeChatPage(driver);
         // Only skip the re-open when we are genuinely still INSIDE the module.
         // "An input bar is visible" is not enough: the Home units chat has one too,
@@ -170,8 +174,13 @@ abstract class ToolChatBaseTest extends BaseTest {
         assumeTrue(page.isInputBarVisible(), "No posting rights — skipping");
         String marker = "qa-" + slug() + "-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(marker);
-        assertTrue(page.messageShown(marker, Duration.ofSeconds(20)),
-                "The sent message '" + marker + "' should appear");
+        // NOT messageShown(): the bubble is inserted locally the instant Send is tapped,
+        // so "the text is on screen" is true even when the message never left the device.
+        // waitMessageSent() requires the row to lose BOTH the pending clock and the Retry
+        // control — i.e. the server actually took it.
+        assertTrue(page.waitMessageSent(marker, Duration.ofSeconds(30)),
+                "The message '" + marker + "' should reach the server — it is "
+                        + page.sendStateOf(marker));
         screenshot("tool-" + slug() + "-sent");
     }
 
@@ -212,7 +221,8 @@ abstract class ToolChatBaseTest extends BaseTest {
         assumeTrue(page.isInputBarVisible(), "No posting rights — skipping");
         String marker = "qa-" + slug() + "-lp-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(marker);
-        assumeTrue(page.messageShown(marker, Duration.ofSeconds(20)), "Need a message to long-press");
+        assumeTrue(page.waitMessageSent(marker, Duration.ofSeconds(30)),
+                "Need a SENT message to long-press — it is " + page.sendStateOf(marker));
         assumeTrue(page.longPressMessage(marker), "Long-press did not open the menu");
         assertTrue(page.isMenuOpen(Duration.ofSeconds(4)), "The options menu should appear");
         System.out.println(">>> " + moduleName() + " long-press options: " + page.menuOptions());
@@ -228,21 +238,30 @@ abstract class ToolChatBaseTest extends BaseTest {
         assumeTrue(page.isInputBarVisible(), "No posting rights — skipping");
         String marker = "qa-" + slug() + "-rep-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(marker);
-        assumeTrue(page.messageShown(marker, Duration.ofSeconds(20)), "Need a message to reply to");
+        assumeTrue(page.waitMessageSent(marker, Duration.ofSeconds(30)),
+                "Need a SENT message to reply to — it is " + page.sendStateOf(marker));
         assumeTrue(page.longPressMessage(marker), "Long-press failed");
         assumeTrue(page.tapMenuOption("Reply"), "Reply option not present");
         assertTrue(page.isReplyPreviewVisible(), "Tapping Reply should show the reply preview");
         String reply = marker + "-r";
         page.sendMessage(reply);
-        assertTrue(page.messageShown(reply, Duration.ofSeconds(15)), "The reply should post");
+        assertTrue(page.waitMessageSent(reply, Duration.ofSeconds(30)),
+                "The reply should reach the server — it is " + page.sendStateOf(reply));
         screenshot("tool-" + slug() + "-reply");
     }
 
-    /** Sends a fresh unique marker and returns it (or null if it didn't post). */
+    /**
+     * Sends a fresh unique marker and returns it, or null if it did not actually SEND.
+     *
+     * <p>Deliberately strict: the later cases (edit / forward / delete) all operate on
+     * this message, and acting on one that is still pending tests nothing — the app
+     * refuses most operations on an unsent message, which then surfaces as a confusing
+     * failure three steps away from the real cause.
+     */
     private String postMarker(HomeChatPage page, String kind) {
         String m = "qa-" + slug() + "-" + kind + "-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(m);
-        return page.messageShown(m, Duration.ofSeconds(20)) ? m : null;
+        return page.waitMessageSent(m, Duration.ofSeconds(30)) ? m : null;
     }
 
     @Test
@@ -259,8 +278,9 @@ abstract class ToolChatBaseTest extends BaseTest {
         String edited = m + "-EDITED";
         page.setEditDialogText(edited);
         page.saveEditDialog();
-        assertTrue(page.messageShown(edited, Duration.ofSeconds(20)),
-                "The edited text '" + edited + "' should appear");
+        assertTrue(page.waitMessageSent(edited, Duration.ofSeconds(30)),
+                "The edited text '" + edited + "' should reach the server — it is "
+                        + page.sendStateOf(edited));
         screenshot("tool-" + slug() + "-edit");
     }
 

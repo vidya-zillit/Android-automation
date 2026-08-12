@@ -102,7 +102,7 @@ class CateringTest extends ToolChatBaseTest {
             }
             String marker = "qa-catering-" + meal.toLowerCase() + "-" + (System.currentTimeMillis() % 1000000);
             page.sendMessage(marker);
-            boolean posted = page.messageShown(marker, Duration.ofSeconds(20));
+            boolean posted = page.waitMessageSent(marker, Duration.ofSeconds(30));
             System.out.println(">>> " + meal + " posted '" + marker + "'=" + posted);
             assertTrue(posted, "The message should post in the '" + meal + "' tab");
         }
@@ -120,8 +120,8 @@ class CateringTest extends ToolChatBaseTest {
         assumeTrue(page.isInputBarVisible(), "No posting rights on Breakfast — skipping");
         String marker = "qa-catering-iso-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(marker);
-        assumeTrue(page.messageShown(marker, Duration.ofSeconds(20)),
-                "The Breakfast marker did not post — skipping the isolation check");
+        assumeTrue(page.waitMessageSent(marker, Duration.ofSeconds(30)),
+                "The Breakfast marker did not SEND — it is " + page.sendStateOf(marker));
 
         // Switch to Lunch: the Breakfast-only message must not be there.
         assumeTrue(page.selectUnit("Lunch"), "Could not select Lunch");
@@ -142,8 +142,8 @@ class CateringTest extends ToolChatBaseTest {
         assumeTrue(page.isInputBarVisible(), "No posting rights on Breakfast — skipping");
         String marker = "qa-catering-persist-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(marker);
-        assumeTrue(page.messageShown(marker, Duration.ofSeconds(20)),
-                "The marker never posted — skipping the persistence check");
+        assumeTrue(page.waitMessageSent(marker, Duration.ofSeconds(30)),
+                "The marker never SENT — it is " + page.sendStateOf(marker));
         System.out.println(">>> posted in Breakfast: " + marker);
 
         // Leave to another meal and come back. NOTE: the conversation reloads at a
@@ -180,7 +180,8 @@ class CateringTest extends ToolChatBaseTest {
         assumeTrue(page.isInputBarVisible(), "No posting rights — skipping");
         String marker = "qa-cater-to-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(marker);
-        assumeTrue(page.messageShown(marker, Duration.ofSeconds(20)), "Marker did not post");
+        assumeTrue(page.waitMessageSent(marker, Duration.ofSeconds(30)),
+                "Marker did not SEND — it is " + page.sendStateOf(marker));
         // The bubble carries the audience label — proof the post is caterer-directed.
         boolean toCaterer = page.textShown("To : All Caterer", Duration.ofSeconds(6))
                 || page.textShown("All Caterer", Duration.ofSeconds(3));
@@ -246,7 +247,8 @@ class CateringTest extends ToolChatBaseTest {
         assumeTrue(page.isInputBarVisible(), "No posting rights — skipping");
         String marker = "qa-cater-rep3b-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(marker);
-        assumeTrue(page.messageShown(marker, Duration.ofSeconds(20)), "Marker did not post");
+        assumeTrue(page.waitMessageSent(marker, Duration.ofSeconds(30)),
+                "Marker did not SEND — it is " + page.sendStateOf(marker));
         assumeTrue(page.longPressMessage(marker), "Long-press failed");
         List<String> opts = page.menuOptions();
         boolean replyOffered = opts.stream().anyMatch(o -> o.equalsIgnoreCase("Reply"));
@@ -314,7 +316,8 @@ class CateringTest extends ToolChatBaseTest {
         assumeTrue(page.isInputBarVisible(), "Keyboard did not enable after choosing All Users");
         String marker = "qa-cater-bcast-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(marker);
-        assumeTrue(page.messageShown(marker, Duration.ofSeconds(20)), "Broadcast did not post");
+        assumeTrue(page.waitMessageSent(marker, Duration.ofSeconds(30)),
+                "Broadcast did not SEND — it is " + page.sendStateOf(marker));
         boolean toAll = page.textShown("To : All Users", Duration.ofSeconds(6));
         System.out.println(">>> caterer broadcast '" + marker + "' labelled To:All Users=" + toAll);
         assertTrue(toAll,
@@ -338,7 +341,8 @@ class CateringTest extends ToolChatBaseTest {
         assumeTrue(page.isInputBarVisible(), "Keyboard did not enable after picking a user");
         String marker = "qa-cater-direct-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(marker);
-        assumeTrue(page.messageShown(marker, Duration.ofSeconds(20)), "Directed message did not post");
+        assumeTrue(page.waitMessageSent(marker, Duration.ofSeconds(30)),
+                "Directed message did not SEND — it is " + page.sendStateOf(marker));
         boolean directed = page.textShown("To : ", Duration.ofSeconds(6))
                 && !page.textShown("To : All Caterer", Duration.ofSeconds(2));
         System.out.println(">>> directed message posted; audience label present=" + directed);
@@ -485,7 +489,7 @@ class CateringTest extends ToolChatBaseTest {
         assumeTrue(cat.ensurePostable(), "Could not enable posting in the new unit");
         String marker = "qa-newunit-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(marker);
-        boolean posted = page.messageShown(marker, Duration.ofSeconds(20));
+        boolean posted = page.waitMessageSent(marker, Duration.ofSeconds(30));
         System.out.println(">>> posted in new unit '" + createdUnit + "': " + marker + " = " + posted);
         assertTrue(posted, "A message should post in the newly created unit '" + createdUnit + "'");
         // and it must survive a reload (switch away and back)

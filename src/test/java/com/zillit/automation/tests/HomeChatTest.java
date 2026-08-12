@@ -47,6 +47,9 @@ class HomeChatTest extends BaseTest {
     void enterProjectOnce() {
         if (insideProject) {
             dismissPermissionPrompts();
+            // A modal confirmation left over from the previous case blocks every
+            // tap and back-press — clear it or the rest of the suite skips.
+            clearBlockingPopup();
             return;
         }
         // Get inside a project and onto the Home tab.
@@ -146,8 +149,12 @@ class HomeChatTest extends BaseTest {
         assumeTrue(page.isInputBarVisible(), "No posting rights — skipping");
         String marker = "qa-auto-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(marker);
-        assertTrue(page.messageShown(marker, Duration.ofSeconds(20)),
-                "The sent message '" + marker + "' should appear in the chat");
+        // The bubble appears locally the moment Send is tapped, so "the text is on
+        // screen" passes even for a message that never left the device. Require the
+        // row to lose the pending clock AND the Retry control.
+        assertTrue(page.waitMessageSent(marker, Duration.ofSeconds(30)),
+                "The message '" + marker + "' should reach the server — it is "
+                        + page.sendStateOf(marker));
         screenshot("home-message-sent");
     }
 
@@ -190,8 +197,13 @@ class HomeChatTest extends BaseTest {
 
     @Test
     @Order(9)
-    @DisplayName("Each media type opens its next screen without crashing")
+    @DisplayName("Each media type OPENS its picker without crashing (opens only — does NOT send)")
     void eachMediaTypeOpens() {
+        // Scope note: this case proves the picker launches, nothing more. It backs out
+        // without sending, so it must never be read as coverage of "the app can send a
+        // contact / location / document" — the send cases are separate and named as such.
+        // Reading this one as send coverage is how those types went untested while the
+        // report looked complete.
         HomeChatPage page = chatUnit();
         assumeTrue(page.isAttachmentVisible(), "No attachment button — skipping");
         // Camera-based options launch the device camera which may be absent on
@@ -236,8 +248,8 @@ class HomeChatTest extends BaseTest {
         assumeTrue(page.isInputBarVisible(), "No posting rights — skipping");
         String marker = "qa-reply-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(marker);
-        assumeTrue(page.messageShown(marker, Duration.ofSeconds(20)),
-                "Need a sent message to long-press");
+        assumeTrue(page.waitMessageSent(marker, Duration.ofSeconds(30)),
+                "Need a SENT message to long-press — it is " + page.sendStateOf(marker));
         assumeTrue(page.longPressMessage(marker), "Long-press did not register");
         assertTrue(page.tapMenuOption("Reply"),
                 "The long-press menu should offer Reply");
@@ -264,14 +276,16 @@ class HomeChatTest extends BaseTest {
         assumeTrue(page.isInputBarVisible(), "No posting rights — skipping");
         String base = "qa-base-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(base);
-        assumeTrue(page.messageShown(base, Duration.ofSeconds(20)), "Need a base message");
+        assumeTrue(page.waitMessageSent(base, Duration.ofSeconds(30)),
+                "Need a SENT base message — it is " + page.sendStateOf(base));
         assumeTrue(page.longPressMessage(base), "Long-press failed");
         assumeTrue(page.tapMenuOption("Reply"), "Reply option missing");
         assumeTrue(page.isReplyPreviewVisible(), "Reply preview missing");
         String reply = "qa-rep-" + (System.currentTimeMillis() % 1000000);
         page.sendMessage(reply);
-        assertTrue(page.messageShown(reply, Duration.ofSeconds(20)),
-                "The reply '" + reply + "' should post to the conversation");
+        assertTrue(page.waitMessageSent(reply, Duration.ofSeconds(30)),
+                "The reply '" + reply + "' should reach the server — it is "
+                        + page.sendStateOf(reply));
         screenshot("home-reply-sent");
     }
 }

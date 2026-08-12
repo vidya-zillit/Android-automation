@@ -160,6 +160,104 @@ elif [[ "${1:-}" == "--drive-settings" ]]; then
   # navigates to it in this build, so the suite asserts it is still unreachable and
   # covers Trash/Activity via the drawer entry points that do ship.
   GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveSettingsTest')
+elif [[ "${1:-}" == "--doc-dist" ]]; then
+  # DOCUMENT DISTRIBUTION — areas A+B (entry, shell, library listing). See
+  # DOC_DISTRIBUTION_TEST_CASES.md for the full 152-case map and the suite plan.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistributionTest')
+elif [[ "${1:-}" == "--doc-dist-folders" ]]; then
+  # DOCUMENT DISTRIBUTION — area C (folders) plus the area-B cases that need content.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistFoldersTest')
+elif [[ "${1:-}" == "--doc-dist-files" ]]; then
+  # DOCUMENT DISTRIBUTION — area D (files & selection): upload a fixture PDF into a
+  # QA folder, preview it (FilePreviewActivity), row menu, selection bar, move sheet,
+  # delete. Needs /sdcard/Download/zl_dd_doc.pdf (pushed by prep_device below).
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistFilesTest')
+elif [[ "${1:-}" == "--doc-dist-composer" ]]; then
+  # DOCUMENT DISTRIBUTION — areas E+F core: the composer (chips, Cc/Bcc, subject,
+  # send-gating, preview round-trip) and the attach-from-library picker. Seeds its own
+  # folder + upload; NEVER sends a real email.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistComposerTest')
+elif [[ "${1:-}" == "--doc-dist-lists" ]]; then
+  # Areas G+H — distribution lists (presets) and email templates: CRUD, badges, apply.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistPresetsTest'
+                --tests 'com.zillit.automation.tests.DocDistTemplatesTest')
+elif [[ "${1:-}" == "--doc-dist-contacts" ]]; then
+  # Area I — address book, contact detail/editor, CSV import, export.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistContactsTest')
+elif [[ "${1:-}" == "--doc-dist-history" ]]; then
+  # Areas J+K+L — history list, distribution detail, analytics. Read-mostly, and
+  # meaningful only against a project that HAS distributions (see --doc-dist-send).
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistHistoryTest')
+elif [[ "${1:-}" == "--doc-dist-watermark" ]]; then
+  # Area M — watermark wizard, batch screen, download.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistWatermarkTest')
+elif [[ "${1:-}" == "--doc-dist-publish" ]]; then
+  # Area N — the publish sheet. Drives every control and CANCELS: a real publish
+  # writes into OTHER modules and cannot be cleaned up from here.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistPublishTest')
+elif [[ "${1:-}" == "--doc-dist-rights" ]]; then
+  # Area O — the click-time permission gate. Two cases need a SECOND account.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistRightsTest')
+elif [[ "${1:-}" == "--doc-dist-regression" ]]; then
+  # Area P — offline, rotation, long/special names, rapid BACK. Toggles device
+  # connectivity and restores it; do not run it against a device you are using.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistRegressionTest')
+elif [[ "${1:-}" == "--doc-dist-send" ]]; then
+  # F-25 — the ONLY suite that really sends. Recipients are @example.com (RFC 2606),
+  # so nothing can reach a real mailbox. Verifies the distribution in History.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistSendTest')
+elif [[ "${1:-}" == "--doc-dist-cleanup" ]]; then
+  # HOUSEKEEPING — deletes stray QA_* folders / lists / templates left behind when a case
+  # failed before its own cleanup. Opt-in only: it removes data. Touches nothing whose
+  # name does not start with QA_. Run it before the empty-state cases (H-2) if a previous
+  # run died mid-way.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistCleanupTest')
+elif [[ "${1:-}" == "--doc-dist-grid" ]]; then
+  # GRID VIEW — the second layout family. A grid FILE row carries Send/Publish/Watermark/
+  # Download/Delete as inline buttons and no ⋮ at all, so the list-view row-menu cases
+  # cover none of it.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistGridViewTest')
+elif [[ "${1:-}" == "--doc-dist-publish-types" ]]; then
+  # PUBLISH TYPE RULES — most destinations are PDF-ONLY (Call Sheet, Production Report,
+  # Schedule*, Script, Page); Info and Confidential Info take anything. Uploads one file
+  # of every supported family and checks the per-row gate. Never publishes.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistPublishTypesTest')
+elif [[ "${1:-}" == "--doc-dist-nested" ]]; then
+  # NESTED FOLDERS — folder inside folder inside folder, the breadcrumb at depth, and
+  # uploading every supported media type at the deepest level.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistNestedFoldersTest')
+elif [[ "${1:-}" == "--doc-dist-verify" ]]; then
+  # RE-CHECK after a fix round: whichever suites still carry a failure. Much faster than
+  # --doc-dist-all when you only need to know whether the last fixes took. Keep this list
+  # current — it is a scratch flag, not a fixed contract.
+  #
+  # Round 1 (H-4/H-5, N-5/N-6, NEST-7) all passed and dropped off. Still open: presets
+  # (G-7's keyboard-tap fix, G-10 downstream of it), publish-types (the sheet was only
+  # getting 3 of 5 files) and rights (O-2 now seeds its own document instead of skipping).
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistPresetsTest'
+                --tests 'com.zillit.automation.tests.DocDistRightsTest'
+                --tests 'com.zillit.automation.tests.DocDistPublishTypesTest')
+elif [[ "${1:-}" == "--doc-dist-all" ]]; then
+  # Everything EXCEPT the real send and the device-state regression suite — those two
+  # are opt-in on purpose (--doc-dist-send, --doc-dist-regression).
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistributionTest'
+                --tests 'com.zillit.automation.tests.DocDistFoldersTest'
+                --tests 'com.zillit.automation.tests.DocDistFilesTest'
+                --tests 'com.zillit.automation.tests.DocDistComposerTest'
+                --tests 'com.zillit.automation.tests.DocDistPresetsTest'
+                --tests 'com.zillit.automation.tests.DocDistTemplatesTest'
+                --tests 'com.zillit.automation.tests.DocDistContactsTest'
+                --tests 'com.zillit.automation.tests.DocDistHistoryTest'
+                --tests 'com.zillit.automation.tests.DocDistWatermarkTest'
+                --tests 'com.zillit.automation.tests.DocDistPublishTest'
+                --tests 'com.zillit.automation.tests.DocDistGridViewTest'
+                --tests 'com.zillit.automation.tests.DocDistPublishTypesTest'
+                --tests 'com.zillit.automation.tests.DocDistNestedFoldersTest'
+                --tests 'com.zillit.automation.tests.DocDistRightsTest')
+elif [[ "${1:-}" == "--doc-dist-everything" ]]; then
+  # Literally every Document Distribution suite, including the real send and the
+  # regression suite that toggles the network.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDist*')
 elif [[ "${1:-}" == "--drive-editor-probe" ]]; then
   # EXPERIMENT HARNESS (plan §2.2), not coverage — writes a marker to a cell with each
   # candidate strategy and reports which ones survive a write → move away → return read.
@@ -227,7 +325,11 @@ elif [[ "${1:-}" == -* ]]; then
   echo "             --recce --recce-pagination --drive --drive-upload --drive-share"
   echo "             --drive-shared --drive-editor --drive-editor-probe --drive-view"
   echo "             --drive-organise --drive-comments --drive-requests --drive-activity"
-  echo "             --drive-settings --drive-folder-share --drive-collab --drive-e2e"
+  echo "             --drive-settings --drive-folder-share --drive-collab --drive-e2e
+             --doc-dist --doc-dist-folders --doc-dist-files --doc-dist-composer
+             --doc-dist-lists --doc-dist-contacts --doc-dist-history --doc-dist-watermark
+             --doc-dist-publish --doc-dist-rights --doc-dist-regression --doc-dist-send
+             --doc-dist-grid --doc-dist-nested --doc-dist-publish-types --doc-dist-verify --doc-dist-all --doc-dist-everything --doc-dist-cleanup"
   echo "             --drive-two-device --drive-all --admin-settings --manual-media"
   echo "             --two-device --all --all-in-project"
   echo "  (no option at all = the full suite, including the manual-OTP E2E)"
@@ -252,6 +354,23 @@ prep_device() {  # $1 = adb device serial (may be empty for the only device)
   [[ -f "$FX/zl_test_audio.wav" ]] && $ADB $flag push "$FX/zl_test_audio.wav" /sdcard/Music/zl_test_audio.wav >/dev/null 2>&1
   # Drive upload fixtures: a single file, plus a TREE for the whole-folder upload.
   [[ -f "$FX/zl_test_doc.pdf" ]] && $ADB $flag push "$FX/zl_test_doc.pdf" /sdcard/Download/zl_drive_doc.pdf >/dev/null 2>&1
+  # Document Distribution upload fixtures — ONE PER SUPPORTED FAMILY, because the
+  # module's allow-list (FileTypeDetector) is PDF + images + Word + Excel + vCard, and
+  # only PDF/JPEG/PNG/WEBP are watermarkable. zl_dd_bad.txt is deliberately NOT allowed
+  # (txt is absent from ALLOWED_EXT) so the rejection path can be tested too.
+  [[ -f "$FX/zl_test_doc.pdf" ]]    && $ADB $flag push "$FX/zl_test_doc.pdf"   /sdcard/Download/zl_dd_doc.pdf   >/dev/null 2>&1
+  [[ -f "$FX/zl_test_image.jpg" ]]  && $ADB $flag push "$FX/zl_test_image.jpg" /sdcard/Download/zl_dd_pic.jpg   >/dev/null 2>&1
+  [[ -f "$FX/zl_drive_doc.docx" ]]  && $ADB $flag push "$FX/zl_drive_doc.docx" /sdcard/Download/zl_dd_word.docx >/dev/null 2>&1
+  [[ -f "$FX/zl_drive_book.xlsx" ]] && $ADB $flag push "$FX/zl_drive_book.xlsx" /sdcard/Download/zl_dd_book.xlsx >/dev/null 2>&1
+  [[ -f "$FX/zl_dd_card.vcf" ]]     && $ADB $flag push "$FX/zl_dd_card.vcf"    /sdcard/Download/zl_dd_card.vcf  >/dev/null 2>&1
+  [[ -f "$FX/zl_drive_note.txt" ]]  && $ADB $flag push "$FX/zl_drive_note.txt" /sdcard/Download/zl_dd_bad.txt   >/dev/null 2>&1
+  # Make the DD fixtures the NEWEST files in Downloads. adb push preserves each file's
+  # original mtime, and the system picker sorts by modified-date — so a fixture pushed
+  # today can carry a date from weeks ago, sort to the bottom of a long list, and never
+  # appear under "Recent" at all. Touching them puts them on the first screenful, which
+  # is the difference between the upload cases running and silently failing to find
+  # their own fixture.
+  $ADB $flag shell 'touch /sdcard/Download/zl_dd_*' >/dev/null 2>&1
   [[ -f "$FX/zl_test_image.jpg" ]] && $ADB $flag push "$FX/zl_test_image.jpg" /sdcard/Download/zl_drive_pic.jpg >/dev/null 2>&1
   # EDITABLE office fixtures — the Drive editor only appears for docx/xlsx/pptx/csv/txt,
   # so a PDF or JPG can never exercise it.

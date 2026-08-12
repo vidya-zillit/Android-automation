@@ -73,6 +73,46 @@ public class CcChatThreadPage extends BasePage {
         return false;
     }
 
+    // ---------------- DID IT ACTUALLY SEND? ----------------
+    //
+    // C&C rows expose LESS than the Bulletin-style chats, and the difference decides what
+    // can honestly be asserted here:
+    //
+    //   MEDIA rows (rv_item_image_video_*_sender, rv_item_audio_sender) carry
+    //     `uploadingProgressStatus` + `retryVw` — a real, id-addressable failure state.
+    //   TEXT rows (rv_item_message_sender) carry only `messageStatus`, an ImageView whose
+    //     DRAWABLE is swapped (ic_clock → single_tick → double_tick). No id per state, no
+    //     contentDescription, so the accessibility tree cannot tell pending from sent.
+    //
+    // Consequence: a C&C TEXT send cannot be verified on the sender's device. The proof
+    // that works is the RECEIVER (see TwoUserChatTest) — which is why the two-device
+    // suite, not this page, is what certifies C&C delivery.
+    //
+    // One line in the app would remove the whole problem: a contentDescription on
+    // `messageStatus` ("pending" / "sent" / "delivered" / "read"). Worth asking for — it
+    // is the same ask as the three unlabelled Switches on the Drive share screen.
+
+    /** A media row is still uploading or has failed — the Retry affordance is showing. */
+    public boolean mediaSendUnfinished() {
+        return isVisible("retryVw", Duration.ofSeconds(2))
+                || isVisible("uploadingProgressStatus", Duration.ofSeconds(1));
+    }
+
+    /**
+     * Waits for a media send to finish — no Retry, no upload progress left on screen.
+     *
+     * <p>Unlike the text case above this IS verifiable, because the failure state has an
+     * id. Use it after sending any attachment in C&C.
+     */
+    public boolean waitMediaSent(Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            if (!mediaSendUnfinished()) return true;
+            sleep(1000);
+        }
+        return false;
+    }
+
     public boolean isInputBarVisible() {
         return isVisible("etMessage", Duration.ofSeconds(3));
     }

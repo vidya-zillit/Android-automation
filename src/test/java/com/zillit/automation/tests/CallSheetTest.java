@@ -55,6 +55,9 @@ class CallSheetTest extends BaseTest {
         HomeChatPage page = new HomeChatPage(driver);
         if (onCallSheet) {
             dismissPermissionPrompts();
+            // A modal confirmation left over from the previous case blocks every
+            // tap and back-press — clear it or the rest of the suite skips.
+            clearBlockingPopup();
             // Clear any leftover popup/menu.
             for (int i = 0; i < 3 && !page.isInputBarVisible(); i++) {
                 driver.navigate().back();

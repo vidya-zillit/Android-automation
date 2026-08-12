@@ -86,8 +86,10 @@ class MediaSystemPickerTest extends BaseTest {
         HomeChatPage home = openTypeInSystemPicker("Document");
         assumeTrue(home.pickSystemFileByName("zl_test", Duration.ofSeconds(12)),
                 "System document picker could not surface the test file on this device — skipping");
-        assertTrue(home.attachmentPostedOrUploading(Duration.ofSeconds(45)),
-                "The document should upload / appear as an attachment bubble");
+        // Not "posted OR uploading": an upload that never finishes satisfies that
+        // forever. Require the finished state — no progress bar, no Retry, no clock.
+        assertTrue(home.waitAttachmentSent(Duration.ofSeconds(60)),
+                "The document should finish sending — it is " + home.attachmentSendState());
         screenshot("system-document-sent");
     }
 
@@ -98,8 +100,10 @@ class MediaSystemPickerTest extends BaseTest {
         HomeChatPage home = openTypeInSystemPicker("Audio");
         assumeTrue(home.pickSystemFileByName("zl_test", Duration.ofSeconds(12)),
                 "System audio picker could not surface the test file on this device — skipping");
-        assertTrue(home.attachmentPostedOrUploading(Duration.ofSeconds(45)),
-                "The audio should upload / appear as an attachment bubble");
+        // Not "posted OR uploading": an upload that never finishes satisfies that
+        // forever. Require the finished state — no progress bar, no Retry, no clock.
+        assertTrue(home.waitAttachmentSent(Duration.ofSeconds(60)),
+                "The audio should finish sending — it is " + home.attachmentSendState());
         screenshot("system-audio-sent");
     }
 

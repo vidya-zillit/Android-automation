@@ -227,6 +227,89 @@ public class HomeChatPage extends BasePage {
         sleep(900);
     }
 
+    // ---------------- DID IT ACTUALLY SEND? ----------------
+    //
+    // A bubble appearing in the list proves NOTHING about delivery: the app inserts it
+    // locally the moment you tap send, then decorates it with a status. Reading only the
+    // text is how a whole run of chat suites went green while every message sat
+    // undelivered with a clock on it.
+    //
+    // What the app actually renders (TextVH.checkMessageUploadedOnServer, and the same
+    // three-state pattern in AttachmentVH / AudioVH / the reply holders):
+    //
+    //     status -1  →  btnTryAgain visible          (failed — "Retry" offered)
+    //     status  0  →  ivClock visible              (pending — the clock)
+    //     status  1  →  btnTryAgain visible          (still not on the server)
+    //     status  2  →  neither                      (SENT)
+    //
+    // So "sent" is the absence of both, ON THAT MESSAGE'S OWN ROW — never anywhere on
+    // screen, because one stuck message would otherwise condemn every later assertion.
+
+    /** The pending clock on the row carrying this text. */
+    public boolean messagePending(String text) {
+        return rowHasVisible(text, "ivClock");
+    }
+
+    /** The Retry control on the row carrying this text — the send failed. */
+    public boolean messageFailed(String text) {
+        return rowHasVisible(text, "btnTryAgain");
+    }
+
+    /**
+     * Waits until the message has genuinely reached the server — no clock, no Retry.
+     *
+     * <p>Use this instead of {@link #messageShown} wherever a test means "the message was
+     * sent". {@code messageShown} answers a different, weaker question: "is the text on
+     * screen".
+     */
+    public boolean waitMessageSent(String text, Duration timeout) {
+        if (!messageShown(text, timeout)) return false;
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            if (!messagePending(text) && !messageFailed(text)) return true;
+            sleep(1000);
+        }
+        return false;
+    }
+
+    /** Why a send is not complete — for a failure message that names the cause. */
+    public String sendStateOf(String text) {
+        if (!messageShown(text, Duration.ofSeconds(2))) return "not in the list at all";
+        if (messageFailed(text)) return "FAILED — the row is offering Retry";
+        if (messagePending(text)) return "PENDING — the row still shows the clock";
+        return "sent";
+    }
+
+    /**
+     * True when the message row containing {@code text} also contains a VISIBLE view with
+     * the given id.
+     *
+     * <p>Anchored on the text and scoped to its own card: {@code ivClock} and
+     * {@code btnTryAgain} exist on every sender row, so an unscoped lookup reports the
+     * state of whichever message happens to be rendered first.
+     */
+    private boolean rowHasVisible(String text, String id) {
+        String pkg = appPackage();
+        // The card wrapping one message row; the text lives inside it.
+        String xpath = "//*[@resource-id='" + pkg + ":id/materialCardView']"
+                + "[.//*[@text=" + xpathLiteral(text) + "]]"
+                + "//*[@resource-id='" + pkg + ":id/" + id + "']";
+        try {
+            for (WebElement e : driver.findElements(AppiumBy.xpath(xpath))) {
+                if (e.isDisplayed()) return true;
+            }
+        } catch (WebDriverException ignored) {
+            // Fall through: no row, or the tree changed under us — treated as "not shown".
+        }
+        return false;
+    }
+
+    /** XPath string literal that survives an apostrophe in the message. */
+    private static String xpathLiteral(String s) {
+        if (!s.contains("'")) return "'" + s + "'";
+        return "concat('" + s.replace("'", "',\"'\",'") + "')";
+    }
+
     /** True if a chat bubble containing the exact text is present in the list. */
     public boolean messageShown(String text, Duration timeout) {
         try {
@@ -516,15 +599,26 @@ public class HomeChatPage extends BasePage {
     public boolean forwardOpensPage(String text) {
         if (!longPressMessage(text)) return false;
         if (!tapMenuOption("Forward")) return false;
-        sleepQuiet(800);
-        // "Are you sure you want to forward?" → Yes/Forward
-        try {
-            driver.findElement(AppiumBy.androidUIAutomator(
-                    "new UiSelector().clickable(true).textMatches(\"(?i)(yes|forward)\")")).click();
-        } catch (WebDriverException ignored) {
-        }
+        // "Are you sure you want to forward?" — the app's own popup, which needs a REAL
+        // wait: it renders a beat after the menu tap, and the old instant text lookup
+        // usually missed it. A missed confirmation is not a silent no-op either — the
+        // dialog is modal, so it blocks every later case in the suite.
+        confirmPopup().acceptIfShown(Duration.ofSeconds(8));
         sleepQuiet(2000);
         return currentActivityContains("ForwardPage") || isVisible("rvView", Duration.ofSeconds(4));
+    }
+
+    /** The app's shared confirmation dialog (delete / forward / share / leave). */
+    public ConfirmPopupPage confirmPopup() {
+        return new ConfirmPopupPage(driver);
+    }
+
+    /**
+     * Clears a confirmation left blocking the chat — call it in recovery paths so one
+     * unhandled popup cannot cascade into a suite full of skips.
+     */
+    public boolean clearBlockingPopup() {
+        return confirmPopup().clearIfBlocking();
     }
 
     /**
@@ -564,6 +658,9 @@ public class HomeChatPage extends BasePage {
     public boolean shareStarts(String text) {
         if (!longPressMessage(text)) return false;
         if (!tapMenuOption("Share")) return false;
+        // Share confirms first on some builds — accept it if it appears, and leave the
+        // screen clean if it does not.
+        confirmPopup().acceptIfShown(Duration.ofSeconds(6));
         sleepQuiet(1500);
         // action-bar Share (tvAction) or an OS/app chooser
         try {
@@ -576,6 +673,9 @@ public class HomeChatPage extends BasePage {
 
     /** Back out of a full-screen overlay (ForwardPage / Library / ReadByUser) to the chat. */
     public void leaveOverlayScreen() {
+        // A modal confirmation swallows BACK, so a leftover popup would keep this loop
+        // pressing back against a dialog and return with the chat still unreachable.
+        clearBlockingPopup();
         for (int i = 0; i < 4 && !isInputBarVisible(); i++) {
             try { driver.navigate().back(); } catch (WebDriverException ignored) {}
             sleepQuiet(700);
@@ -922,6 +1022,49 @@ public class HomeChatPage extends BasePage {
                 return true;
             }
         }
+        return false;
+    }
+
+    /**
+     * Waits for an attachment to be FULLY SENT — the bubble is there, and it is no longer
+     * uploading and not offering Retry.
+     *
+     * <p>{@link #attachmentPostedOrUploading} deliberately accepts an in-flight upload,
+     * which makes it useful as a "did the send start" check and useless as proof of
+     * delivery: an upload that later fails satisfies it forever. {@code AttachmentVH}
+     * drives the same three states as a text row — {@code ivClock} pending,
+     * {@code btnTryAgain} failed, neither = sent — so require the finished state.
+     */
+    public boolean waitAttachmentSent(Duration timeout) {
+        if (!attachmentPostedOrUploading(Duration.ofSeconds(Math.min(20, timeout.toSeconds())))) {
+            return false;
+        }
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            if (!anyVisible("uploadingProgress") && !anyVisible("btnTryAgain") && !anyVisible("ivClock")) {
+                return true;
+            }
+            sleepQuiet(1000);
+        }
+        return false;
+    }
+
+    /** Why an attachment send is not finished — for a failure message that names it. */
+    public String attachmentSendState() {
+        if (anyVisible("btnTryAgain")) return "FAILED — the bubble is offering Retry";
+        if (anyVisible("uploadingProgress")) return "still UPLOADING";
+        if (anyVisible("ivClock")) return "PENDING — the clock is still showing";
+        if (!driver.findElements(byId("attachmentType")).isEmpty()
+                || !driver.findElements(byId("imageParent")).isEmpty()) return "sent";
+        return "no attachment bubble at all";
+    }
+
+    private boolean anyVisible(String id) {
+        try {
+            for (WebElement e : driver.findElements(byId(id))) {
+                if (e.isDisplayed()) return true;
+            }
+        } catch (WebDriverException ignored) { }
         return false;
     }
 

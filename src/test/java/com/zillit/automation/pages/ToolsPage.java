@@ -41,13 +41,57 @@ public class ToolsPage extends BasePage {
         }
     }
 
+    /**
+     * True when the Tools screen is up.
+     *
+     * <p>Checks the search box BY ID first. The old version matched the text
+     * "Search tools" — which is the box's HINT, so it vanishes the instant anything is
+     * typed — with section headers as fallbacks, and those disappear too when a filter
+     * matches nothing. The result: once a previous navigation left a query in the box,
+     * Tools reported "not loaded" for ever and every attempt to re-enter a module failed
+     * with the screen plainly on display. {@code searchEt} is present regardless of what
+     * it contains.
+     */
     public boolean isLoaded(Duration timeout) {
-        return textShown("Search tools", timeout)
-                || textShown("PRODUCTION", Duration.ofSeconds(2))
-                || textShown("ADMIN", Duration.ofSeconds(2));
+        return isVisible("searchEt", timeout)
+                || textShown("Search tools", Duration.ofSeconds(1))
+                || textShown("PRODUCTION", Duration.ofSeconds(1))
+                || textShown("ADMIN", Duration.ofSeconds(1));
     }
 
     // ---------------- search (searchEt) ----------------
+
+    /**
+     * Opens the module if its row is ALREADY on screen — no clearing, no scrolling.
+     *
+     * <p>The cheapest path, and common in practice: a previous navigation may have left
+     * the list filtered to exactly this row, or it simply sits above the fold. Checking
+     * costs one lookup, and skipping the clear+scroll saves the whole round trip.
+     *
+     * @return true only when a row was actually found AND tapped.
+     */
+    public boolean openIfVisible(String label) {
+        // EXCLUDE EditText. The search box holds the query from the previous navigation —
+        // literally the module's name — so a bare text match found the INPUT, clicked it,
+        // and reported success while only moving the caret. The log said
+        // "opened=true library=false" for every label with the app sitting on the bottom
+        // nav: a tap that lands on the thing you searched WITH rather than the thing you
+        // searched FOR.
+        try {
+            for (WebElement el : driver.findElements(AppiumBy.androidUIAutomator(
+                    "new UiSelector().textMatches(\"(?i)" + label + "\")"))) {
+                try {
+                    String cls = el.getAttribute("className");
+                    if (cls != null && cls.contains("EditText")) continue;
+                    if (!el.isDisplayed()) continue;
+                    el.click();
+                    sleep(1200);
+                    return true;
+                } catch (WebDriverException ignored) { }
+            }
+        } catch (WebDriverException ignored) { }
+        return false;
+    }
 
     /** Filter the tool list via the "Search tools" box (searchEt). */
     public void searchTools(String text) {

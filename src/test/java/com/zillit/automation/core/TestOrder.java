@@ -101,7 +101,13 @@ public final class TestOrder {
     public static final int DRIVE_FOLDER_SHARE  = 56;
     /** Experiment harness for the editor cell-write failure (plan §2.2), not coverage. */
     public static final int DRIVE_EDITOR_PROBE  = 57;
-    // free: 50, 58–59
+    // 58–59 · tools — Document Distribution · VIDYA -------------------------
+    /** Areas A+B: entry, shell and the library listing. */
+    public static final int DOC_DISTRIBUTION    = 58;
+    /** Area C: folders (create / edit / delete) + the area-B cases that need content. */
+    public static final int DOC_DISTRIBUTION_FOLDERS = 59;
+    // 58–59 full — the content suites continue at 81–88 (each seeds and cleans up
+    // its own folder, so running after the Drive range is harmless).
 
     // 60–69 · tools — standalone modules · VIDYA ------------------------------
     public static final int RECCE               = 60;
@@ -121,6 +127,47 @@ public final class TestOrder {
     // 80–89 · cross-cutting / two-device ---------------------------------------
     /** Both devices upload, share, receive and edit — the full symmetric loop. */
     public static final int DRIVE_E2E           = 80;
+
+    // 81–88 · tools — Document Distribution content suites · VIDYA ------------
+    // (DOC_DISTRIBUTION_TEST_CASES.md §6 — areas D/E/F now; G/H/I, J/K/L, M/N to
+    // follow in this block. Self-contained: each seeds and deletes its own folder.)
+    /** Area D: files &amp; selection — upload, preview, row menu, selection bar, move. */
+    public static final int DOC_DISTRIBUTION_FILES    = 81;
+    /** Areas E+F core: the composer and its attach-from-library picker. NO real send. */
+    public static final int DOC_DISTRIBUTION_COMPOSER = 82;
+    /** Grid view — the second layout family: inline row actions the list view has not got. */
+    public static final int DOC_DISTRIBUTION_GRID      = 94;
+    /** Publish TYPE rules: pdfOnly / documentsOnly destinations vs every media family. */
+    public static final int DOC_DISTRIBUTION_PUBLISH_TYPES = 96;
+    /** Nested folders: folder-in-folder, deep breadcrumb, uploads at depth. */
+    public static final int DOC_DISTRIBUTION_NESTED    = 95;
+    /** Area G: distribution lists (presets) — CRUD, badge, apply in the composer. */
+    public static final int DOC_DISTRIBUTION_PRESETS   = 83;
+    /** Area H: email templates — CRUD, badge, apply in the composer. */
+    public static final int DOC_DISTRIBUTION_TEMPLATES = 84;
+    /** Area I: address book, contact detail/editor, CSV import, export. */
+    public static final int DOC_DISTRIBUTION_CONTACTS  = 85;
+    /** Areas J+K+L: history list, distribution detail, analytics. Read-mostly. */
+    public static final int DOC_DISTRIBUTION_HISTORY   = 86;
+    /** Area M: watermark wizard, batch screen, download. */
+    public static final int DOC_DISTRIBUTION_WATERMARK = 87;
+    /** Area N: publish sheet — categories, fields, republish. Writes into OTHER modules. */
+    public static final int DOC_DISTRIBUTION_PUBLISH   = 88;
+    /** Area O: rights — the click-time permission gate. Two cases need a second account. */
+    public static final int DOC_DISTRIBUTION_RIGHTS    = 89;
+    /**
+     * F-25 — the only suite that SENDS. Recipients are RFC-2606 example.com addresses,
+     * which cannot reach a real person. Runs late so History/detail have something real.
+     */
+    public static final int DOC_DISTRIBUTION_SEND      = 91;
+    /**
+     * Housekeeping: deletes stray {@code QA_*} folders / lists / templates left behind by
+     * failed cases. In the DESTRUCTIVE range because it removes data, and opt-in only
+     * ({@code --doc-dist-cleanup}) — never part of --doc-dist-all.
+     */
+    public static final int DOC_DISTRIBUTION_CLEANUP    = 93;
+    /** Area P: regression &amp; edge — offline, rotation, long names, rapid back. */
+    public static final int DOC_DISTRIBUTION_REGRESSION = 92;
 
     // 70–89 · ADMIN SETTINGS · BHAVIK -----------------------------------------
     public static final int DEPARTMENT_LISTING_ORDER      = 70;
