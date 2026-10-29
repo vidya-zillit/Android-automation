@@ -83,8 +83,26 @@ public class DepartmentListingOrderPage extends BasePage {
      * priority numbers; "position" here just means list order.
      */
     public List<String> referenceDepartmentNames() {
+        // This runs immediately after openCreateNewDepartment(), i.e. straight
+        // after an Activity transition. An instant findElements() can fire
+        // before the RecyclerView has rendered and returns NOTHING — which
+        // shows up downstream as indexOf(name) == -1, i.e. "position 0", and
+        // reads as a reordering bug rather than the timing artefact it is.
+        // Poll until the list has rendered (same guard the row-tap helper below
+        // already uses for exactly this reason).
+        long deadline = System.currentTimeMillis() + 10_000;
+        List<WebElement> rows = driver.findElements(byId("memberNameTv"));
+        while (rows.isEmpty() && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            rows = driver.findElements(byId("memberNameTv"));
+        }
         List<String> out = new ArrayList<>();
-        for (WebElement e : driver.findElements(byId("memberNameTv"))) {
+        for (WebElement e : rows) {
             try {
                 out.add(e.getText());
             } catch (WebDriverException ignored) {
@@ -100,6 +118,18 @@ public class DepartmentListingOrderPage extends BasePage {
      * screen's RecyclerView has finished rendering.
      */
     private boolean tapListRow(String label) {
+        // Bring the row on screen FIRST. Admin Settings is a long list and it keeps
+        // its scroll position, so after opening "Create New Department" (6th row)
+        // and coming back, "Change Department Listing Order for Crew List" (3rd row)
+        // has scrolled off the top. Without this the lookup below simply times out
+        // and the flow stops on Admin Settings having never reopened the screen.
+        try {
+            driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiScrollable(new UiSelector().scrollable(true))"
+                            + ".scrollIntoView(new UiSelector().textContains(\"" + label + "\"))"));
+        } catch (WebDriverException notScrollable) {
+            // Short list, or already visible — the lookup below decides.
+        }
         try {
             new WebDriverWait(driver, Duration.ofSeconds(10))
                     .until(ExpectedConditions.elementToBeClickable(AppiumBy.xpath(
@@ -186,7 +216,7 @@ public class DepartmentListingOrderPage extends BasePage {
 
     /** True once Save has redirected back to the Admin Settings list. */
     public boolean isOnAdminSettings(Duration timeout) {
-        return textShown("ADMIN SETTINGS", timeout);
+        return onAdminSettingsScreen(timeout);
     }
 
     public boolean tapReset() {

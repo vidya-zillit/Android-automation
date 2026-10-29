@@ -2,14 +2,15 @@
 # Zillit Automation — one command: run every suite, then push the report
 # to the team Google Sheet. Works standalone; no Claude involved.
 #
-#   ./run-and-report.sh                    # full suite (E2E asks for manual OTP)
+#   ./run-and-report.sh --all                   # full suite (E2E asks for manual OTP)
 #   ./run-and-report.sh --no-e2e           # skip the OTP/E2E test
 #   ./run-and-report.sh --all-in-project   # Home+Calendar+Email+C&C+Tools+Admin Settings, one report
 #   ./run-and-report.sh --admin-settings   # Settings → Admin Settings only (e.g. Department Listing Order)
+#   ./run-and-report.sh --settings         # Settings tab (non-admin), e.g. Edit My Profile
 #   ./run-and-report.sh --two-device       # cross-device send/receive (two users)
 #
 # Prerequisites (once): emulator running, Appium server running
-#   (ANDROID_HOME=$HOME/Library/Android/sdk npm run appium),
+#   (ANDROID_HOME must be exported, then: npm run appium),
 #   develop-debug APK built in ../Zillit-Android.
 #
 # --two-device also needs a SECOND device attached and BOTH devices already
@@ -18,6 +19,14 @@
 
 set -u
 cd "$(dirname "$0")"
+
+# Git Bash / MSYS rewrites any argument that looks like a Unix path into a
+# Windows one, so `adb push … /sdcard/Pictures/x.jpg` silently became
+# `C:/Program Files/Git/sdcard/…` and every fixture push failed — invisibly,
+# because prep_device discards output. These two vars turn that off and are
+# simply ignored by bash on macOS/Linux.
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL='*'
 
 GRADLE_ARGS=(test --continue)
 if [[ "${1:-}" == "--no-e2e" ]]; then
@@ -288,14 +297,33 @@ elif [[ "${1:-}" == "--recce-pagination" ]]; then
   #   ZILLIT_RECCE_SEED=false ./run-and-report.sh --recce-pagination   # verify only
   GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.RecceePaginationTest')
 elif [[ "${1:-}" == "--admin-settings" ]]; then
-  # SETTINGS → ADMIN SETTINGS — every admin-settings sub-feature test class.
-  # Add new admin-settings test classes to this same list as they're
-  # implemented, so this one flag keeps covering the whole Admin Settings area.
+  # SETTINGS → ADMIN SETTINGS — every admin-settings sub-feature test class, in the
+  # agreed running order (that order lives in TestOrder, 100–149).
+  # Add new admin-settings classes here AND give them a TestOrder constant.
   GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DepartmentListingOrderTest'
                 --tests 'com.zillit.automation.tests.CompanyDetailsTest'
                 --tests 'com.zillit.automation.tests.CreateAdditionalShootingUnitTest'
                 --tests 'com.zillit.automation.tests.CreateNewDepartmentTest'
-                --tests 'com.zillit.automation.tests.CreateNewDesignationTest')
+                --tests 'com.zillit.automation.tests.CreateNewDesignationTest'
+                --tests 'com.zillit.automation.tests.CreateRemoteShootingUnitTest'
+                --tests 'com.zillit.automation.tests.CreateUpdateHomeUnitTest'
+                --tests 'com.zillit.automation.tests.CustomizationOfToolsTest'
+                --tests 'com.zillit.automation.tests.EditProjectNameTest'
+                --tests 'com.zillit.automation.tests.ManageToolGroupsTest'
+                --tests 'com.zillit.automation.tests.PreApprovedUsersTest'
+                --tests 'com.zillit.automation.tests.ApproveNewUserRequestTest'
+                --tests 'com.zillit.automation.tests.SosReceiversTest'
+                --tests 'com.zillit.automation.tests.UserManagementTest'
+                --tests 'com.zillit.automation.tests.WatermarkLogoTest'
+                --tests 'com.zillit.automation.tests.DeleteProjectTest')
+elif [[ "${1:-}" == "--settings" ]]; then
+  # SETTINGS TAB (non-admin) — separate from Admin Settings. Run this after
+  # --admin-settings. TestOrder range 150–169.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.EditMyProfileTest'
+                --tests 'com.zillit.automation.tests.AppPreferencesTest'
+                --tests 'com.zillit.automation.tests.LinkedDeviceTest'
+                --tests 'com.zillit.automation.tests.InviteUsersTest'
+                --tests 'com.zillit.automation.tests.ZillitHelpTest')
 elif [[ "${1:-}" == "--manual-media" ]]; then
   # Interactive: YOU pick Video/Location/Contact on the device and reach the
   # send screen; automation sends + verifies. Set ZILLIT_PICK_WAIT for a longer
@@ -338,10 +366,23 @@ fi
 
 # Push test media + pre-grant permissions to the target device(s) so media-send
 # tests have content and don't stall on system permission dialogs.
-ADB="$HOME/Library/Android/sdk/platform-tools/adb"
+# adb location — resolved, not hardcoded. The old macOS-only path meant that on
+# any other machine BOTH prep_device and relaunch_app silently did nothing (the
+# -x guard below just skipped them), so media tests failed for no visible reason.
+# Order: ANDROID_HOME / ANDROID_SDK_ROOT (set on every dev machine) → the macOS
+# default → whatever is on PATH. Windows reports ANDROID_HOME with backslashes
+# and needs adb.exe, so normalise the separators and try both names.
+ANDROID_SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
+ANDROID_SDK="${ANDROID_SDK//\\//}"
+ADB="$ANDROID_SDK/platform-tools/adb"
+[[ -x "$ADB" ]] || ADB="$ANDROID_SDK/platform-tools/adb.exe"
+[[ -x "$ADB" ]] || ADB="$(command -v adb 2>/dev/null || true)"
+[[ -x "$ADB" ]] || echo "⚠ adb not found (looked in $ANDROID_SDK/platform-tools and on PATH)" \
+                        "— device prep and app relaunch will be skipped."
 FX=src/test/resources/fixtures
-#PKG="${ZILLIT_APP_PACKAGE:-com.zillit.zillitapp.qa}"
-PKG="${ZILLIT_APP_PACKAGE:-com.zillit.zillitapp.dev}"
+# QA flavour — matches zillit.appPackage in config/config.properties. A merge
+# briefly switched this to .dev, which mis-targeted pm grant and relaunch_app.
+PKG="${ZILLIT_APP_PACKAGE:-com.zillit.zillitapp.qa}"
 
 prep_device() {  # $1 = adb device serial (may be empty for the only device)
   local flag=""
@@ -404,7 +445,8 @@ fi
 if ! curl -s -m 4 http://127.0.0.1:4723/status >/dev/null 2>&1; then
   echo "✗ Appium server is NOT running on http://127.0.0.1:4723"
   echo "  Start it in another terminal, then re-run:"
-  echo "    ANDROID_HOME=\$HOME/Library/Android/sdk npm run appium"
+  echo "    export ANDROID_HOME=<your Android SDK>   # macOS: \$HOME/Library/Android/sdk"
+  echo "    npm run appium"
   exit 2
 fi
 
@@ -524,7 +566,8 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"
     "Tools::ConfidentialInfoTest InfoTest CateringTest RecceTest DriveTest ToolsManagementTest"
-    "Settings / Admin Settings::DepartmentListingOrderTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest"
+    "Settings / Admin Settings::DepartmentListingOrderTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest CreateRemoteShootingUnitTest CreateUpdateHomeUnitTest CustomizationOfToolsTest EditProjectNameTest ManageToolGroupsTest PreApprovedUsersTest ApproveNewUserRequestTest SosReceiversTest UserManagementTest WatermarkLogoTest DeleteProjectTest"
+    "Settings (tab)::EditMyProfileTest AppPreferencesTest LinkedDeviceTest InviteUsersTest ZillitHelpTest"
   )
   if [[ "${SKIP_PROJECT_MODULE:-0}" == "1" ]]; then
     MODULES=("${MODULES[@]:1}")  # drop "Project create / join / list"

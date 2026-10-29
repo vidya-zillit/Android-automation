@@ -21,8 +21,10 @@ package com.zillit.automation.core;
  *   40–47   C&amp;C (chat &amp; calling)
  *   48–59   tools                                  ← VIDYA
  *   60–69   tools: standalone modules (Recce, …)   ← VIDYA
- *   70–89   ADMIN SETTINGS                         ← BHAVIK
- *   90–99   destructive / global-state — MUST run last
+ *   90–99   destructive / global-state (tools)     ← VIDYA
+ *  100–149  ADMIN SETTINGS                         ← BHAVIK
+ *  150–169  SETTINGS TAB (non-admin)               ← BHAVIK
+ *   (70–89 retired — the admin block moved to 100+ to make room)
  * </pre>
  *
  * <p><b>Leave gaps.</b> Inside your range, jump by 2–3 (70, 72, 74…) so a suite can
@@ -169,15 +171,68 @@ public final class TestOrder {
     /** Area P: regression &amp; edge — offline, rotation, long names, rapid back. */
     public static final int DOC_DISTRIBUTION_REGRESSION = 92;
 
-    // 70–89 · ADMIN SETTINGS · BHAVIK -----------------------------------------
-    public static final int DEPARTMENT_LISTING_ORDER      = 70;
-    public static final int COMPANY_DETAILS               = 72;
-    public static final int CREATE_ADDITIONAL_SHOOTING_UNIT = 74;
-    public static final int CREATE_NEW_DEPARTMENT         = 76;
-    public static final int CREATE_NEW_DESIGNATION        = 78;
-    // free: 71, 73, 75, 77, 79–89 — next admin-settings suites go here
-
-    // 90–99 · destructive / global-state — always last ------------------------
+    // 90–99 · destructive / global-state · VIDYA -----------------------------
     /** Disables tools and reorders groups — must not run before the tool suites. */
-    public static final int TOOLS_MANAGEMENT    = 90;
+    public static final int TOOLS_MANAGEMENT             = 90;
+    // free: 91–99
+
+    // 100–149 · ADMIN SETTINGS · BHAVIK ---------------------------------------
+    // This list IS the run order for --admin-settings. Steps of 3 leave two free
+    // numbers between every pair, so a new admin module can be slotted anywhere
+    // without renumbering its neighbours.
+    //
+    // CUSTOMIZATION_OF_TOOLS_ALL lives here, not in the destructive range: it is
+    // an Admin Settings screen, and its position is fixed by the agreed sequence.
+    //
+    // DELETE_PROJECT is last because it schedules the project for real deletion
+    // and leaves the timer armed.
+    public static final int DEPARTMENT_LISTING_ORDER        = 100;
+    public static final int COMPANY_DETAILS                 = 103;
+    public static final int CREATE_ADDITIONAL_SHOOTING_UNIT = 106;
+    public static final int CREATE_NEW_DEPARTMENT           = 109;
+    public static final int CREATE_NEW_DESIGNATION          = 112;
+    public static final int CREATE_REMOTE_SHOOTING_UNIT     = 115;
+    public static final int CREATE_UPDATE_HOME_UNIT         = 118;
+    public static final int CUSTOMIZATION_OF_TOOLS_ALL      = 121;
+    public static final int EDIT_PROJECT_NAME               = 124;
+    public static final int MANAGE_TOOL_GROUPS              = 127;
+    public static final int PRE_APPROVED_USERS              = 130;
+    public static final int APPROVE_NEW_USER_REQUEST        = 133;
+    public static final int SOS_RECEIVERS                   = 136;
+    public static final int USER_MANAGEMENT                 = 139;
+    public static final int WATERMARK_LOGO                  = 142;
+    public static final int DELETE_PROJECT                  = 145;
+    // free: 101–102, 104–105, 107–108, … 146–149 — new admin modules go here
+
+    // 150–169 · SETTINGS TAB (non-admin) · BHAVIK -----------------------------
+    // NOT part of Admin Settings — its own --settings flag, run after that block.
+    public static final int EDIT_MY_PROFILE              = 150;
+    /**
+     * Chat font size, theme and default home unit. Measures the EFFECT of each
+     * setting rather than its stored value, and restarts the app to prove the
+     * default unit persists.
+     */
+    public static final int APP_PREFERENCES              = 153;
+    /**
+     * Read-only: shows the laptop-linking instructions and confirms Link Device
+     * opens the QR scanner. Never actually links a device — that needs a QR code
+     * from a browser — so it changes nothing.
+     */
+    public static final int LINKED_DEVICE                = 156;
+    /**
+     * Read-only: shows the project invitation text and code. Never presses
+     * Share, so no invitation is sent and nothing changes.
+     */
+    public static final int INVITE_USERS                 = 159;
+    /**
+     * The whole ZILLIT GUIDE, entry by entry: Contact us (including Email Us),
+     * FAQ, Privacy Policy, Terms of Use, and the Tutorial for Admin tour.
+     * Tutorial for Admin is a row in that guide, so it lives here rather than in
+     * a suite of its own.
+     *
+     * <p>SENDS A REAL EMAIL every run: the composer arrives addressed to Zillit
+     * Support, so the message reaches their inbox as well as the BCC address.
+     */
+    public static final int ZILLIT_HELP                  = 162;
+    // free: 151–152, 154–155, 157–158, 160–161, 163–169
 }

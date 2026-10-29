@@ -59,6 +59,17 @@ public class CompanyDetailsPage extends BasePage {
      * before that screen's RecyclerView has finished rendering.
      */
     private boolean tapListRow(String label) {
+        // Bring the row on screen FIRST. Admin Settings is a long list and it keeps
+        // its scroll position, so after visiting another screen and coming back a
+        // row can sit off-screen — an unscrolled lookup then just times out and the
+        // flow stops without ever opening the screen it was asked for.
+        try {
+            driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiScrollable(new UiSelector().scrollable(true))"
+                            + ".scrollIntoView(new UiSelector().textContains(\"" + label + "\"))"));
+        } catch (WebDriverException notScrollable) {
+            // Short list, or already visible - the lookup below decides.
+        }
         try {
             new WebDriverWait(driver, Duration.ofSeconds(10))
                     .until(ExpectedConditions.elementToBeClickable(AppiumBy.xpath(
@@ -190,7 +201,7 @@ public class CompanyDetailsPage extends BasePage {
     }
 
     public boolean isOnAdminSettings(Duration timeout) {
-        return textShown("ADMIN SETTINGS", timeout);
+        return onAdminSettingsScreen(timeout);
     }
 
     // ---------------- Custom Fields ----------------
@@ -272,17 +283,39 @@ public class CompanyDetailsPage extends BasePage {
         }
     }
 
-    /** Opens the "Pictures" album in the app's own gallery (Fallery). */
+    /**
+     * Opens an album in the app's own gallery (Fallery).
+     *
+     * <p>Pinning this to a folder literally named "Pictures" made the logo-upload
+     * case fail on any device that has no such album — the picker only lists
+     * buckets that actually exist, and a freshly created emulator often has none
+     * of them named that. So try the likely names first, then fall back to
+     * whichever bucket the picker DOES list. Same approach
+     * {@code CcChatThreadPage.enterGalleryBucket()} already uses for this picker.
+     */
     public boolean openPicturesFolder() {
-        try {
-            new WebDriverWait(driver, Duration.ofSeconds(8))
-                    .until(ExpectedConditions.elementToBeClickable(
-                            AppiumBy.androidUIAutomator("new UiSelector().textContains(\"Pictures\")")))
-                    .click();
-            return true;
-        } catch (WebDriverException e) {
-            return false;
+        for (String label : new String[]{"Pictures", "All Media", "DCIM", "Camera", "Download"}) {
+            try {
+                new WebDriverWait(driver, Duration.ofSeconds(3))
+                        .until(ExpectedConditions.elementToBeClickable(
+                                AppiumBy.androidUIAutomator(
+                                        "new UiSelector().textContains(\"" + label + "\")")))
+                        .click();
+                return true;
+            } catch (WebDriverException notThisAlbum) {
+                // Not on this device — try the next name.
+            }
         }
+        // No known name matched: open the first album the picker actually shows.
+        try {
+            var buckets = driver.findElements(byId("imageViewBucketImage"));
+            if (!buckets.isEmpty()) {
+                buckets.get(0).click();
+                return true;
+            }
+        } catch (WebDriverException ignored) {
+        }
+        return false;
     }
 
     /** Selects the first photo thumbnail in the currently open album. */

@@ -48,16 +48,24 @@ public abstract class BaseTest {
         driver = DriverFactory.create();
         // The package under test comes from CONFIG, never from whatever happens to be
         // on screen. Reading getCurrentPackage() here poisons the entire session if the
-        // app is not foreground yet (slow cold start, or the screen dropped to the
-        // launcher while Gradle compiled): appPackage becomes e.g. the launcher, so
-        // every byAppId() builds "<launcher>:id/bottomNavigation" and matches nothing,
-        // AND the settleLanding() self-heal — which only re-activates when the current
-        // package differs from appPackage — concludes it is already in the right app and
-        // never brings it up. The run then fails 90s later with a misleading
-        // "No known landing screen appeared".
-        appPackage = Config.has("zillit.appPackage")
-                ? Config.get("zillit.appPackage")
-                : driver.getCurrentPackage();
+        // app is not foreground yet (slow cold start, the screen dropped to the launcher
+        // while Gradle compiled, or a previous suite left the camera / gallery / QR
+        // scanner in front): appPackage becomes e.g. the launcher, so every byAppId()
+        // builds "<launcher>:id/bottomNavigation" and matches nothing, AND the
+        // settleLanding() self-heal — which only re-activates when the current package
+        // differs from appPackage — concludes it is already in the right app and never
+        // brings it up. The run then fails 90s later with a misleading
+        // "No known landing screen appeared", because the ids were WRONG rather than
+        // absent and every lookup burned its full timeout.
+        //
+        // configuredAppPackage() gives zillit.resourcePackage precedence, so a flavour
+        // whose resource ids differ from its application id can still be pointed
+        // elsewhere; zillit.appPackage is the ordinary answer and is already set.
+        appPackage = Config.configuredAppPackage();
+        if (appPackage.isEmpty()) {
+            // Nothing configured — the foreground app is the only clue left.
+            appPackage = driver.getCurrentPackage();
+        }
         ensureForeground();
         // Nudge past any leftover editor/gallery/preview screen from a prior run
         // WITHOUT a full relaunch (a relaunch re-hits splash + the app-lock alert
