@@ -19,15 +19,49 @@ public class ProjectListPage extends BasePage {
         return waitVisible("projectListRecyclerView").isDisplayed();
     }
 
+    /**
+     * The project names on screen, WAITING for the list to populate first.
+     *
+     * <p><b>Why the wait is the whole point.</b> settleLanding() reports PROJECT_LIST as
+     * soon as {@code projectListRecyclerView} exists — but the RecyclerView is in the
+     * hierarchy before the API has returned a single row. An instant read therefore comes
+     * back empty on a cold start, and all 58 callers guard with
+     * {@code assumeTrue(!names.isEmpty(), "No projects to enter")}. The suite then skips
+     * every case while the phone sits on a project list that fills in a second later —
+     * reporting "no projects" about an account with plenty of them.
+     *
+     * <p>Returning empty after the wait is still a real answer (an account genuinely
+     * without projects), so the behaviour callers rely on does not change — only the
+     * timing does.
+     */
     public List<String> visibleProjectNames() {
-        try {
-            return driver.findElements(byId("projectNameText")).stream()
-                    .map(WebElement::getText)
-                    .collect(Collectors.toList());
-        } catch (WebDriverException e) {
-            return List.of();
+        long deadline = System.currentTimeMillis() + PROJECTS_APPEAR.toMillis();
+        while (true) {
+            try {
+                List<String> names = driver.findElements(byId("projectNameText")).stream()
+                        .map(WebElement::getText)
+                        .filter(t -> t != null && !t.isBlank())
+                        .collect(Collectors.toList());
+                if (!names.isEmpty()) {
+                    return names;
+                }
+            } catch (WebDriverException ignored) {
+                // List re-binding mid-read — try again until the budget runs out.
+            }
+            if (System.currentTimeMillis() >= deadline) {
+                return List.of();
+            }
+            try {
+                Thread.sleep(400);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return List.of();
+            }
         }
     }
+
+    /** How long the project list gets to come back from the API before we call it empty. */
+    private static final Duration PROJECTS_APPEAR = Duration.ofSeconds(25);
 
     public void search(String text) {
         WebElement field = waitVisible("search_widget_edit_textvw");

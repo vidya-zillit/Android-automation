@@ -24,8 +24,43 @@ public class HomeChatPage extends BasePage {
 
     // ---------- unit strip ----------
 
+    /**
+     * True once the Home units strip is up — self-healing onto the Home tab if it is not.
+     *
+     * <p><b>Why the self-heal.</b> {@code recTab} exists ONLY on the Home tab, but
+     * "inside a project" is detected by the bottom bar, which is equally present on
+     * Tools, Email, C&amp;C and Settings, and inside a unit's chat. So a session that
+     * started with the app parked on another tab passed every "are we in a project"
+     * check and then failed this one, and because the suites guard on it with
+     * assumeTrue, the whole module reported SKIPPED rather than saying what was wrong.
+     *
+     * <p>Three steps, cheapest first: look; back out of a sub-screen that is covering
+     * the nav; tap Home. Each is a no-op when it is not needed.
+     */
     public boolean isLoaded() {
-        return isVisible("recTab", Duration.ofSeconds(20));
+        if (isVisible("recTab", Duration.ofSeconds(8))) return true;
+
+        // NO back-presses here, deliberately.
+        //
+        // This is a PREDICATE. Callers ask it freely, often inside loops — ChatOptionsTest's
+        // ensureInChat() asks it up to six times while recovering from Forward/Share/Delete.
+        // When this method pressed BACK to "unwind" on the caller's behalf, that recovery
+        // loop became roughly twenty-four back-presses: chat → units → project list →
+        // Start & Join → out of the app. The phone ended up on the launcher and every
+        // later case reported "Home tab not reachable; bottom-nav tabs seen: []", which is
+        // true and completely useless, because by then nothing was on screen to find.
+        //
+        // Tapping Home is safe — it cannot leave the project — so the tab correction stays.
+        // Unwinding a sub-screen belongs to the caller, which knows what it opened and has
+        // a relaunch to fall back on.
+        if (driver.findElements(byId("bottomNavigation")).isEmpty()) {
+            return false; // not on a bottom-nav screen at all — the caller decides what to do
+        }
+        BottomNavPage nav = new BottomNavPage(driver);
+        if (nav.goHome()) {
+            return isVisible("recTab", Duration.ofSeconds(10));
+        }
+        return false;
     }
 
     /**
@@ -980,34 +1015,13 @@ public class HomeChatPage extends BasePage {
     }
 
     /**
-     * In an open Android SYSTEM picker (Documents/Audio), taps the first item
-     * whose visible text contains namePart. Best-effort — returns false when the
-     * device's picker doesn't surface the file (varies by OS/vendor).
+     * In an open Android SYSTEM picker, taps the first item whose text contains namePart.
+     * Returns false — and hands the screen back to the app — when the file is not there.
+     *
+     * @see BasePage#pickSystemFile(String, java.time.Duration)
      */
     public boolean pickSystemFileByName(String namePart, Duration timeout) {
-        long deadline = System.currentTimeMillis() + timeout.toMillis();
-        By loc = AppiumBy.androidUIAutomator(
-                "new UiSelector().textContains(\"" + namePart + "\")");
-        while (System.currentTimeMillis() < deadline) {
-            // Some pickers hide files behind a "Show roots" drawer or a search.
-            try {
-                var els = driver.findElements(loc);
-                if (!els.isEmpty()) {
-                    els.get(els.size() - 1).click();
-                    return true;
-                }
-            } catch (WebDriverException ignored) {
-            }
-            // Try a search box if present (DocumentsUI search).
-            try {
-                driver.findElement(AppiumBy.androidUIAutomator(
-                        "new UiSelector().descriptionContains(\"Search\")")).click();
-                var s = driver.findElement(By.className("android.widget.EditText"));
-                s.sendKeys(namePart);
-            } catch (WebDriverException ignored) {
-            }
-        }
-        return false;
+        return pickSystemFile(namePart, timeout);
     }
 
     /** True once a sent attachment (media/doc) bubble or its loader is present. */

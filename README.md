@@ -15,6 +15,149 @@ Standalone Appium UI-automation project for the Zillit Android app
 npm install            # installs Appium + UiAutomator2 driver locally
 ```
 
+## Running from Android Studio (one click)
+
+Nothing to start by hand — no emulator window, no Appium terminal, no `adb` commands.
+
+1. Open the project in Android Studio and let the Gradle sync finish.
+2. Open the **run-configuration dropdown** in the toolbar. The Zillit entries are
+   committed in `.run/` and show up on their own:
+
+   | Configuration | Module flag | What it runs |
+   |---|---|---|
+   | `Zillit ▸ Home` | `--home` | chat, posting rights, media send/preview, call sheet, calendar |
+   | `Zillit ▸ Chat` | `--chat` | every chat suite, no calendar |
+   | `Zillit ▸ Calendar` | `--calendar` | calendar CRUD, all pickers |
+   | `Zillit ▸ Email` | `--email` | email module |
+   | `Zillit ▸ Comms and Collaboration` | `--cc` | C&C module |
+   | `Zillit ▸ Tools` | `--tools` | tools module |
+   | `Zillit ▸ Recce` | `--recce` | recce module |
+   | `Zillit ▸ Drive (full)` | `--drive-all` | the whole Drive sweep |
+   | `Zillit ▸ Document Distribution` | `--doc-dist-all` | all Document Distribution content suites |
+   | `Zillit ▸ Admin Settings` | `--admin-settings` | Settings → Admin Settings |
+   | `Zillit ▸ Settings tab` | `--settings` | the Settings tab |
+   | `Zillit ▸ ALL modules` | `--all-in-project` | every module, one combined report |
+
+3. Press **▶ Run**. That is the whole procedure.
+
+Each run does the following by itself, and skips any step already done:
+
+1. resolves `adb` and the emulator from the SDK — no hardcoded paths;
+2. runs `npm install` if Appium is not installed yet;
+3. finds a device, **booting an AVD when nothing is attached** and waiting for
+   `sys.boot_completed` rather than just for `adb` to notice it;
+4. grants `io.appium.settings` its location permissions — on Android 14+ its
+   foreground service is location-typed and silently refuses to start without
+   them, which is what produces the misleading
+   *"Appium Settings app is not running after 5000ms"* on real phones;
+5. starts the Appium server if it is not already listening, logging to
+   `build/appium.log`;
+6. pushes the media fixtures and grants the app's permissions;
+7. runs the suites, builds the HTML report and shares it.
+
+The same thing from a terminal:
+
+```bash
+./run-ui.sh --home            # one module
+./run-ui.sh --all-in-project  # everything, already logged in
+./run-ui.sh --help            # the module list
+```
+
+### Choosing the build (QA / DEV / PROD)
+
+Every flavour is a separate app with its own applicationId, so switching is one
+variable — and because **resource ids are prefixed by the applicationId**, that
+same variable decides what every locator in the suite resolves against:
+
+| `ZILLIT_FLAVOR` | Package | Notes |
+|---|---|---|
+| `dev` | `com.zillit.zillitapp.dev` | develop flavour |
+| `qa` | `com.zillit.zillitapp.qa` | the config default |
+| `stg` | `com.zillit.zillitapp.stg` | staging builds, where installed |
+| `prod` | `com.zillit.zillitapp` | **also needs `ZILLIT_ALLOW_PROD=1`** |
+
+```bash
+ZILLIT_FLAVOR=dev ./run-ui.sh --home
+```
+
+The launcher activity does **not** change with the flavour — `.splash.SplashActivity`
+resolves against the manifest namespace, which stays `com.zillit.zillitapp` for all
+of them — so `zillit.appActivity` is correct as it is and needs no edit.
+
+Prod is gated deliberately. These suites send messages, replace documents and can
+clear a Call Sheet unit; on prod that lands in a live production.
+
+To change the default permanently, edit `zillit.appPackage` in
+`config/config.properties`.
+
+Before the run starts, the chosen flavour is checked against what is actually
+installed on the chosen device. If it is missing you get the list of Zillit builds
+that *are* there, instead of an hour of locator timeouts that look like "no project".
+
+### Choosing which device to run on
+
+See everything attached and what is installed on each:
+
+```bash
+./run-ui.sh --devices
+```
+
+```
+  34281FDH2005XC  —  Pixel 7, Android 17
+      ZILLIT_FLAVOR=dev   com.zillit.zillitapp.dev    Zillit_32535-dev
+      ZILLIT_FLAVOR=qa    com.zillit.zillitapp.qa     Zillit_22533-qa
+```
+
+Then:
+
+```bash
+ZILLIT_UDID=34281FDH2005XC ZILLIT_FLAVOR=qa ./run-ui.sh --home
+```
+
+**For a physical device the only requirements are:** USB debugging on, the device
+authorised (`adb devices` shows `device`, not `unauthorized`), the flavour you want
+installed, and that build **logged in with a project you can post in**. The location
+grant that Android 14+ needs for Appium's helper app is applied automatically.
+
+
+### Device selection rules
+
+| Situation | What happens |
+|---|---|
+| Nothing attached | the AVD boots automatically (`ZILLIT_AVD` picks which one) |
+| Exactly one device attached | that one is used |
+| Several attached | `zillit.udid` in `config/config.properties` decides |
+| `ZILLIT_UDID` set | that one wins, and the run fails fast if it is not attached |
+
+It never guesses between two devices without being told, because guessing wrong
+means posting real chat messages into a project on the wrong phone.
+
+```bash
+ZILLIT_UDID=34281FDH2005XC ./run-ui.sh --home   # a specific phone
+ZILLIT_AVD=Medium_Phone_API_37.0 ./run-ui.sh --home
+```
+
+To change the default permanently, edit `zillit.udid` in `config/config.properties`.
+
+### Sharing the results
+
+Every run ends with a **self-contained HTML report**, kept per run instead of
+overwritten:
+
+```
+build/report/zillit-home-20261117-1543.html
+```
+
+One file, no server, no assets — attach it to a chat or an email as is. Each
+failure is classified (environment vs. real app/test issue) with a plain-English
+explanation and a next step. It opens automatically when the run finishes; set
+`ZILLIT_NO_OPEN=1` to stop that.
+
+When `zillit.sheetWebhook` is set in `config/config.properties` (one-time setup
+in `tools/google-apps-script.gs`), the same run also appends **one row per test
+case** to the team Google Sheet — name, module, status, failure reason — so the
+sheet is the running test-case log. Set `ZILLIT_SHARE=0` to skip that for a run.
+
 ## Running the tests (manual runbook)
 
 **Terminal 1 — build the app** (only when the app code changed):

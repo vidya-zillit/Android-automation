@@ -94,13 +94,25 @@ public abstract class BaseTest {
         }
     }
 
-    /** Presses back a few times if the app is on a non-landing (media) screen. */
+    /**
+     * Presses back a few times if the app is genuinely stuck on a non-landing screen.
+     *
+     * <p><b>It WAITS before deciding that.</b> "No landing marker on screen" is also true
+     * of an app that is still on its splash, and this runs in @BeforeAll — the earliest
+     * possible moment. Backing out of a launching app does not unwind a stray screen, it
+     * walks straight out of the project: project → project list → Start &amp; Join. Every
+     * suite afterwards then skips with "Could not enter a project" on a device that was
+     * logged in the whole time.
+     *
+     * <p>This used to be protected by accident: the three presence checks each waited 2s,
+     * so a pass cost ~6s and the app usually finished starting inside it. Making those
+     * checks instant removed that grace and turned a latent bug into a reliable one — so
+     * the wait is now explicit and owned, instead of being a side effect of slow lookups.
+     */
     private void unwindStrayScreens() {
         for (int i = 0; i < 4; i++) {
-            if (isPresent(byAppId("bottomNavigation"))
-                    || isPresent(byAppId("projectListRecyclerView"))
-                    || isPresent(byAppId("start_project_btn"))) {
-                return; // already on a landing
+            if (waitForAnyLanding(Duration.ofSeconds(10))) {
+                return; // already on a landing, or got there while we waited
             }
             if (!appPackage.equals(safeCurrentPackage())) {
                 return; // left the app (a system screen) — don't keep backing out
@@ -109,6 +121,49 @@ public abstract class BaseTest {
                 driver.navigate().back();
                 Thread.sleep(800);
             } catch (WebDriverException | InterruptedException ignored) {
+            }
+        }
+    }
+
+    /**
+     * Taps the Home bottom-nav tab if it is there. Scoped to the bottomNavigation
+     * container: the nav tabs and the Home UNIT chips share the id menuText, so an
+     * unscoped match taps a unit believing it tapped a tab.
+     */
+    private void selectHomeTabIfPresent() {
+        try {
+            var nav = driver.findElements(byAppId("bottomNavigation"));
+            if (nav.isEmpty()) return;
+            for (var tab : nav.get(0).findElements(byAppId("menuText"))) {
+                String text = tab.getText();
+                if (text != null && text.trim().equalsIgnoreCase("Home")) {
+                    tab.click();
+                    Thread.sleep(1000);
+                    return;
+                }
+            }
+        } catch (WebDriverException | InterruptedException ignored) {
+            // Nav not ready — the suite's own entry code still self-heals.
+        }
+    }
+
+    /** True once any of the three landing markers shows up within the budget. */
+    private boolean waitForAnyLanding(Duration budget) {
+        long deadline = System.currentTimeMillis() + budget.toMillis();
+        while (true) {
+            if (isPresent(byAppId("bottomNavigation"))
+                    || isPresent(byAppId("projectListRecyclerView"))
+                    || isPresent(byAppId("start_project_btn"))) {
+                return true;
+            }
+            if (System.currentTimeMillis() >= deadline) {
+                return false;
+            }
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
             }
         }
     }
@@ -143,11 +198,59 @@ public abstract class BaseTest {
         }
         if (relaunchBetweenTests()) {
             relaunchApp();
+            return;
         }
+        // Ladder suites deliberately stay on one screen between cases, so NOTHING
+        // re-foregrounds the app when a case ends somewhere else. A system file picker,
+        // the gallery, a viewer or a share sheet belongs to another package, and every
+        // byAppId() lookup after that searches a foreign activity, finds nothing, and
+        // skips — one stranded case quietly takes the remainder of the module with it.
+        recoverIfOutsideApp();
+    }
+
+    /**
+     * Returns to the app under test if the previous case ended in another app.
+     *
+     * <p>Back presses first (they unwind the foreign activity cleanly), then activateApp
+     * as the fallback for a screen that will not close.
+     */
+    private void recoverIfOutsideApp() {
+        String current = safeCurrentPackage();
+        if (appPackage.equals(current)) {
+            return;
+        }
+        System.out.println(">>> Previous case ended in " + current
+                + " — returning to " + appPackage + " before the next one");
+        for (int i = 0; i < 4 && !appPackage.equals(safeCurrentPackage()); i++) {
+            try {
+                driver.navigate().back();
+                Thread.sleep(700);
+            } catch (WebDriverException | InterruptedException ignored) {
+                break;
+            }
+        }
+        ensureForeground();
     }
 
     private void prepareInitialState() {
         landing = settleLanding(120);
+        // ---- in-project suites: normalise the TAB, do not restart the app.
+        //
+        // The original problem was real: Landing.BOTTOM_NAV only means "the bottom bar is
+        // visible", which is equally true on Tools, Email or inside a unit's chat, so a
+        // suite could start one tab away from the screen it asserts against.
+        //
+        // Restarting the app fixed that but cost a full cold start — splash, auth, project
+        // fetch — on top of the launch that had ALREADY happened, so every suite paid for
+        // two launches and roughly a minute before its first case. It also opened a window
+        // where the landing search backs out of a half-loaded app.
+        //
+        // Tapping Home is the same correction for about a second, and it cannot leave the
+        // project. HomeChatPage.isLoaded() self-heals onto Home as well, so this is belt
+        // and braces, not the only guard.
+        if (!requiresLoggedOutStart() && landing == Landing.BOTTOM_NAV) {
+            selectHomeTabIfPresent();
+        }
         if (requiresLoggedOutStart() && landing != Landing.START_AND_JOIN) {
             System.out.println(">>> App is logged in (" + landing
                     + ") but this suite needs a fresh start — clearing app data");
@@ -166,7 +269,13 @@ public abstract class BaseTest {
     protected void relaunchApp() {
         driver.executeScript("mobile: terminateApp", Map.of("appId", appPackage));
         driver.executeScript("mobile: activateApp", Map.of("appId", appPackage));
-        landing = settleLanding(90);
+        // allowBackUnwind = FALSE. The app was just started fresh, so there is no stray
+        // sub-screen to unwind — and a cold start (splash, auth, project fetch) routinely
+        // takes longer than settleLanding's 8s grace. Left enabled, the self-heal starts
+        // pressing BACK while the app is still loading and walks it OUT of the project:
+        // project → project list → Start & Join. Every in-project suite then skips with
+        // "Could not enter a project", on a device that was logged in the whole time.
+        landing = settleLanding(90, false);
         if (requiresLoggedOutStart() && landing != Landing.START_AND_JOIN) {
             throw new IllegalStateException("Expected Start & Join after relaunch, got " + landing);
         }
@@ -177,6 +286,15 @@ public abstract class BaseTest {
      * three landing screens is visible, and reports which one.
      */
     protected Landing settleLanding(int timeoutSeconds) {
+        return settleLanding(timeoutSeconds, true);
+    }
+
+    /**
+     * @param allowBackUnwind press BACK periodically to unwind a stray sub-screen left by
+     *   an earlier suite. Safe when we inherited an unknown screen; HARMFUL right after a
+     *   relaunch, where the only thing BACK can do is leave the project.
+     */
+    protected Landing settleLanding(int timeoutSeconds, boolean allowBackUnwind) {
         long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
         By okBtn = AppiumBy.androidUIAutomator("new UiSelector().textMatches(\"(?i)ok\")");
         By skipBtn = byAppId("skipBtn");
@@ -213,12 +331,20 @@ public abstract class BaseTest {
             // Self-heal #2: a prior class can foreground a deep sub-screen (e.g. an
             // email folder) with no landing marker. Periodically press back to
             // unwind toward a landing while we're in-app.
-            if (appPackage.equals(cur) && System.currentTimeMillis() > nextBack) {
+            if (allowBackUnwind && appPackage.equals(cur) && System.currentTimeMillis() > nextBack) {
                 try {
                     driver.navigate().back();
                 } catch (WebDriverException ignored) {
                 }
                 nextBack = System.currentTimeMillis() + 2500;
+            }
+            // The landing checks are instant now, so pace the loop explicitly rather than
+            // hammering the device with a page-source dump as fast as it can answer.
+            try {
+                Thread.sleep(300);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
             }
         }
         // Name what was actually on screen — "no landing screen" alone sends you hunting
@@ -244,20 +370,42 @@ public abstract class BaseTest {
         }
     }
 
+    /**
+     * Is the element on screen RIGHT NOW? No waiting.
+     *
+     * <p>settleLanding() asks this for three different landing markers on every pass of
+     * its loop. At 2s apiece that was up to 6s burned per pass on the two markers that
+     * were never going to match — so the slowest landing to detect was also the one
+     * charged the most for it. The loop itself is the wait; a single pass should be cheap.
+     */
     private boolean isPresent(By locator) {
         try {
-            new WebDriverWait(driver, Duration.ofSeconds(2))
-                    .until(ExpectedConditions.visibilityOfElementLocated(locator));
-            return true;
-        } catch (WebDriverException e) {
-            return false;
+            for (org.openqa.selenium.WebElement candidate : driver.findElements(locator)) {
+                if (candidate.isDisplayed()) {
+                    return true;
+                }
+            }
+        } catch (WebDriverException ignored) {
+            // Hierarchy in flux — the next pass decides.
         }
+        return false;
     }
 
+    /**
+     * Clicks the control if it is there, paying nothing when it is not.
+     *
+     * <p>Presence is checked instantly first; only once something matches do we spend a
+     * short wait on it becoming clickable. The old version waited 700ms on EVERY locator
+     * whether or not it existed — and dismissPermissionPrompts() asks for three of them,
+     * on every pass of settleLanding(), so ~2.1s went on confirming the absence of
+     * dialogs over and over. The overwhelmingly common case is "no dialog", and that case
+     * should be free.
+     */
     private boolean clickIfPresent(By locator) {
-        // Short wait: dialogs render fast, so a long wait here just wastes time
-        // on every no-op check (this runs constantly). 700ms is plenty.
         try {
+            if (driver.findElements(locator).isEmpty()) {
+                return false;
+            }
             new WebDriverWait(driver, Duration.ofMillis(700))
                     .until(ExpectedConditions.elementToBeClickable(locator))
                     .click();

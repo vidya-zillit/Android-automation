@@ -67,7 +67,7 @@ public class InviteUsersPage extends BasePage {
         try {
             driver.findElement(AppiumBy.androidUIAutomator(
                     "new UiScrollable(new UiSelector().scrollable(true))"
-                            + ".scrollIntoView(new UiSelector().textContains(\"" + SETTINGS_ROW + "\"))"));
+                            + ".scrollIntoView(new UiSelector().resourceIdMatches(\".*nameTv\").textContains(\"" + SETTINGS_ROW + "\"))"));
         } catch (WebDriverException notScrollable) {
             // Short list or already visible.
         }

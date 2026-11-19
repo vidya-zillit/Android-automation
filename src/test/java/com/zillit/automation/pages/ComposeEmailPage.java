@@ -288,22 +288,14 @@ public class ComposeEmailPage extends BasePage {
         }
     }
 
-    /** Picks a file in the Android system picker by (partial) name. */
+    /**
+     * Picks a file in the Android system picker by (partial) name, backing out of the
+     * picker when it is not there so the next case is not stranded in DocumentsUI.
+     *
+     * @see BasePage#pickSystemFile(String, java.time.Duration)
+     */
     public boolean pickSystemFileByName(String namePart, Duration timeout) {
-        long deadline = System.currentTimeMillis() + timeout.toMillis();
-        By loc = AppiumBy.androidUIAutomator("new UiSelector().textContains(\"" + namePart + "\")");
-        while (System.currentTimeMillis() < deadline) {
-            try {
-                var els = driver.findElements(loc);
-                if (!els.isEmpty()) {
-                    els.get(els.size() - 1).click();
-                    return true;
-                }
-            } catch (WebDriverException ignored) {
-            }
-            sleep(500);
-        }
-        return false;
+        return pickSystemFile(namePart, timeout);
     }
 
     /**

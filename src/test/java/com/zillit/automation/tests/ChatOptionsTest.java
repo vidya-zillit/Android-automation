@@ -79,6 +79,13 @@ class ChatOptionsTest extends BaseTest {
                 sleep(800);
                 if (home.isInputBarVisible()) return;
             }
+            // Do not keep backing once we are already OUT of the project: from the
+            // project list or Start & Join, the next BACK leaves the app, and the
+            // relaunch below is the correct recovery instead.
+            if (!driver.findElements(byAppId("projectListRecyclerView")).isEmpty()
+                    || !driver.findElements(byAppId("start_project_btn")).isEmpty()) {
+                break;
+            }
             driver.navigate().back();
             sleep(600);
         }

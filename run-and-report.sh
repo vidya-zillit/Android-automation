@@ -54,6 +54,13 @@ elif [[ "${1:-}" == "--home" ]]; then
                 --tests 'com.zillit.automation.tests.RegressionStressTest'
                 --tests 'com.zillit.automation.tests.AllUnitsMediaTest'
                 --tests 'com.zillit.automation.tests.CalendarTest')
+elif [[ "${1:-}" == "--call-sheet-upload" ]]; then
+  # ZL-21154 upload-mode sheet (Continuation / New / Replace) on the Call Sheet unit.
+  # Its own flag rather than part of --home: every case drives a full picker round-trip to
+  # reach the sheet, so folding 17 of them into an already hour-long --home would roughly
+  # double it for one feature.
+  # Add -Dzillit.callSheetDestructive=true to also run the "New wipes the unit" case.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.CallSheetUploadModeTest')
 elif [[ "${1:-}" == "--calendar" ]]; then
   # CALENDAR ONLY — its own fresh session, nothing to do with chat. Full field
   # coverage, all pickers, and CRUD (create / view / update / delete + recurring).
@@ -349,7 +356,8 @@ elif [[ "${1:-}" == -* ]]; then
   # suite in the project — a single typo ('--drive-editor-probe' before it existed)
   # started a multi-hour sweep of an unrelated module. Fail loudly instead.
   echo "✗ Unknown option: $1"
-  echo "  Available: --no-e2e --flow --sweep --home --calendar --chat --email --cc --tools"
+  echo "  Available: --no-e2e --flow --sweep --home --call-sheet-upload --calendar --chat"
+  echo "             --email --cc --tools"
   echo "             --recce --recce-pagination --drive --drive-upload --drive-share"
   echo "             --drive-shared --drive-editor --drive-editor-probe --drive-view"
   echo "             --drive-organise --drive-comments --drive-requests --drive-activity"
@@ -412,6 +420,14 @@ prep_device() {  # $1 = adb device serial (may be empty for the only device)
   # is the difference between the upload cases running and silently failing to find
   # their own fixture.
   $ADB $flag shell 'touch /sdcard/Download/zl_dd_*' >/dev/null 2>&1
+  # Same treatment for the zl_test_* fixtures, for the same reason. These are what the
+  # chat/media suites ask the SYSTEM picker for ("zl_test"), and zl_test_doc.pdf lives in
+  # Documents, not Downloads — so the picker opens on Recent without it in sight and the
+  # suite has to fall back on search. adb push keeps each file's ORIGINAL mtime, so a
+  # fixture copied today can carry a date from weeks back, sort below everything, and miss
+  # Recent entirely. Touching them puts them on the first screenful, which is the
+  # difference between the picker finding the file directly and depending on search.
+  $ADB $flag shell 'touch /sdcard/Documents/zl_test_* /sdcard/Pictures/zl_test_* /sdcard/Music/zl_test_*' >/dev/null 2>&1
   [[ -f "$FX/zl_test_image.jpg" ]] && $ADB $flag push "$FX/zl_test_image.jpg" /sdcard/Download/zl_drive_pic.jpg >/dev/null 2>&1
   # EDITABLE office fixtures — the Drive editor only appears for docx/xlsx/pptx/csv/txt,
   # so a PDF or JPG can never exercise it.
@@ -562,6 +578,7 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
   MODULES=(
     "Project create / join / list::CreateProjectValidationTest CreateProjectSubTypeTest JoinProjectTest ProjectListTest ProjectFlowE2ETest"
     "Home / Bulletin chat::HomeChatTest PostingRightsTest MediaPreviewTest MediaSystemPickerTest ChatOptionsTest CallSheetTest RegressionStressTest AllUnitsMediaTest"
+    "Call Sheet upload mode::CallSheetUploadModeTest"
     "Calendar::CalendarTest"
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"

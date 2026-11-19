@@ -117,7 +117,7 @@ public class DeleteProjectPage extends BasePage {
         try {
             driver.findElement(AppiumBy.androidUIAutomator(
                     "new UiScrollable(new UiSelector().scrollable(true))"
-                            + ".scrollIntoView(new UiSelector().textContains(\"" + label + "\"))"));
+                            + ".scrollIntoView(new UiSelector().resourceIdMatches(\".*nameTv\").textContains(\"" + label + "\"))"));
         } catch (WebDriverException notScrollable) {
             // Short list or already visible.
         }

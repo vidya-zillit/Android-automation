@@ -6,6 +6,7 @@ import com.zillit.automation.pages.BottomNavPage;
 import com.zillit.automation.pages.HomeChatPage;
 import com.zillit.automation.pages.MediaPreviewPage;
 import com.zillit.automation.pages.ProjectListPage;
+import com.zillit.automation.pages.UploadModePage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
@@ -104,12 +105,7 @@ class CallSheetTest extends BaseTest {
     void sendDocument() {
         HomeChatPage p = page();
         p.tapAttachment();
-        // If content already exists the confirm popup shows first — choose Continuation.
-        if (p.isCallSheetFirstPopupShown(Duration.ofSeconds(3))) {
-            p.tapDialogLeft(); // Continuation
-        }
-        assumeTrue(p.isAttachmentPickerVisible() || p.isCallSheetFirstPopupShown(Duration.ofSeconds(1)),
-                "Document picker did not open");
+        assumeTrue(p.isAttachmentPickerVisible(), "Document picker did not open");
         // Picker must be document-only.
         if (p.isAttachmentPickerVisible()) {
             assertTrue(p.isDocumentOnlyPicker(),
@@ -123,6 +119,14 @@ class CallSheetTest extends BaseTest {
         MediaPreviewPage prev = new MediaPreviewPage(driver);
         if (prev.isPreviewOpen()) {
             prev.tapPreviewSend();
+        }
+        // ZL-21154: with content already in the unit the upload-mode sheet is the LAST gate
+        // before the upload. Left unanswered it stays on screen, and every later case fails
+        // against a sheet rather than the chat.
+        UploadModePage mode = new UploadModePage(driver);
+        if (mode.isShown(Duration.ofSeconds(15))) {
+            mode.chooseContinuation();
+            mode.tapSend();
         }
         assertTrue(p.isDocBubbleShown(Duration.ofSeconds(45)),
                 "The document should appear as a bubble with a file size");
@@ -153,55 +157,20 @@ class CallSheetTest extends BaseTest {
         p.closeMenu();
     }
 
-    // ---------------- two-popup replace flow ----------------
-
-    @Test
-    @Order(4)
-    @DisplayName("With content, attachment shows the continuation/new popup; Cancel opens nothing")
-    void replacePopupCancel() {
-        HomeChatPage p = page();
-        assumeTrue(p.isDocBubbleShown(Duration.ofSeconds(6)),
-                "Call sheet empty — the popup only appears with existing content");
-        p.tapAttachment();
-        assumeTrue(p.isCallSheetFirstPopupShown(POPUP), "First popup did not appear");
-        assertTrue(p.textShown("Continuation", Duration.ofSeconds(3))
-                        && p.textShown("New", Duration.ofSeconds(2)),
-                "Popup should offer Continuation and New");
-        p.tapDialogCancel();
-        assertTrue(!p.isAttachmentPickerVisible(), "Cancel must not open the picker");
-    }
-
-    @Test
-    @Order(5)
-    @DisplayName("'Continuation' opens the document picker directly (append — NO second popup)")
-    void continuationAppendsDirectly() {
-        HomeChatPage p = page();
-        assumeTrue(p.isDocBubbleShown(Duration.ofSeconds(6)), "No content — skipping");
-        p.tapAttachment();
-        assumeTrue(p.isCallSheetFirstPopupShown(POPUP), "First popup missing");
-        p.tapDialogLeft(); // Continuation
-        // Verified live: Continuation → document picker directly, no replace warning.
-        assertTrue(p.isDocumentOnlyPicker() || p.isAttachmentPickerVisible(),
-                "Continuation should open the document picker directly");
-        assertTrue(!p.isCallSheetReplaceWarningShown(Duration.ofSeconds(2)),
-                "Continuation must NOT show the replace-warning popup");
-        p.dismissAttachmentPicker();
-    }
-
-    @Test
-    @Order(6)
-    @DisplayName("'New' shows the replace-warning; 'No' cancels, 'Yes' opens the replace picker")
-    void newShowsReplaceWarning() {
-        HomeChatPage p = page();
-        assumeTrue(p.isDocBubbleShown(Duration.ofSeconds(6)), "No content — skipping");
-        p.tapAttachment();
-        assumeTrue(p.isCallSheetFirstPopupShown(POPUP), "First popup missing");
-        p.tapDialogRight(); // New
-        assertTrue(p.isCallSheetReplaceWarningShown(POPUP),
-                "Choosing New should show the replace-warning popup (New replaces old)");
-        p.tapDialogLeft(); // No
-        assertTrue(!p.isAttachmentPickerVisible(), "'No' must not open the picker");
-    }
+    // ---------------- upload-mode sheet (ZL-21154) ----------------
+    //
+    // Three cases lived here that drove the OLD two-popup flow: tap attachment, answer
+    // "Continuation / New / Cancel", THEN pick a file. ZL-21154 reversed that — the files are
+    // chosen first and the sheet is the last gate before the upload — and replaced the dialog
+    // with a bottom sheet that also offers Replace.
+    //
+    // They were not failing. They detected the old dialog by its text
+    // ("continuation of the existing Call Sheet"), that string is no longer referenced by any
+    // code, so the detection returned false and all three skipped on every run — silently
+    // reporting nothing about a feature that had changed underneath them.
+    //
+    // Coverage now lives in CallSheetUploadModeTest, against the real umContinuation / umNew /
+    // umReplace ids.
 
     // ---------------- History (Read) ----------------
 

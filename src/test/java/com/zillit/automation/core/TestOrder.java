@@ -68,6 +68,8 @@ public final class TestOrder {
     public static final int REGRESSION_STRESS   = 26;
     public static final int ALL_UNITS_MEDIA     = 27;
     public static final int MANUAL_PICK_SEND    = 28;
+    /** Call Sheet upload-mode sheet (ZL-21154) — runs after CALL_SHEET so the unit has content. */
+    public static final int CALL_SHEET_UPLOAD_MODE = 29;
 
     // 30–39 · email ----------------------------------------------------------
     public static final int EMAIL               = 30;
@@ -187,6 +189,8 @@ public final class TestOrder {
     // DELETE_PROJECT is last because it schedules the project for real deletion
     // and leaves the timer armed.
     public static final int DEPARTMENT_LISTING_ORDER        = 100;
+    /** Admin Settings regrouped into sections + cross-group search (new UI). */
+    public static final int ADMIN_SETTINGS_GROUPS = 101;
     public static final int COMPANY_DETAILS                 = 103;
     public static final int CREATE_ADDITIONAL_SHOOTING_UNIT = 106;
     public static final int CREATE_NEW_DEPARTMENT           = 109;

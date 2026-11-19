@@ -3,11 +3,14 @@ package com.zillit.automation.pages;
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.android.AndroidDriver;
 import org.openqa.selenium.By;
+import org.openqa.selenium.WebElement;
 import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The main in-project screen (BottomNavigationActivity). Its toolbar shows
@@ -52,15 +55,72 @@ public class BottomNavPage extends BasePage {
         }
     }
 
+    /**
+     * Clicks the control if it is on screen RIGHT NOW — no waiting.
+     *
+     * <p>This used to wait 2s per locator. It is called for three locators, in a loop of
+     * up to twelve, on every poll of {@link #waitUntilLoaded(Duration)} — so entering a
+     * project burned ~6 seconds per poll looking for permission dialogs that were not
+     * there, before it even checked whether the screen had loaded. Waiting for a dialog
+     * that has not appeared is pointless anyway: the enclosing poll loop is the wait, and
+     * it comes back around in a moment.
+     */
     private boolean clickIfPresent(By locator) {
         try {
-            new WebDriverWait(driver, Duration.ofSeconds(2))
-                    .until(ExpectedConditions.elementToBeClickable(locator))
-                    .click();
-            return true;
-        } catch (WebDriverException e) {
-            return false;
+            for (WebElement candidate : driver.findElements(locator)) {
+                if (candidate.isDisplayed()) {
+                    candidate.click();
+                    return true;
+                }
+            }
+        } catch (WebDriverException ignored) {
+            // Gone between the find and the click — treat as nothing to do.
         }
+        return false;
+    }
+
+    /**
+     * Taps a BOTTOM-NAV tab by its label (Home / Email / Tools / C&C / Settings).
+     *
+     * <p>Scoped to the bottomNavigation container on purpose: the nav tabs and the Home
+     * UNIT chips both use the id {@code menuText}, so an unscoped lookup happily taps a
+     * unit chip believing it tapped a tab — the same trap documented on
+     * {@code HomeChatPage.unitChipElements()}.
+     */
+    public boolean selectTab(String label) {
+        try {
+            WebElement nav = driver.findElement(byId("bottomNavigation"));
+            for (WebElement tab : nav.findElements(byId("menuText"))) {
+                String text = tab.getText();
+                if (text != null && text.trim().equalsIgnoreCase(label)) {
+                    tab.click();
+                    Thread.sleep(1200);
+                    return true;
+                }
+            }
+        } catch (WebDriverException | InterruptedException ignored) {
+            // Nav not up, or the tab is absent on this build — caller decides.
+        }
+        return false;
+    }
+
+    /** The bottom-nav tab labels, for diagnostics when a tap finds nothing. */
+    public List<String> tabLabels() {
+        List<String> labels = new ArrayList<>();
+        try {
+            WebElement nav = driver.findElement(byId("bottomNavigation"));
+            for (WebElement tab : nav.findElements(byId("menuText"))) {
+                String text = tab.getText();
+                if (text != null && !text.isBlank()) labels.add(text.trim());
+            }
+        } catch (WebDriverException ignored) {
+        }
+        return labels;
+    }
+
+    /** Switches to the Home tab — the only tab that carries the units strip. */
+    public boolean goHome() {
+        return selectTab("Home");
     }
 
     /** True if an element with the given app resource-id appears within timeout. */

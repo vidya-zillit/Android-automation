@@ -43,6 +43,110 @@ public abstract class BasePage {
         }
     }
 
+    /**
+     * Picks a file by (partial) name in the Android SYSTEM picker — and never strands the
+     * run when the file is not there.
+     *
+     * <p><b>Two bugs this replaces, both of which turned "fixture missing" into "the rest
+     * of the module skipped".</b>
+     *
+     * <ol>
+     *   <li><b>The search defeated itself.</b> The old loops re-tapped Search and called
+     *       {@code sendKeys(namePart)} on EVERY iteration with no {@code clear()}, so the
+     *       query grew into {@code zl_testzl_testzl_test…} and could no longer match
+     *       anything — the picker ended up showing an empty result list for a file that
+     *       may well have been present. One of them also had no sleep at all, so it did
+     *       that as fast as the device could answer.</li>
+     *   <li><b>Failure left the picker open.</b> The system picker is a DIFFERENT app
+     *       (DocumentsUI). Returning false with it still in front means every later case
+     *       looks for the app's ids in someone else's activity, finds nothing, and skips —
+     *       so one missing fixture silently takes the whole suite with it.</li>
+     * </ol>
+     *
+     * <p>So: search once, clear first, poll gently, and always hand back control of the
+     * screen — found or not.
+     */
+    protected boolean pickSystemFile(String namePart, Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        By byName = AppiumBy.androidUIAutomator(
+                "new UiSelector().textContains(\"" + namePart + "\")");
+        boolean searched = false;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                java.util.List<WebElement> hits = driver.findElements(byName);
+                if (!hits.isEmpty()) {
+                    hits.get(hits.size() - 1).click();
+                    return true;
+                }
+            } catch (WebDriverException ignored) {
+                // Picker still drawing — try again on the next poll.
+            }
+            // Some pickers open on Recent and hide everything else behind search.
+            // ONCE, with a clear first.
+            if (!searched) {
+                searched = true;
+                try {
+                    driver.findElement(AppiumBy.androidUIAutomator(
+                            "new UiSelector().descriptionContains(\"Search\")")).click();
+                    WebElement box = driver.findElement(By.className("android.widget.EditText"));
+                    box.clear();
+                    box.sendKeys(namePart);
+                } catch (WebDriverException ignored) {
+                    // No search affordance on this device's picker.
+                }
+            }
+            pauseMillis(500);
+        }
+        System.out.println(">>> system picker: '" + namePart + "' not found in "
+                + timeout.toSeconds() + "s — backing out so the next case can run");
+        returnToAppUnderTest();
+        return false;
+    }
+
+    /**
+     * Brings the app under test back to the front after a flow left us somewhere else
+     * (system picker, gallery, viewer, launcher).
+     *
+     * <p>Back presses first, because they unwind the foreign activity cleanly; activateApp
+     * as the fallback, because a picker that refuses to close still must not own the
+     * screen for the rest of the run.
+     */
+    protected boolean returnToAppUnderTest() {
+        String app = appPackage();
+        for (int i = 0; i < 5; i++) {
+            String current;
+            try {
+                current = driver.getCurrentPackage();
+            } catch (WebDriverException e) {
+                current = null;
+            }
+            if (app.equals(current)) return true;
+            try {
+                driver.navigate().back();
+            } catch (WebDriverException ignored) {
+            }
+            pauseMillis(700);
+        }
+        try {
+            driver.executeScript("mobile: activateApp", java.util.Map.of("appId", app));
+            pauseMillis(1200);
+        } catch (WebDriverException ignored) {
+        }
+        try {
+            return app.equals(driver.getCurrentPackage());
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    private void pauseMillis(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     protected By byId(String id) {
         return AppiumBy.id(idPrefix + id);
     }

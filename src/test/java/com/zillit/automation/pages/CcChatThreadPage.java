@@ -482,27 +482,9 @@ public class CcChatThreadPage extends BasePage {
     }
 
     /** In an open Android SYSTEM picker (Documents), tap the first item matching name. */
+    /** @see BasePage#pickSystemFile(String, java.time.Duration) */
     private boolean pickSystemFileByName(String namePart, Duration timeout) {
-        long deadline = System.currentTimeMillis() + timeout.toMillis();
-        while (System.currentTimeMillis() < deadline) {
-            try {
-                WebElement e = driver.findElement(AppiumBy.androidUIAutomator(
-                        "new UiSelector().textContains(\"" + namePart + "\")"));
-                e.click();
-                return true;
-            } catch (WebDriverException notYet) {
-                // Try a documents search box.
-                try {
-                    driver.findElement(AppiumBy.androidUIAutomator(
-                            "new UiSelector().descriptionContains(\"Search\")")).click();
-                    WebElement s = driver.findElement(By.className("android.widget.EditText"));
-                    s.sendKeys(namePart);
-                    sleep(1200);
-                } catch (WebDriverException ignored) {}
-            }
-            sleep(600);
-        }
-        return false;
+        return pickSystemFile(namePart, timeout);
     }
 
     private void recoverBack() {

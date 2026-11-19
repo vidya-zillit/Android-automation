@@ -53,6 +53,14 @@ public class ToolsPage extends BasePage {
      * it contains.
      */
     public boolean isLoaded(Duration timeout) {
+        // Admin Settings grew its OWN searchEt when it was regrouped into sections, so
+        // searchEt alone no longer means "Tools" — it also matches the admin list, and a
+        // recovery loop that backs out until isLoaded() is true would stop one screen
+        // early and run the module's cases against Admin Settings. Admin Settings is a
+        // separate activity with its own recycler, so rule it out explicitly.
+        if (!driver.findElements(byId("adminSettingsRecyclerView")).isEmpty()) {
+            return false;
+        }
         return isVisible("searchEt", timeout)
                 || textShown("Search tools", Duration.ofSeconds(1))
                 || textShown("PRODUCTION", Duration.ofSeconds(1))
