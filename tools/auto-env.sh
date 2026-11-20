@@ -200,13 +200,34 @@ if [[ -n "$ZILLIT_PKG" ]]; then
   if "$ADB" -s "$ZILLIT_UDID" shell pm list packages 2>/dev/null | tr -d '\r' | grep -qx "package:$ZILLIT_PKG"; then
     _ae_say "app:   $ZILLIT_PKG ($("$ADB" -s "$ZILLIT_UDID" shell dumpsys package "$ZILLIT_PKG" 2>/dev/null | grep -m1 versionName | tr -d '\r ' | cut -d= -f2))"
   else
-    _ae_fail "$ZILLIT_PKG is not installed on $ZILLIT_UDID."
-    _ae_say  "Zillit builds that ARE on this device:"
-    "$ADB" -s "$ZILLIT_UDID" shell pm list packages 2>/dev/null | tr -d '\r' \
-      | grep 'com.zillit.zillitapp' | sed 's/^package:/      /'
-    _ae_say  ""
-    _ae_say  "Install it, or pick another flavour:  ZILLIT_FLAVOR=dev ./run-ui.sh --home"
-    return 1 2>/dev/null || exit 1
+    # Nothing was ASKED for — config/config.properties just defaulted — and exactly one
+    # Zillit build is on the device. Use that one instead of aborting. The alternative is
+    # the run dying on "com.zillit.zillitapp.qa is not installed" when the only build
+    # present is .dev, which is a confusing way to say "you forgot ZILLIT_FLAVOR=dev".
+    # NOTE: this file is SOURCED, so the success path must fall through, never `return` —
+    # returning here would skip the Appium settings helper and everything after it.
+    _ae_auto_pkg=""
+    if [[ -z "${ZILLIT_FLAVOR:-}" && -z "${ZILLIT_APP_PACKAGE:-}" ]]; then
+      _ae_found=$("$ADB" -s "$ZILLIT_UDID" shell pm list packages 2>/dev/null | tr -d '\r' \
+        | grep '^package:com\.zillit\.zillitapp' | sed 's/^package://')
+      if [[ $(printf '%s\n' "$_ae_found" | grep -c .) -eq 1 ]]; then
+        _ae_auto_pkg="$(printf '%s\n' "$_ae_found" | grep . | head -1)"
+      fi
+    fi
+    if [[ -n "$_ae_auto_pkg" ]]; then
+      export ZILLIT_APP_PACKAGE="$_ae_auto_pkg"
+      ZILLIT_PKG="$_ae_auto_pkg"
+      _ae_say "app:   $ZILLIT_PKG  (the only Zillit build on this device, so it was picked"
+      _ae_say "       for you — set ZILLIT_FLAVOR if you meant a different one)"
+    else
+      _ae_fail "$ZILLIT_PKG is not installed on $ZILLIT_UDID."
+      _ae_say  "Zillit builds that ARE on this device:"
+      "$ADB" -s "$ZILLIT_UDID" shell pm list packages 2>/dev/null | tr -d '\r' \
+        | grep 'com.zillit.zillitapp' | sed 's/^package:/      /'
+      _ae_say  ""
+      _ae_say  "Install it, or pick another flavour:  ZILLIT_FLAVOR=dev ./run-ui.sh --home"
+      return 1 2>/dev/null || exit 1
+    fi
   fi
 fi
 

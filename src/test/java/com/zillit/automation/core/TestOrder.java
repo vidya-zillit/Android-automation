@@ -93,6 +93,13 @@ public final class TestOrder {
     public static final int TOOL_INFO           = 49;
     public static final int TOOL_CATERING       = 51;
 
+    /**
+     * External users: the listing, its filters, the three user types with their show/hide
+     * rules, every field's validation, the read-only detail screen, and the two taps that
+     * hand over to the Email module and to the dialer.
+     */
+    public static final int EXTERNAL_USERS             = 50;
+
     // Drive OVERFLOW — 62–69 (Drive's own range) is full, and renumbering an existing
     // suite to make room is exactly what this file forbids. These four claim the next
     // free slots instead. They are independent of the 62–69 suites (each seeds and
@@ -126,6 +133,33 @@ public final class TestOrder {
     /** Two devices editing one document — needs a SECOND device. */
     public static final int DRIVE_COLLAB        = 68;
     public static final int DRIVE_ORGANISE      = 69;
+
+    /** Tools → Map (new_map). Sits after the Drive block, before the DocDist 80s. */
+    public static final int MAP                 = 70;
+    /** Map's read-only overlay of Location-tool Shortlisted/Final pins. */
+    public static final int MAP_LOCATION_PINS   = 71;
+    /** Tools → Location — the tool that feeds that overlay. */
+    public static final int LOCATION_TOOL       = 72;
+
+    /** Map → cities: create / validate / edit / delete / switch. */
+    public static final int MAP_CITY_CRUD       = 73;
+    /** Map → studio zones, including applying one as the active boundary. */
+    public static final int MAP_ZONE_CRUD       = 74;
+    /**
+     * Map → pinning and the boundary verdicts. Runs AFTER the zone suite on purpose:
+     * the "outside the zone but inside the city" verdict is only reachable once a zone
+     * has been applied.
+     */
+    public static final int MAP_PIN_BOUNDARY    = 75;
+    /** Map → locations: form validation, detail sheet, list view, delete. */
+    public static final int MAP_LOCATION_CRUD   = 77;
+    /** Map → location types (header manager). Before locations, which use them. */
+    public static final int MAP_TYPE_MANAGER    = 76;
+
+    /** Map → directions and share. Last, because both hand off to other apps. */
+    public static final int MAP_DIRECTIONS_SHARE = 78;
+    /** Map → empty-state guards and the state the module persists for itself. */
+    public static final int MAP_GUARDS          = 79;
     // 62–69 full — Drive's symmetric two-device journey continues the tools range.
 
     // 80–89 · cross-cutting / two-device ---------------------------------------
@@ -164,6 +198,82 @@ public final class TestOrder {
      * which cannot reach a real person. Runs late so History/detail have something real.
      */
     public static final int DOC_DISTRIBUTION_SEND      = 91;
+
+    /**
+     * Map → the whole data lifecycle on one city: several locations created by dropping
+     * pins, renamed, scene-numbered, the out-of-city choices, a drag, deletes, cleanup.
+     *
+     * <p>NOT in the 70s with the other Map suites because that band is full (70–79, and
+     * 80 is DRIVE_E2E). Late suits it anyway: this is the only Map suite that WRITES and
+     * DELETES data, so it should run after the read-only ones have had a quiet project to
+     * read. It removes every fixture it creates.
+     */
+    public static final int MAP_CRUD_LIFECYCLE         = 97;
+
+    /**
+     * Housekeeping — deletes any {@code ZL AUTO} location, zone or type left on the
+     * project when a Map suite could not finish its own cleanup (a lost session mid-run,
+     * usually). OPT-IN ONLY: {@code --map-cleanup}, never part of --map-all or --all,
+     * because it removes data and nothing should do that unasked.
+     */
+    public static final int MAP_CLEANUP                = 98;
+
+    /**
+     * Map → a SECOND city: created through the out-of-city pin dialog, then switching
+     * between cities and proving pins stay scoped to the one selected.
+     *
+     * <p>Its own suite, kept small on purpose. The long Map suites lose the device before
+     * they finish on this emulator, and these cases are worthless unless they complete.
+     */
+    public static final int MAP_CITY_MULTI             = 99;
+
+    // ── Production Diary / Box Schedule ─────────────────────────────────────
+    // One module, two names (strings.xml: "Production Diary/Box Schedule").
+    // Ordered so each suite starts from what the one before it made: a type, then a
+    // schedule day, then the events and notes that hang off it.
+    /** Views, sub-modes, default view, the drawer. Read-only. */
+    public static final int BOX_SHELL                  = 102;
+    /** Schedule types — needed before a schedule can be created. */
+    public static final int BOX_TYPES                  = 104;
+    /** Schedule days: the three date modes, validation, edit, delete. */
+    public static final int BOX_SCHEDULE_CRUD          = 105;
+    /** Replace / Extend / Overlap, including the scattered-dates case (ZL-19566). */
+    public static final int BOX_CONFLICT               = 107;
+    /**
+     * A whole production laid out with DIFFERENT types across real dates — Prep, Travel,
+     * Shoot, a Day Off inside the Shoot, Wrap — and each conflict resolution applied and
+     * read back. Runs after the conflict suite, which proves the chooser appears at all.
+     */
+    public static final int BOX_PRODUCTION             = 111;
+
+    /**
+     * UPDATING schedules: the scope prompt, the single-day split and the whole-block
+     * retype. A different code path from creating, with its own meanings for
+     * Replace / Extend / Overlap. Runs after the production suite has laid out a timeline.
+     */
+    public static final int BOX_EDIT                   = 113;
+
+    /**
+     * One schedule, five renderings — Month, Week, Day, By Date and By Schedule — held to
+     * saying the same thing. Runs last of the Box suites, on days it lays down itself.
+     */
+    public static final int BOX_CROSS_VIEW             = 114;
+
+    /**
+     * The whole life of an event and of a note: made, renamed, moved, re-addressed,
+     * removed — each change checked from the List row and the Calendar, not from the form.
+     */
+    public static final int BOX_EVENT_LIFECYCLE        = 116;
+
+    /**
+     * Opt-in housekeeping for the Box module: deletes the schedule days the suites left in
+     * their date window. Never part of --box or --all; needs -Dzillit.boxCleanup=true.
+     */
+    public static final int BOX_CLEANUP                = 117;
+    /** Events and notes, the Home-Calendar prompt, general vs personal. */
+    public static final int BOX_EVENT_NOTE             = 108;
+    /** Filters, day detail, PDF actions, history. */
+    public static final int BOX_VIEWS                  = 110;
     /**
      * Housekeeping: deletes stray {@code QA_*} folders / lists / templates left behind by
      * failed cases. In the DESTRUCTIVE range because it removes data, and opt-in only

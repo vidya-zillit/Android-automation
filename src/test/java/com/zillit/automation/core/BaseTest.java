@@ -42,6 +42,11 @@ public abstract class BaseTest {
     protected String appPackage;
     protected Landing landing = Landing.UNKNOWN;
     private boolean firstLaunchHandled;
+    /** Set once the device is unreachable, so the rest of the class fails fast. */
+    private static boolean deviceLost;
+    private static String deviceLostReason = "";
+    /** Why the last landing-marker lookup failed, if it did. See settleLanding(). */
+    private WebDriverException lastLookupFailure;
 
     @BeforeAll
     void startSession() {
@@ -191,6 +196,32 @@ public abstract class BaseTest {
 
     @BeforeEach
     void freshLaunch() {
+        // A dead UiAutomator2 instrumentation cannot be waited out. Every lookup after
+        // it dies throws, settleLanding() swallows those throws as "marker not on
+        // screen", and each remaining case in the class then burns its full 120s before
+        // failing with "No known landing screen appeared" — a whole suite can spend
+        // twenty minutes reporting a problem that was decided in its first case. Check
+        // first, and rebuild the session instead of re-living the timeout.
+        if (deviceLost) {
+            // Decided by an earlier case in this class. Re-living the 120s landing budget
+            // per case is how one lost emulator turned a 23-case suite into a 39-minute
+            // run that proved nothing about the app.
+            throw new IllegalStateException(deviceLostReason
+                    + " — every remaining case in this class is failed immediately"
+                    + " rather than waiting out a landing that cannot appear.");
+        }
+        if (!sessionAlive()) {
+            if (recreateSession()) {
+                firstLaunchHandled = false;
+            } else {
+                deviceLost = true;
+                deviceLostReason = "The device stopped answering and the Appium session"
+                        + " could not be rebuilt (the rebuild errors are above)";
+                throw new IllegalStateException(deviceLostReason
+                        + ". This is an environment failure, not a product one: nothing"
+                        + " about the app under test was exercised.");
+            }
+        }
         if (!firstLaunchHandled) {
             prepareInitialState();
             firstLaunchHandled = true;
@@ -303,11 +334,26 @@ public abstract class BaseTest {
         By startAndJoin = byAppId("start_project_btn");
 
         long nextActivate = 0;
+        lastLookupFailure = null;
         long nextBack = System.currentTimeMillis() + 8000; // give the app time to settle first
         while (System.currentTimeMillis() < deadline) {
             // Self-heal: if a prior run left the app backgrounded (on the
             // launcher / a system screen), the landing never appears. Re-foreground
             // it. Throttled so we don't spam activateApp every loop.
+            // Every marker lookup below swallows its exceptions, because "the hierarchy
+            // was in flux" is the usual reason one fails and the next pass settles it.
+            // A dead instrumentation fails them the same way and never settles, so the
+            // loop would wait out its whole timeout to report a missing landing screen
+            // when the real answer — and it is not going to change — is that the device
+            // half of the session is gone. Watch for that wording explicitly.
+            if (lastLookupFailure != null && instrumentationGone(lastLookupFailure)) {
+                throw new IllegalStateException(
+                        "The UiAutomator2 instrumentation on the device is gone, so no"
+                                + " landing screen can be detected — waiting out the"
+                                + " remaining "
+                                + Math.max(0, (deadline - System.currentTimeMillis()) / 1000)
+                                + "s would not change that.", lastLookupFailure);
+            }
             String cur = safeCurrentPackage();
             if (cur != null && !appPackage.equals(cur) && System.currentTimeMillis() > nextActivate) {
                 try {
@@ -371,6 +417,154 @@ public abstract class BaseTest {
     }
 
     /**
+     * Appium's wording for "the on-device half of the session is gone".
+     *
+     * <p>The UiAutomator2 instrumentation runs as its own process on the device and can be
+     * killed by the system (low memory, an ANR, or simply a long run of expensive
+     * UiScrollable queries). The Appium server stays up and keeps answering, so the
+     * session looks healthy from here — it just cannot reach the device any more, and says
+     * so in the error text rather than in the status code.
+     */
+    private static boolean instrumentationGone(Throwable t) {
+        for (Throwable e = t; e != null; e = e.getCause()) {
+            String message = e.getMessage();
+            if (message == null) continue;
+            if (message.contains("instrumentation process is not running")
+                    || message.contains("cannot be proxied to UiAutomator2 server")
+                    || message.contains("A session is either terminated or not started")
+                    // The emulator itself can drop off the bus mid-run — the five-suite
+                    // verification lost it and adb answered "device offline" /
+                    // "protocol fault" for the rest of the hour. That reaches us exactly
+                    // as a dead instrumentation does, and waiting it out is as pointless.
+                    || message.contains("device offline")
+                    || message.contains("device not found")
+                    || message.contains("protocol fault")
+                    || message.contains("Error executing adbExec")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Can the session still reach the device? One cheap question, no waiting.
+     *
+     * <p>The probe MUST travel through the instrumentation, which is why it looks for an
+     * id that cannot exist rather than asking something simpler.
+     * {@code getCurrentPackage()} is served by adb on the Appium host and keeps answering
+     * cheerfully for a session whose on-device half is dead — the exact state this is
+     * here to catch. A findElements for a missing id is proxied to UiAutomator2, so it
+     * returns an empty list when the instrumentation is alive and fails loudly when it
+     * is not.
+     */
+    protected boolean sessionAlive() {
+        try {
+            driver.findElements(byAppId("zillitInstrumentationProbe"));
+            return true;
+        } catch (WebDriverException e) {
+            return !instrumentationGone(e);
+        }
+    }
+
+    /**
+     * Throws away a session whose instrumentation has died and starts a fresh one.
+     *
+     * <p>Only safe BETWEEN cases: page objects hold the driver they were built with, so a
+     * rebuild mid-case leaves the case holding a corpse. Suites build their page objects
+     * per method, which is what makes the @BeforeEach hook the right place for this.
+     *
+     * <p>noReset is on, so this re-launches the instrumentation rather than reinstalling
+     * the APK — about thirty seconds, against the twenty-odd minutes a class of timeouts
+     * costs.
+     */
+    protected boolean recreateSession() {
+        System.out.println(">>> The UiAutomator2 instrumentation on the device is gone"
+                + " — rebuilding the Appium session");
+        try {
+            driver.quit();
+        } catch (Exception ignored) {
+            // Already unreachable; nothing to close politely.
+        }
+        // Two attempts, because the first one lands while the dying server is still
+        // half-registered with the system. Appium then reports "The instrumentation
+        // process cannot be initialized" and blames the app under test, which is
+        // misleading — the app is fine; the previous UiAutomator2 server is what has not
+        // finished letting go. Force-stopping it and waiting makes the retry work; this
+        // was verified by hand against exactly the state that defeated the first attempt.
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            try {
+                driver = DriverFactory.create();
+                landing = Landing.UNKNOWN;
+                ensureForeground();
+                return true;
+            } catch (Exception e) {
+                System.out.println(">>> Rebuild attempt " + attempt + " failed: "
+                        + e.getMessage());
+                if (attempt == 2) return false;
+                clearStaleInstrumentation();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Force-stops the UiAutomator2 server on the device so a new session can claim
+     * {@code UiAutomation} for itself.
+     *
+     * <p>Shells out to adb rather than going through the driver, because the whole point
+     * of being here is that there is no working driver to ask.
+     */
+    /**
+     * Force-stops the UiAutomator2 server so a rebuild can take UiAutomation.
+     *
+     * <p>NOTE ON adb: every call here starts the adb server if it is not running. Two of
+     * them racing produced this in a real run —
+     * <pre>could not install *smartsocket* listener: Address already in use
+     * adb: cannot connect to daemon</pre>
+     * — two daemons fighting for port 5037, after which nothing could reach the device for
+     * the rest of the run. The calls below are sequential and each waits, so they cannot
+     * race each other; what they must not do is run while Appium is also shelling out. The
+     * rebuild attempt that follows is therefore spaced by the sleep at the end.
+     */
+    private void clearStaleInstrumentation() {
+        String udid = Config.get("zillit.udid");
+        for (String pkg : new String[]{
+                "io.appium.uiautomator2.server", "io.appium.uiautomator2.server.test"}) {
+            try {
+                java.util.List<String> cmd = new java.util.ArrayList<>(
+                        java.util.List.of(adbPath()));
+                if (udid != null && !udid.isBlank()) {
+                    cmd.add("-s");
+                    cmd.add(udid);
+                }
+                cmd.addAll(java.util.List.of("shell", "am", "force-stop", pkg));
+                new ProcessBuilder(cmd).redirectErrorStream(true).start()
+                        .waitFor(20, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (Exception e) {
+                System.out.println(">>> Could not force-stop " + pkg + ": " + e.getMessage());
+            }
+        }
+        try {
+            Thread.sleep(5000); // let the system release the UiAutomation connection
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /** adb from ANDROID_HOME / ANDROID_SDK_ROOT when PATH does not carry it. */
+    private static String adbPath() {
+        for (String var : new String[]{"ANDROID_HOME", "ANDROID_SDK_ROOT"}) {
+            String root = System.getenv(var);
+            if (root == null || root.isBlank()) continue;
+            Path candidate = Paths.get(root, "platform-tools", "adb");
+            if (Files.isExecutable(candidate)) return candidate.toString();
+        }
+        Path home = Paths.get(System.getProperty("user.home"),
+                "Library", "Android", "sdk", "platform-tools", "adb");
+        return Files.isExecutable(home) ? home.toString() : "adb";
+    }
+
+    /**
      * Is the element on screen RIGHT NOW? No waiting.
      *
      * <p>settleLanding() asks this for three different landing markers on every pass of
@@ -385,8 +579,10 @@ public abstract class BaseTest {
                     return true;
                 }
             }
-        } catch (WebDriverException ignored) {
-            // Hierarchy in flux — the next pass decides.
+        } catch (WebDriverException e) {
+            // Usually the hierarchy in flux, and the next pass decides. Keep it anyway:
+            // settleLanding() reads it to tell that apart from a dead instrumentation.
+            lastLookupFailure = e;
         }
         return false;
     }

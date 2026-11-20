@@ -1,0 +1,382 @@
+package com.zillit.automation.pages;
+
+import io.appium.java_client.AppiumBy;
+import io.appium.java_client.android.AndroidDriver;
+import org.openqa.selenium.WebElement;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * BOX — the List view, which is the only surface that says in words what sits on a day.
+ *
+ * <p>The calendar draws its types as coloured cells, and colour does not reach the
+ * accessibility tree. The list does: in <b>By Date</b> each row carries a date and the
+ * type on it ({@code tvDate}, {@code tvTypeName}), and in <b>By Schedule</b> each row is a
+ * block with its type, its day count and its span ({@code tvBlockTypeName},
+ * {@code tvDayCount}, {@code tvDateRange}). Ids from {@code new_box_item_schedule_day.xml}.
+ *
+ * <p>That makes this the page that can actually answer what Replace, Extend and Overlap
+ * did — the questions the conflict cases could previously only ask of a dialog.
+ */
+public class BoxListPage extends BoxSchedulePage {
+
+    public BoxListPage(AndroidDriver driver) {
+        super(driver);
+    }
+
+    /** One day of the schedule: the date as shown, and the type sitting on it. */
+    public static final class DayRow {
+        public final String date;
+        public final String type;
+        DayRow(String date, String type) { this.date = date; this.type = type; }
+        @Override public String toString() { return date + " = " + type; }
+    }
+
+    /** One block of consecutive days of a single type. */
+    public static final class Block {
+        public final String type;
+        public final String dayCount;
+        public final String range;
+        Block(String type, String dayCount, String range) {
+            this.type = type; this.dayCount = dayCount; this.range = range;
+        }
+        @Override public String toString() {
+            return type + " × " + dayCount + " (" + range + ")";
+        }
+    }
+
+    public boolean isLoaded(Duration timeout) {
+        long end = System.currentTimeMillis() + timeout.toMillis();
+        do {
+            if (displayed("scheduleList") || displayed("emptyState")) return true;
+            pause(400);
+        } while (System.currentTimeMillis() < end);
+        return false;
+    }
+
+    public boolean isEmpty() { return displayed("emptyState"); }
+
+    /**
+     * Every By-Date row on screen, as date → type.
+     *
+     * <p>Only what is on screen: rows scrolled out of a RecyclerView are absent from the
+     * tree, so a caller that needs a particular date should search with
+     * {@link #findDay(String)} rather than assume this list is complete.
+     */
+    public List<DayRow> dayRows() {
+        List<DayRow> out = new ArrayList<>();
+        for (WebElement row : rows()) {
+            String date = childText(row, "tvDate");
+            String type = childText(row, "tvTypeName");
+            if (date != null || type != null) out.add(new DayRow(date, type));
+        }
+        return out;
+    }
+
+    /** Every By-Schedule block on screen. */
+    public List<Block> blocks() {
+        List<Block> out = new ArrayList<>();
+        for (WebElement row : rowsOf("byScheduleLayout")) {
+            String type = childText(row, "tvBlockTypeName");
+            if (type == null) continue;
+            out.add(new Block(type, childText(row, "tvDayCount"),
+                    childText(row, "tvDateRange")));
+        }
+        return out;
+    }
+
+    /** The type on a given date, scrolling to find it; null when that date has no row. */
+    public String typeOn(String dateFragment) {
+        for (DayRow r : dayRows()) {
+            if (r.date != null && r.date.contains(dateFragment)) return r.type;
+        }
+        if (!findDay(dateFragment)) return null;
+        for (DayRow r : dayRows()) {
+            if (r.date != null && r.date.contains(dateFragment)) return r.type;
+        }
+        return null;
+    }
+
+    /** Scrolls the list until a row carrying this text is on screen. */
+    public boolean findDay(String textFragment) {
+        try {
+            driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiScrollable(new UiSelector().scrollable(true))"
+                            + ".setMaxSearchSwipes(12)"
+                            + ".scrollIntoView(new UiSelector().textContains(\""
+                            + textFragment + "\"))"));
+            pause(500);
+            return true;
+        } catch (Exception e) { return false; }
+    }
+
+    /** How many rows on screen carry this type. */
+    public long daysOfType(String type) {
+        return dayRows().stream()
+                .filter(r -> r.type != null && r.type.contains(type)).count();
+    }
+
+    /** One event or note as the list prints it. */
+    public static final class EventRow {
+        public final String kind;
+        public final String title;
+        public final String date;
+        public final String distributeTo;
+        EventRow(String kind, String title, String date, String distributeTo) {
+            this.kind = kind; this.title = title; this.date = date;
+            this.distributeTo = distributeTo;
+        }
+        @Override public String toString() {
+            return (kind == null ? "?" : kind) + " \"" + title + "\" on " + date
+                    + " → " + distributeTo;
+        }
+    }
+
+    /**
+     * Every event and note row on screen.
+     *
+     * <p>The list mixes two kinds of row: schedule days ({@code byDateLayout}) and
+     * events/notes ({@code new_box_item_list_event}). This reads the second kind, which is
+     * the only place the app prints an event's title, its date and <b>who it went to</b>
+     * together — so it is where an edit can be checked from the outside.
+     */
+    public List<EventRow> eventRows() {
+        List<EventRow> out = new ArrayList<>();
+        try {
+            List<WebElement> lists = driver.findElements(byId("scheduleList"));
+            if (lists.isEmpty()) return out;
+            for (WebElement row : lists.get(0).findElements(byId("leTitle"))) {
+                // leTitle is unique per event row, so each one found is one row; its
+                // siblings are read from the row's own parent.
+                out.add(new EventRow(
+                        siblingText(row, "leKindBadge"),
+                        safeText(row),
+                        siblingText(row, "leDate"),
+                        siblingText(row, "leDistributeTo")));
+            }
+        } catch (Exception ignored) { }
+        return out;
+    }
+
+    /** The event or note with this title, or null. */
+    public EventRow findEvent(String title) {
+        for (EventRow r : eventRows()) {
+            if (r.title != null && r.title.contains(title)) return r;
+        }
+        return null;
+    }
+
+    /** Taps Edit on the event row carrying this title. */
+    public boolean editEvent(String title) { return tapEventControl(title, "leBtnEdit"); }
+
+    /** Taps Delete on the event row carrying this title. */
+    public boolean deleteEvent(String title) { return tapEventControl(title, "leBtnDelete"); }
+
+    private boolean tapEventControl(String title, String controlId) {
+        try {
+            List<WebElement> lists = driver.findElements(byId("scheduleList"));
+            if (lists.isEmpty()) return false;
+            List<WebElement> titles = lists.get(0).findElements(byId("leTitle"));
+            List<WebElement> controls = lists.get(0).findElements(byId(controlId));
+            for (int i = 0; i < titles.size(); i++) {
+                String t = safeText(titles.get(i));
+                if (t == null || !t.contains(title)) continue;
+                if (i >= controls.size()) {
+                    System.out.println(">>> list: event \"" + t + "\" has no " + controlId
+                            + " (" + titles.size() + " rows, " + controls.size()
+                            + " controls)");
+                    return false;
+                }
+                controls.get(i).click();
+                pause(1800);
+                return true;
+            }
+        } catch (Exception ignored) { }
+        return false;
+    }
+
+    /**
+     * Reads another field of the row that holds this element.
+     *
+     * <p>Walks up to the nearest ancestor that actually contains the wanted field, matched
+     * on the id's tail so no package prefix is needed. Going up a fixed number of levels
+     * would break the moment the row's layout gained a wrapper.
+     */
+    private String siblingText(WebElement anchorEl, String id) {
+        try {
+            WebElement row = anchorEl.findElement(AppiumBy.xpath(
+                    "./ancestor::*[.//*[contains(@resource-id,'" + id + "')]][1]"));
+            return childText(row, id);
+        } catch (Exception e) { return null; }
+    }
+
+    private String safeText(WebElement e) {
+        try {
+            String t = e.getText();
+            return t == null || t.isBlank() ? null : t.trim();
+        } catch (Exception ex) { return null; }
+    }
+
+    public boolean search(String term) { return fill("etListSearch", term); }
+
+    public boolean clearSearch() { return fill("etListSearch", ""); }
+
+    /**
+     * How many days carry this type, counted after filtering the list down to it.
+     *
+     * <p>Counting the unfiltered list is worthless: it opens around today and rows scrolled
+     * out of the RecyclerView are absent from the accessibility tree, so a block a month
+     * out reads as zero days. The list's own search matches the type name
+     * ({@code ListFragment.filterDays}: title, typeName or date), which brings exactly the
+     * rows in question on screen.
+     *
+     * @return the count, or -1 when the search box could not be used at all
+     */
+    public int daysOfTypeFiltered(String type) {
+        if (!search(type)) return -1;
+        pause(2000);
+        int n = (int) daysOfType(type);
+        // A filtered list can still be longer than one screen; walk it if it looks full.
+        if (n >= 8) {
+            for (int i = 0; i < 6; i++) {
+                int before = n;
+                scrollListDown();
+                int now = (int) daysOfType(type);
+                n = Math.max(n, now);
+                if (now <= before) break;
+            }
+        }
+        return n;
+    }
+
+    /** Every row on screen, as text, for a failure message that can be acted on. */
+    public List<String> rowSummaries() {
+        List<String> out = new ArrayList<>();
+        for (DayRow r : dayRows()) out.add(r.toString());
+        return out;
+    }
+
+    private void scrollListDown() {
+        try {
+            driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiScrollable(new UiSelector().scrollable(true)).scrollForward()"));
+            pause(700);
+        } catch (Exception ignored) { }
+    }
+
+    /**
+     * Deletes one day's row — the unit cancelling a single day out of a block.
+     *
+     * <p>Row actions live behind {@code rowActions} with {@code btnRowEdit} and
+     * {@code btnRowDelete} ({@code new_box_item_schedule_day.xml}); they may need the row
+     * tapped first to reveal them.
+     */
+    public boolean deleteDay(String dateFragment) { return tapRowControl(dateFragment, "btnRowDelete"); }
+
+    /** Finds the row carrying this date and taps the named control on that same row. */
+    private boolean tapRowControl(String dateFragment, String controlId) {
+        List<WebElement> rows = rows();
+        List<WebElement> controls = rowControls(controlId);
+        for (int i = 0; i < rows.size(); i++) {
+            String date = childText(rows.get(i), "tvDate");
+            if (date == null || !date.contains(dateFragment)) continue;
+            if (i >= controls.size()) {
+                System.out.println(">>> list: row " + date + " has no " + controlId
+                        + " (" + rows.size() + " rows, " + controls.size() + " controls)");
+                return false;
+            }
+            try { controls.get(i).click(); pause(1500); return true; }
+            catch (Exception e) { return false; }
+        }
+        return false;
+    }
+
+    /**
+     * Taps a row's Edit — the start of the update flow, which is a different path from
+     * create: it goes through the scope prompt and then a pre-filled form whose date is
+     * locked when the scope is a single day.
+     */
+    public boolean editDay(String dateFragment) { return tapRowControl(dateFragment, "btnRowEdit"); }
+
+    /** The first date on screen carrying this type, or null. */
+    public String firstDateOfType(String type) {
+        for (DayRow r : dayRows()) {
+            if (r.type != null && r.type.toLowerCase().contains(type.toLowerCase())) {
+                return r.date;
+            }
+        }
+        return null;
+    }
+
+    /** Confirms whatever delete dialog the row raised. */
+    public boolean confirmDelete() {
+        for (String label : new String[] { "Delete", "DELETE", "Yes", "OK" }) {
+            if (tapText(label)) { pause(2500); return true; }
+        }
+        return false;
+    }
+
+    /**
+     * One element per visible row, in the order they are drawn.
+     *
+     * <p>NOT the list's direct children: {@code scheduleList} holds a single nested
+     * RecyclerView, so {@code ./*} returns that one wrapper. Treating it as a row collapsed
+     * the whole list into one entry — every count came back as 1, and a five-day block read
+     * as one day while By Schedule correctly said five. That looked exactly like the app
+     * contradicting itself across two views, and it was this method.
+     *
+     * <p>Each row contributes one {@code byDateLayout} (By Date mode) or one
+     * {@code byScheduleLayout} (By Schedule mode), so those are what get counted.
+     */
+    private List<WebElement> rows() { return rowsOf("byDateLayout"); }
+
+    private List<WebElement> rowsOf(String layoutId) {
+        try {
+            List<WebElement> lists = driver.findElements(byId("scheduleList"));
+            if (lists.isEmpty()) return List.of();
+            return lists.get(0).findElements(byId(layoutId));
+        } catch (Exception e) { return List.of(); }
+    }
+
+    /**
+     * The row controls, index-matched to {@link #rows()}.
+     *
+     * <p>Edit and Delete sit in the item's {@code rowActions}, a sibling of
+     * {@code byDateLayout} rather than a child, so they cannot be read from inside a row.
+     * Each item carries exactly one of each, and both lists come back in draw order, so
+     * position n in one belongs to position n in the other.
+     */
+    private List<WebElement> rowControls(String id) {
+        try {
+            List<WebElement> lists = driver.findElements(byId("scheduleList"));
+            if (lists.isEmpty()) return List.of();
+            return lists.get(0).findElements(byId(id));
+        } catch (Exception e) { return List.of(); }
+    }
+
+    private String childText(WebElement row, String id) {
+        try {
+            List<WebElement> els = row.findElements(byId(id));
+            if (els.isEmpty()) return null;
+            String t = els.get(0).getText();
+            return t == null || t.isBlank() ? null : t.trim();
+        } catch (Exception e) { return null; }
+    }
+
+    private boolean fill(String id, String value) {
+        try {
+            for (WebElement e : driver.findElements(byId(id))) {
+                if (!e.isDisplayed()) continue;
+                e.click();
+                e.clear();
+                if (!value.isEmpty()) e.sendKeys(value);
+                hideKeyboard();
+                pause(800);
+                return true;
+            }
+            return false;
+        } catch (Exception e) { return false; }
+    }
+}

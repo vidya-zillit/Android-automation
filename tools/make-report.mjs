@@ -327,6 +327,19 @@ function moduleOf(suiteName) {
   if (n.includes('callsheet')) return { label: 'Call Sheet', nav: ['Open the Call Sheet unit from the Home units strip.'] };
   if (n.includes('twouser')) return { label: 'Chat · two-device', nav: ['Sign in as two different users in the same project on two devices.', 'Open the same chat unit on both.'] };
   if (n.match(/chat|media|regression|postingrights|allunits/)) return { label: 'Home · Chat', nav: ['Open a chat unit (e.g. Bulletin) from the Home units strip.'] };
+  if (n.includes('maplocationpins')) return { label: 'Map · Shoot-location overlay', nav: ['Open the Tools tab.', 'Open "Map".', 'Select a city, then use the "Shoot Locations" toggle in the toolbar.'] };
+  if (n.startsWith('externaluser')) return { label: 'External Users', nav: ['Open the Tools tab.', 'Open "External Users".'] };
+  if (n.startsWith('box')) return { label: 'Production Diary / Box Schedule', nav: ['Open the Tools tab.', 'Open "Production Diary/Box Schedule".'] };
+  if (n.includes('mapcrudlifecycle')) return { label: 'Map · Data lifecycle', nav: ['Open the Tools tab.', 'Open "Map".', 'Select a city, then use Pin Location to add, edit and delete locations.'] };
+  if (n.includes('mapcity')) return { label: 'Map · Cities', nav: ['Open the Tools tab.', 'Open "Map".', 'Tap the Cities button in the toolbar.'] };
+  if (n.includes('mapzone')) return { label: 'Map · Studio zones', nav: ['Open the Tools tab.', 'Open "Map".', 'Select a city, then tap the zone-list button.'] };
+  if (n.includes('mappinboundary')) return { label: 'Map · Pinning & boundaries', nav: ['Open the Tools tab.', 'Open "Map".', 'Select a city, tap "Pin Location", then tap the map.'] };
+  if (n.includes('maplocationcrud')) return { label: 'Map · Locations', nav: ['Open the Tools tab.', 'Open "Map".', 'Select a city, then "View All".'] };
+  if (n.includes('maptype')) return { label: 'Map · Location types', nav: ['Open the Tools tab.', 'Open "Map".', 'Select a city, then tap the Types button.'] };
+  if (n.includes('mapguards')) return { label: 'Map · Guards & persisted state', nav: ['Open the Tools tab.', 'Open "Map".'] };
+  if (n.includes('mapdirections')) return { label: 'Map · Directions & share', nav: ['Open the Tools tab.', 'Open "Map".', 'Tap a pin, then Directions or Share on its card.'] };
+  if (n.includes('mapmodule')) return { label: 'Map', nav: ['Open the Tools tab.', 'Open "Map".'] };
+  if (n.includes('locationtool')) return { label: 'Location tool', nav: ['Open the Tools tab.', 'Open "Location" (enable it first under "Click here to select tools" if it is missing).'] };
   if (n.match(/project|join|flow/)) return { label: 'Project', nav: ['Start from the Start & Join / Project List screen.'] };
   return { label: suiteName, nav: [] };
 }

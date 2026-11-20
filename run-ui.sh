@@ -27,7 +27,26 @@ Common modules
   --email             Email module
   --cc                Communication & Collaboration
   --tools             Tools module
+  --external-users    External Users: listing, filters, 3 types, validation, detail
   --recce             Recce
+  --box               Production Diary / Box Schedule
+  --map               Map module (city panel, toolbar, carousel, View All)
+  --map-pins          Map's Shortlisted/Final shoot-location overlay
+  --location          Location tool (Select / Shortlist / Final tabs)
+  --map-crud          Map write paths: cities, zones, pin boundary, locations
+  --map-directions    Map directions and share
+  --map-crud-full     Map DATA lifecycle: creates locations by dropping pins,
+                      renames, scene number, out-of-city choices, drag,
+                      delete, then cleans up its own fixtures
+  --map-cities        Second city, switching, per-city pin scoping
+  --map-cleanup       Delete ZL AUTO fixtures left on the project (opt-in)
+  --map-all           Every Map suite — ONE Appium session per suite, one HTML
+                      report at the end. This is the one to use for the Map module.
+  --only <Class>      One suite by class name, e.g. --only MapCityCrudTest.
+                      Prefer this while fixing a suite: a long Appium session
+                      loses its on-device UiAutomator2 instrumentation after
+                      roughly half an hour, and everything past that point fails
+                      for reasons that have nothing to do with the app.
   --drive             Drive (use --drive-all for the full Drive sweep)
   --doc-dist-all      Document Distribution (all content suites)
   --admin-settings    Settings -> Admin Settings
@@ -54,6 +73,9 @@ Other switches
   -Dzillit.callSheetDestructive=true   also run the 'New wipes the unit' case
 
 Every other flag run-and-report.sh knows still works — run it with a bad flag to see all of them.
+
+Adding a new module? ADDING_A_MODULE.md lists the five places it has to be wired
+in — including the --all sweep, which is the one that gets missed.
 HELP
   exit 0
 fi

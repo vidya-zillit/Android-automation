@@ -101,11 +101,130 @@ elif [[ "${1:-}" == "--tools" ]]; then
                 --tests 'com.zillit.automation.tests.ConfidentialInfoTest'
                 --tests 'com.zillit.automation.tests.InfoTest'
                 --tests 'com.zillit.automation.tests.CateringTest'
+                --tests 'com.zillit.automation.tests.ExternalUserTest'
                 --tests 'com.zillit.automation.tests.RecceTest')
+elif [[ "${1:-}" == "--external-users" ]]; then
+  # EXTERNAL USERS — the listing and its filters, the three user types with their
+  # show/hide rules, every field's validation, the read-only detail screen, and the taps
+  # that hand over to the Email module and to the dialer.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.ExternalUserTest')
 elif [[ "${1:-}" == "--recce" ]]; then
   # RECCE ONLY — the location-scout module: list/search/filters, create form +
   # publish validation, drafts, stops, personnel, location picker, detail, delete.
   GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.RecceTest')
+elif [[ "${1:-}" == "--only" ]]; then
+  # ONE SUITE — ./run-and-report.sh --only MapCityCrudTest
+  #
+  # A long Appium session degrades: the UiAutomator2 instrumentation on the device
+  # gets killed somewhere past the half-hour mark and everything after it fails for
+  # reasons that have nothing to do with the app. Running a single suite keeps the
+  # session short enough to trust what it reports, which is what you want while
+  # fixing one.
+  if [[ -z "${2:-}" ]]; then
+    echo "--only needs a test class, e.g. --only MapCityCrudTest" >&2
+    exit 2
+  fi
+  GRADLE_ARGS+=(--tests "com.zillit.automation.tests.${2}")
+elif [[ "${1:-}" == "--map" ]]; then
+  # MAP ONLY — Tools → LOCATION → Map (new_map): landing state, tutorial card,
+  # city panel + last-visited persistence, city-gated toolbar, search, map type,
+  # filter panel, carousel and the View All list.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapModuleTest')
+elif [[ "${1:-}" == "--map-pins" ]]; then
+  # MAP OVERLAY ONLY — the Location tool's Shortlisted/Final shoot locations drawn
+  # over the Map: toggle gating, ON-by-default, count label, persistence across an
+  # app kill, the two label registers, read-only enforcement and project-wide scope.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapLocationPinsTest')
+elif [[ "${1:-}" == "--location" ]]; then
+  # LOCATION TOOL ONLY — Select / Shortlist / Final tabs, the source of the Map
+  # overlay. Skips wholesale when the tool is not enabled on the project.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.LocationToolTest')
+elif [[ "${1:-}" == "--map-crud" ]]; then
+  # MAP WRITE PATHS — cities, studio zones, pin boundary verdicts, locations.
+  # These CREATE and DELETE real records on the project. Every fixture is named
+  # "ZL AUTO …" and each suite deletes only what it created.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapCityCrudTest'
+                --tests 'com.zillit.automation.tests.MapZoneCrudTest'
+                --tests 'com.zillit.automation.tests.MapPinBoundaryTest'
+                --tests 'com.zillit.automation.tests.MapTypeManagerTest'
+                --tests 'com.zillit.automation.tests.MapLocationCrudTest')
+elif [[ "${1:-}" == "--box" ]]; then
+  # PRODUCTION DIARY / BOX SCHEDULE — one module, two names. Suites run in an order where
+  # each starts from what the one before it made: a type, then a schedule day, then the
+  # events and notes that hang off it.
+  BOX_SUITES=(BoxShellTest BoxTypeTest BoxScheduleCrudTest BoxConflictTest
+              BoxEventNoteTest BoxProductionScheduleTest BoxScheduleEditTest
+              BoxCrossViewTest BoxEventLifecycleTest)
+  ACC="build/allresults"; rm -rf "$ACC"; mkdir -p "$ACC"; TEST_EXIT=0
+  for C in "${BOX_SUITES[@]}"; do
+    echo ""; echo "════════════════════════════════════════════════════════════"
+    echo "▶ $C"; echo "════════════════════════════════════════════════════════════"
+    ./gradlew cleanTest test --continue --tests "com.zillit.automation.tests.$C" || TEST_EXIT=1
+    if ls build/test-results/test/*.xml >/dev/null 2>&1; then
+      for f in build/test-results/test/*.xml; do cp "$f" "$ACC/${C}__$(basename "$f")" 2>/dev/null || true; done
+    fi
+  done
+  if ls "$ACC"/*.xml >/dev/null 2>&1; then
+    rm -f build/test-results/test/*.xml 2>/dev/null || true
+    cp "$ACC"/*.xml build/test-results/test/ 2>/dev/null || true
+  fi
+  echo ""; echo "▶ Building shareable HTML report…"; node tools/make-report.mjs || true
+  exit $TEST_EXIT
+elif [[ "${1:-}" == "--map-cities" ]]; then
+  # A SECOND CITY, and what only two cities can prove: switching, per-city pin scoping
+  # and city search. Small on purpose — these cases are worthless unless they finish.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapCityMultiTest')
+elif [[ "${1:-}" == "--map-cleanup" ]]; then
+  # HOUSEKEEPING — deletes ZL AUTO locations/zones/types left on the project when a Map
+  # run lost its session before its own cleanup case. Deliberately NOT in --map-all or
+  # --all: it removes data, and nothing should do that unasked.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapCleanupTest')
+elif [[ "${1:-}" == "--map-crud-full" ]]; then
+  # THE DATA LIFECYCLE — creates several locations by dropping pins, renames one, sets a
+  # scene number, exercises the out-of-city choices, drags a pin, deletes, and cleans up
+  # after itself. This is the suite that finds data bugs; the others read screens.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapCrudLifecycleTest')
+elif [[ "${1:-}" == "--map-directions" ]]; then
+  # DIRECTIONS + SHARE — both hand off to other apps, so they run last.
+  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapDirectionsShareTest')
+elif [[ "${1:-}" == "--map-all" ]]; then
+  # EVERYTHING map-related — but ONE APPIUM SESSION PER SUITE, not one session for all
+  # ten. Handing every class to a single Gradle run is what this branch used to do, and
+  # it is the pattern that produced a 76-minute run reporting 38 failures with no
+  # assertion behind any of them: the UiAutomator2 instrumentation dies somewhere past
+  # the half-hour mark, every later lookup throws, and each remaining case burns its full
+  # landing budget before failing. Per-suite sessions kept the same ten suites at
+  # 30 passed / 2 failed / 77 skipped with no rebuilds in nine of them (2026-11-20).
+  #
+  # Each suite's XML is collected and ONE HTML report is built from the lot, so this is
+  # still a single command with a single shareable result.
+  MAP_SUITES=(MapModuleTest MapLocationPinsTest LocationToolTest MapCityCrudTest
+              MapZoneCrudTest MapPinBoundaryTest MapTypeManagerTest MapLocationCrudTest
+              MapDirectionsShareTest MapGuardsTest MapCrudLifecycleTest
+              MapCityMultiTest)
+  ACC="build/allresults"
+  rm -rf "$ACC"; mkdir -p "$ACC"
+  TEST_EXIT=0
+  for C in "${MAP_SUITES[@]}"; do
+    echo ""
+    echo "════════════════════════════════════════════════════════════"
+    echo "▶ $C"
+    echo "════════════════════════════════════════════════════════════"
+    ./gradlew cleanTest test --continue --tests "com.zillit.automation.tests.$C" || TEST_EXIT=1
+    if ls build/test-results/test/*.xml >/dev/null 2>&1; then
+      for f in build/test-results/test/*.xml; do
+        cp "$f" "$ACC/${C}__$(basename "$f")" 2>/dev/null || true
+      done
+    fi
+  done
+  if ls "$ACC"/*.xml >/dev/null 2>&1; then
+    rm -f build/test-results/test/*.xml 2>/dev/null || true
+    cp "$ACC"/*.xml build/test-results/test/ 2>/dev/null || true
+  fi
+  echo ""
+  echo "▶ Building shareable HTML report…"
+  node tools/make-report.mjs || true
+  exit $TEST_EXIT
 elif [[ "${1:-}" == "--drive" ]]; then
   # DRIVE ONLY — Tools → ADMIN → Drive: home shell (tabs/chips/select/drawer),
   # create-folder validation + access control, folder navigation and cleanup.
@@ -308,6 +427,7 @@ elif [[ "${1:-}" == "--admin-settings" ]]; then
   # agreed running order (that order lives in TestOrder, 100–149).
   # Add new admin-settings classes here AND give them a TestOrder constant.
   GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DepartmentListingOrderTest'
+                --tests 'com.zillit.automation.tests.AdminSettingsGroupsTest'
                 --tests 'com.zillit.automation.tests.CompanyDetailsTest'
                 --tests 'com.zillit.automation.tests.CreateAdditionalShootingUnitTest'
                 --tests 'com.zillit.automation.tests.CreateNewDepartmentTest'
@@ -359,6 +479,7 @@ elif [[ "${1:-}" == -* ]]; then
   echo "  Available: --no-e2e --flow --sweep --home --call-sheet-upload --calendar --chat"
   echo "             --email --cc --tools"
   echo "             --recce --recce-pagination --drive --drive-upload --drive-share"
+  echo "             --map --map-pins --location --map-crud --map-directions --map-all"
   echo "             --drive-shared --drive-editor --drive-editor-probe --drive-view"
   echo "             --drive-organise --drive-comments --drive-requests --drive-activity"
   echo "             --drive-settings --drive-folder-share --drive-collab --drive-e2e
@@ -396,6 +517,20 @@ prep_device() {  # $1 = adb device serial (may be empty for the only device)
   local flag=""
   [[ -n "$1" ]] && flag="-s $1"
   echo "▶ Prepping device ${1:-<default>}…"
+  # CLEAR A STALE UiAutomator2 SERVER before the first session is created.
+  #
+  # A run that ended badly can leave io.appium.uiautomator2.server holding UiAutomation.
+  # The next run then dies at session creation with "The instrumentation process cannot
+  # be initialized" — the whole class reports a single initializationError and nothing
+  # runs. BaseTest already recovers from this MID-run by force-stopping both packages,
+  # but nothing cleared it BEFORE the first session, so a poisoned device stayed poisoned.
+  # One adb server, started once, before anything else shells out to it. Two concurrent
+  # `adb` calls on a stopped server race to start one and both lose:
+  #   "could not install *smartsocket* listener: Address already in use"
+  # after which the device is unreachable for the rest of the run. Seen in a real --map-all.
+  $ADB start-server >/dev/null 2>&1
+  $ADB $flag shell am force-stop io.appium.uiautomator2.server      >/dev/null 2>&1
+  $ADB $flag shell am force-stop io.appium.uiautomator2.server.test >/dev/null 2>&1
   for i in 1 2 3; do
     $ADB $flag push "$FX/zl_test_image.jpg" /sdcard/Pictures/zl_test_$i.jpg >/dev/null 2>&1
   done
@@ -582,13 +717,28 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     "Calendar::CalendarTest"
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"
-    "Tools::ConfidentialInfoTest InfoTest CateringTest RecceTest DriveTest ToolsManagementTest"
-    "Settings / Admin Settings::DepartmentListingOrderTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest CreateRemoteShootingUnitTest CreateUpdateHomeUnitTest CustomizationOfToolsTest EditProjectNameTest ManageToolGroupsTest PreApprovedUsersTest ApproveNewUserRequestTest SosReceiversTest UserManagementTest WatermarkLogoTest DeleteProjectTest"
+    "Tools::ConfidentialInfoTest InfoTest CateringTest ExternalUserTest RecceTest DriveTest ToolsManagementTest"
+    "Production Diary / Box Schedule::BoxShellTest BoxTypeTest BoxScheduleCrudTest BoxConflictTest BoxEventNoteTest BoxProductionScheduleTest BoxScheduleEditTest BoxCrossViewTest BoxEventLifecycleTest"
+    "Map & Location::MapModuleTest MapLocationPinsTest LocationToolTest MapCityCrudTest MapZoneCrudTest MapPinBoundaryTest MapTypeManagerTest MapLocationCrudTest MapDirectionsShareTest MapGuardsTest MapCrudLifecycleTest MapCityMultiTest"
+    "Settings / Admin Settings::DepartmentListingOrderTest AdminSettingsGroupsTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest CreateRemoteShootingUnitTest CreateUpdateHomeUnitTest CustomizationOfToolsTest EditProjectNameTest ManageToolGroupsTest PreApprovedUsersTest ApproveNewUserRequestTest SosReceiversTest UserManagementTest WatermarkLogoTest DeleteProjectTest"
     "Settings (tab)::EditMyProfileTest AppPreferencesTest LinkedDeviceTest InviteUsersTest ZillitHelpTest"
   )
   if [[ "${SKIP_PROJECT_MODULE:-0}" == "1" ]]; then
     MODULES=("${MODULES[@]:1}")  # drop "Project create / join / list"
   fi
+  # Modules whose suites each need their OWN Appium session, instead of sharing one
+  # session for the whole module.
+  #
+  # The Map suites render a live Google map. UiAutomator waits for an idle screen before
+  # every lookup and a map never goes idle, so these sessions are the ones that lose the
+  # on-device UiAutomator2 instrumentation — and once it is gone, every remaining case in
+  # that gradle run fails with no assertion behind it. Measured 2026-11-20: ten Map suites
+  # in ONE session gave 3 passed / 38 failed over 76 minutes; the same ten, one session
+  # each, gave 30 passed / 2 failed with nine suites completely clean.
+  #
+  # Costs one extra gradle startup per suite. Add a label here only with a run to justify
+  # it — this is not the default for good reason.
+  PER_SUITE_LABELS=("Map & Location" "Production Diary / Box Schedule")
   TEST_EXIT=0
   for entry in "${MODULES[@]}"; do
     label="${entry%%::*}"; classes="${entry##*::}"
@@ -596,11 +746,25 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     echo "════════════════════════════════════════════════════════════"
     echo "▶ MODULE: $label"
     echo "════════════════════════════════════════════════════════════"
-    relaunch_app
-    args=(cleanTest test --continue)
-    for c in $classes; do args+=(--tests "com.zillit.automation.tests.$c"); done
-    ./gradlew "${args[@]}"
-    [[ $? -ne 0 ]] && TEST_EXIT=1
+    _per_suite=0
+    for _l in "${PER_SUITE_LABELS[@]}"; do [[ "$label" == "$_l" ]] && _per_suite=1; done
+    if [[ $_per_suite -eq 1 ]]; then
+      for c in $classes; do
+        echo "  ── $c (own Appium session)"
+        relaunch_app
+        ./gradlew cleanTest test --continue --tests "com.zillit.automation.tests.$c" \
+          || TEST_EXIT=1
+        if ls build/test-results/test/*.xml >/dev/null 2>&1; then
+          cp -f build/test-results/test/*.xml "$ACC"/ 2>/dev/null
+        fi
+      done
+    else
+      relaunch_app
+      args=(cleanTest test --continue)
+      for c in $classes; do args+=(--tests "com.zillit.automation.tests.$c"); done
+      ./gradlew "${args[@]}"
+      [[ $? -ne 0 ]] && TEST_EXIT=1
+    fi
     # Accumulate this module's JUnit XMLs (one file per test class, no name clashes).
     if ls build/test-results/test/*.xml >/dev/null 2>&1; then
       cp -f build/test-results/test/*.xml "$ACC"/ 2>/dev/null

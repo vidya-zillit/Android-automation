@@ -354,6 +354,61 @@ public class ToolsPage extends BasePage {
         return textShown(name, timeout);
     }
 
+    /**
+     * Opens a tool whose label CONTAINS {@code part}.
+     *
+     * <p>{@link #openModule} matches the whole label with {@code textMatches}, while
+     * {@link #isModuleListed} only asks whether the text appears anywhere. That asymmetry
+     * is a trap: searching for "Production" reported the tool as listed and then failed to
+     * open it, because the row actually reads "Production Diary/Box Schedule". Tool labels
+     * come from the server per project ({@code toolsInfo.unitName}), so the full name
+     * cannot be hard-coded.
+     */
+    public boolean openModuleContaining(String part) {
+        String rowSel = "new UiSelector().className(\"android.widget.TextView\")"
+                + ".textContains(\"" + part + "\")";
+        long deadline = System.currentTimeMillis() + 8000;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                for (WebElement e : driver.findElements(AppiumBy.androidUIAutomator(rowSel))) {
+                    // Skip the search box, whose text also equals what was typed.
+                    String cls = e.getAttribute("className");
+                    if (cls != null && cls.contains("EditText")) continue;
+                    if (!e.isDisplayed()) continue;
+                    e.click();
+                    sleep(1500);
+                    return true;
+                }
+            } catch (WebDriverException ignored) {
+            }
+            try {
+                driver.findElement(AppiumBy.androidUIAutomator(
+                        "new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView("
+                                + rowSel + ")"));
+            } catch (WebDriverException ignored) {
+            }
+            sleep(500);
+        }
+        return false;
+    }
+
+    /** Every tool label on screen — for saying what IS there when a lookup fails. */
+    public java.util.List<String> visibleModuleNames() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        try {
+            for (WebElement e : driver.findElements(
+                    AppiumBy.className("android.widget.TextView"))) {
+                String t = e.getText();
+                if (t != null && !t.isBlank() && t.length() < 60 && e.isDisplayed()) {
+                    out.add(t.trim());
+                }
+                if (out.size() >= 40) break;
+            }
+        } catch (Exception ignored) {
+        }
+        return out;
+    }
+
     /** Open a tool module by its exact (case-insensitive) label. */
     public boolean openModule(String name) {
         // Match the ROW label TextView only — NOT the search EditText, whose text

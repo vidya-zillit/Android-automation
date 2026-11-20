@@ -100,9 +100,40 @@ public final class DriverFactory {
         }
 
         try {
-            return new AndroidDriver(new URL(Config.get("zillit.serverUrl")), options);
+            AndroidDriver driver =
+                    new AndroidDriver(new URL(Config.get("zillit.serverUrl")), options);
+            applyMapFriendlySettings(driver);
+            return driver;
         } catch (MalformedURLException e) {
             throw new IllegalStateException("Bad Appium server URL: " + Config.get("zillit.serverUrl"), e);
+        }
+    }
+
+    /**
+     * Stops UiAutomator waiting for an idle screen before every lookup.
+     *
+     * <p>Measured on 2026-11-20: the Map suites that work in lists and forms
+     * (city panel, location list, type manager) ran clean, while the two that query the
+     * screen with a GoogleMap rendering — {@code MapPinBoundaryTest} and
+     * {@code MapZoneCrudTest} — lost the UiAutomator2 instrumentation on a
+     * {@code POST /elements} four times each, on a device idling at load 0.24. A
+     * GoogleMap renders continuously, so it NEVER reports idle: every query paid the
+     * default 10s {@code waitForIdleTimeout} in full and the server eventually died
+     * inside {@code UiAutomation.disconnect}, which is what the device's own crash log
+     * records.
+     *
+     * <p>100ms keeps a short settle without the wait. Raise it with
+     * {@code zillit.waitForIdleTimeout} if a suite turns out to need the idle wait; 0
+     * disables the settle entirely.
+     */
+    private static void applyMapFriendlySettings(AndroidDriver driver) {
+        String idle = configOrDefault("zillit.waitForIdleTimeout", "100");
+        try {
+            driver.setSetting("waitForIdleTimeout", Integer.parseInt(idle.trim()));
+        } catch (RuntimeException e) {
+            // A server that does not accept the setting is not a reason to fail the run.
+            System.out.println(">>> Could not set waitForIdleTimeout=" + idle
+                    + " (" + e.getMessage() + ") — carrying on with the server default");
         }
     }
 
