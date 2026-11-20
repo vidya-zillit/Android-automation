@@ -72,6 +72,21 @@ class ExternalUserTest extends BaseTest {
      */
     @Override protected boolean requiresLoggedOutStart() { return false; }
 
+    /**
+     * The app is NOT restarted between cases.
+     *
+     * <p>{@link BaseTest#relaunchBetweenTests()} defaults to TRUE: before every case the
+     * app is terminated and launched again, which means splash, authentication, the
+     * project list, and a walk back through Tools — per case. On a phone that is most of
+     * the run's time, and on screen it looks like the app opening and closing over and
+     * over, which is exactly what it is.
+     *
+     * <p>These cases are a ladder — EU-30 creates a user, EU-31 finds it, EU-32 renames it,
+     * EU-37 deletes it — so they belong on one continuous session, and every helper here
+     * already recovers to the listing on its own.
+     */
+    @Override protected boolean relaunchBetweenTests() { return false; }
+
     private String createdName;
 
     private static String fixtureName(String what) {
@@ -457,6 +472,18 @@ class ExternalUserTest extends BaseTest {
                         || String.valueOf(f.gender()).isBlank(),
                 "The form already has a gender (\"" + f.gender() + "\"), so 'without a"
                         + " gender' is not what would be tested");
+
+        // Give this user a phone number. EU-35 taps the contact on the detail screen to
+        // check it opens the dialer, and that tap does nothing unless BOTH the country
+        // code and the number are set — so a suite that never saves one can never test it.
+        // It skipped every run for exactly that reason, which looked like a finding and
+        // was a gap in the fixture.
+        if (f.chooseCountry(null)) {
+            f.setPhone("9876543210");
+        } else {
+            System.out.println(">>> EU-30 note: no country could be chosen, so this user"
+                    + " is saved without a phone and EU-35 will have nothing to dial.");
+        }
         assumeTrue(f.save(), "The save button was not clickable");
         sleep(4000);
 
@@ -514,15 +541,23 @@ class ExternalUserTest extends BaseTest {
         // ("… 8109 UPD" contains "… 8109"), so asking whether any row still carries the old
         // name answers yes for the renamed row itself — the rename looked like a duplicate
         // when the list held exactly one correct row.
-        List<String> mine = after.names().stream()
-                .filter(n -> n.contains(FIXTURE_PREFIX)).toList();
-        assertEquals(1, mine.size(),
-                "After renaming to \"" + renamed + "\" the project holds " + mine.size()
-                        + " fixture user(s): " + mine + ". An update must change the one"
-                        + " that exists, not add another.");
-        assertEquals(renamed, mine.get(0),
-                "The row reads \"" + mine.get(0) + "\" after a rename to \"" + renamed + "\"");
+        // Matched EXACTLY, both ways, and the new name is recorded first.
+        //
+        // Counting every fixture row assumed a clean project, and broke the moment an
+        // earlier run left one behind: it reported a duplicate this case had not created.
+        // A "contains" test for the old name is no better — the renamed row contains it,
+        // since "… 8109 UPD" contains "… 8109". And recording the new name only after the
+        // assertions meant a failure here left every later case hunting for the OLD name.
+        String previous = createdName;
         createdName = renamed;
+
+        List<String> names = after.names();
+        assertTrue(names.stream().anyMatch(renamed::equals),
+                "The user was renamed to \"" + renamed + "\" and no row carries exactly"
+                        + " that: " + names);
+        assertFalse(names.stream().anyMatch(previous::equals),
+                "A row still carries the old name \"" + previous + "\" exactly, so the"
+                        + " update added a user instead of changing one: " + names);
         after.clearSearch();
     }
 
@@ -616,13 +651,19 @@ class ExternalUserTest extends BaseTest {
                 "Delete did not ask for confirmation. An external user carries somebody's"
                         + " contact details, and a mis-tap would take them with no warning.");
         assumeTrue(list.cancelDelete(), "Cancel was not available");
-        sleep(2500);
+        sleep(3000);
 
-        assumeTrue(list.search(FIXTURE_PREFIX), "The search box could not be used");
-        assertNotNull(list.find(createdName),
-                "Cancelling the delete removed \"" + createdName + "\" anyway: "
-                        + list.names());
-        list.clearSearch();
+        // Re-read from a FRESH listing, not from the one the dialog was dismissed over.
+        // The rows are re-bound when the dialog closes, and reading across that moment
+        // returned an empty list — which read as "Cancel deleted the user" when the user
+        // was never touched. A claim this serious has to be made on a settled screen.
+        ExternalUserListPage after = reopenListing();
+        assumeTrue(after.search(FIXTURE_PREFIX), "The search box could not be used");
+        sleep(2000);
+        assertNotNull(after.find(createdName),
+                "Cancelling the delete removed \"" + createdName + "\" anyway."
+                        + " Rows after a reopen: " + after.names());
+        after.clearSearch();
     }
 
     @Test
@@ -684,46 +725,117 @@ class ExternalUserTest extends BaseTest {
     // ─────────────────────────── helpers ───────────────────────────
 
     /** Opens the module from Tools, entering a project first if we are not in one. */
+    /**
+     * Gets to the External Users listing by the shortest route that works.
+     *
+     * <p>The app is opened once and a project entered once, for the whole suite. After
+     * that every case starts from wherever the last one finished, and the cheapest true
+     * answer wins:
+     *
+     * <ol>
+     *   <li>already on the listing — do nothing;</li>
+     *   <li>inside the project — go through Tools, and nothing else;</li>
+     *   <li>somewhere else in the app — step back until one of the above;</li>
+     *   <li>on the project list — enter a project, which happens once.</li>
+     * </ol>
+     *
+     * <p>Nothing here ever restarts the app or re-enters the project to recover. Watching
+     * splash, login and the project list scroll past before every case is not just slow:
+     * it throws away the state each case leaves for the next, which is the whole point of
+     * a suite that creates a user, finds it, renames it and then deletes it.
+     */
     private void openExternalUsers() {
-        ExternalUserListPage already = new ExternalUserListPage(driver);
-        // Generous on the first look: after a save the listing re-fetches, and a check that
-        // gave up in two seconds used to decide we were lost and press BACK — walking out
-        // of the module from the very screen it wanted.
-        if (already.isLoaded(Duration.ofSeconds(10))) return;
+        ExternalUserListPage listing = new ExternalUserListPage(driver);
+        BottomNavPage nav = new BottomNavPage(driver);
 
-        // Back out of whatever is on top until the listing is reached — NOT only screens
-        // whose Activity is named after this module. Department, Designation and Country
-        // open CommonSearchListActivity, a screen of their own, and a case that ends on one
-        // used to leave the next case looking for a landing it could never find: the
-        // bottom navigation is not on screen there, so it waited out its whole budget and
-        // then failed, taking every case after it down as well.
-        for (int i = 0; i < 6; i++) {
-            if (already.isLoaded(Duration.ofSeconds(2))) return;
-            if (!appPackage.equals(safePackage())) break;   // left the app — stop backing out
-            try { driver.navigate().back(); } catch (Exception ignored) { }
-            sleep(1000);
+        // 1 — already there.
+        if (listing.isLoaded(Duration.ofSeconds(5))) return;
+
+        // 2 — inside the project: Tools is one tap away.
+        if (nav.waitUntilLoaded(Duration.ofSeconds(3))) {
+            openFromTools();
+            return;
         }
-        if (already.isLoaded(Duration.ofSeconds(2))) return;
 
-        if (landing == Landing.PROJECT_LIST) {
+        // 3 — somewhere else in the app: step back, never off a screen that is a place to
+        // start from, and never out of the app.
+        for (int i = 0; i < 6; i++) {
+            if (listing.isLoaded(Duration.ofSeconds(2))) return;
+            if (nav.waitUntilLoaded(Duration.ofSeconds(2))) { openFromTools(); return; }
+            if (onProjectList()) break;
+            if (!appPackage.equals(safePackage())) break;
+            try { driver.navigate().back(); } catch (Exception ignored) { }
+            sleep(900);
+        }
+
+        // 4 — the project list: go in. Once per suite in practice, because nothing above
+        // ever comes back here.
+        if (onProjectList()) {
             ProjectListPage projects = new ProjectListPage(driver);
             List<String> names = projects.visibleProjectNames();
-            assumeTrue(!names.isEmpty(), "No projects to enter");
-            assumeTrue(projects.tapProject(names.get(0)), "Could not enter a project");
+            assumeTrue(!names.isEmpty(),
+                    "The project list is open but shows no projects to enter."
+                            + " This account may have none on this device.");
+            assumeTrue(projects.tapProject(names.get(0)),
+                    "Could not enter \"" + names.get(0) + "\". Projects listed: " + names);
         }
-        assumeTrue(new BottomNavPage(driver).waitUntilLoaded(Duration.ofSeconds(60)),
-                "The bottom navigation never loaded");
 
+        if (!nav.waitUntilLoaded(Duration.ofSeconds(60))) {
+            assumeTrue(false, "The bottom navigation never loaded. On screen instead: "
+                    + whereAreWe());
+        }
+        openFromTools();
+    }
+
+    /**
+     * Tools tab → External Users. The only recovery route a case ever needs.
+     *
+     * <p>Deliberately separate: going back to Tools is a tab tap and a list open, which is
+     * what a person does. Restarting the app to reach the same screen is not.
+     */
+    private void openFromTools() {
         ToolsPage tools = new ToolsPage(driver);
         assumeTrue(tools.openToolsTab(), "The Tools tab could not be opened");
         assumeTrue(tools.isLoaded(Duration.ofSeconds(30)), "The Tools tab did not load");
         tools.searchTools("External");
-        sleep(1500);
-        assumeTrue(tools.openIfVisible(TOOL),
-                "\"" + TOOL + "\" is not offered in Tools. Tools visible: "
-                        + tools.toolNames());
+        sleep(1200);
+        if (!tools.openIfVisible(TOOL)) {
+            assumeTrue(false, "\"" + TOOL + "\" is not offered in Tools. Tools visible: "
+                    + tools.toolNames());
+        }
         assumeTrue(new ExternalUserListPage(driver).isLoaded(Duration.ofSeconds(25)),
                 "The External Users listing did not open");
+    }
+
+    /**
+     * Are we on the project list? Asked without waiting, and without throwing.
+     *
+     * <p>{@code ProjectListPage.isLoaded()} reads like a predicate and is not one: it calls
+     * {@code waitVisible}, which blocks for the full 30-second timeout and then throws
+     * TimeoutException. Using it as a question meant that every time the answer was "no" —
+     * the ordinary case, since the app is usually inside a project — the case died on a
+     * timeout instead of moving on. A guard has to be cheap and total: it answers now, and
+     * it answers for every screen.
+     */
+    private boolean onProjectList() {
+        try {
+            return !driver.findElements(byAppId("projectListRecyclerView")).isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** A short description of where the app is, for a message that can be acted on. */
+    private String whereAreWe() {
+        String pkg = safePackage();
+        if (!appPackage.equals(pkg)) {
+            return "a different app (" + (pkg.isEmpty() ? "unreadable" : pkg) + ")";
+        }
+        if (onProjectList()) return "the project list";
+        if (new ExternalUserListPage(driver).isLoaded(Duration.ofSeconds(1))) {
+            return "the External Users listing";
+        }
+        return "activity " + resumedActivity();
     }
 
     private ExternalUserFormPage openAddForm() {
@@ -743,6 +855,21 @@ class ExternalUserTest extends BaseTest {
         return list.viewDetails(name);
     }
 
+    /**
+     * Comes back to a freshly loaded listing.
+     *
+     * <p>Used when an assertion is about to say something serious about the data — that a
+     * user survived a cancelled delete, say. Reading the list while its rows are being
+     * re-bound after a dialog closes can return nothing at all, and "nothing" is
+     * indistinguishable from "deleted".
+     */
+    private ExternalUserListPage reopenListing() {
+        openFromTools();
+        ExternalUserListPage fresh = new ExternalUserListPage(driver);
+        assumeTrue(fresh.isLoaded(Duration.ofSeconds(20)), "The listing did not reload");
+        return fresh;
+    }
+
     /** Leaves the form without leaving the module. */
     private void closeForm() {
         ExternalUserFormPage f = new ExternalUserFormPage(driver);
@@ -752,12 +879,31 @@ class ExternalUserTest extends BaseTest {
     }
 
     /** Comes back from wherever a hand-over took us, without acting on that screen. */
+    /**
+     * Comes back from wherever a hand-over took us — the Email module, the dialer —
+     * without acting on that screen.
+     *
+     * <p>Guarded the same way as {@link #openExternalUsers()}: stepping back is for
+     * escaping screens we did not mean to be on, and it stops at the project list, at the
+     * bottom navigation, or at the edge of the app. An unguarded run of BACK presses walks
+     * straight off the project list and out of the app, and then every later case relaunches
+     * and lands in the same place — the open-and-close loop.
+     */
     private void backToModule() {
+        ProjectListPage projects = new ProjectListPage(driver);
+        BottomNavPage nav = new BottomNavPage(driver);
         for (int i = 0; i < 6; i++) {
             if (new ExternalUserListPage(driver).isLoaded(Duration.ofSeconds(2))
                     || new ExternalUserFormPage(driver).isLoaded(Duration.ofSeconds(1))) {
                 break;
             }
+            if (onProjectList()) break;
+            if (nav.waitUntilLoaded(Duration.ofSeconds(2))) break;
+            // Being in ANOTHER app is the ordinary case here — this runs after a hand-over
+            // to Email or to the dialer, and BACK is how a person comes back. Stopping at
+            // the app's edge left the dialer on screen, so the next step could not find a
+            // landing and reported a case that had in fact done exactly what it set out
+            // to do.
             try { driver.navigate().back(); } catch (Exception ignored) { }
             sleep(1200);
         }

@@ -128,17 +128,18 @@ public class ExternalUserFormPage extends BasePage {
      */
     /** User Type, by the order the dropdown lists them: Crew Member, Vendor, others. */
     public boolean chooseUserType(String label) {
-        int i = TYPE_CREW.equalsIgnoreCase(label) ? 0
-              : TYPE_VENDOR.equalsIgnoreCase(label) ? 1
-              : TYPE_OTHERS.equalsIgnoreCase(label) ? 2 : -1;
-        if (i < 0) return false;
-        return pickByPosition("userType", i, label);
+        int i = indexOf(USER_TYPES, label);
+        return i >= 0 && pickByPosition("userType", USER_TYPES, i);
     }
+
+    /** The three user types, in the order the dropdown lists them. */
+    public static final List<String> USER_TYPES =
+            List.of(TYPE_CREW, TYPE_VENDOR, TYPE_OTHERS);
 
     /** Gender, in the order of R.array.gender_type2: Male, Female, Non-Binary. */
     public boolean chooseGender(String label) {
-        int i = GENDERS.indexOf(label);
-        return i >= 0 && pickByPosition("gender", i, label);
+        int i = indexOf(GENDERS, label);
+        return i >= 0 && pickByPosition("gender", GENDERS, i);
     }
 
     /** The options a dropdown is currently offering, with its popup open. */
@@ -180,8 +181,11 @@ public class ExternalUserFormPage extends BasePage {
      *
      * @param index which item, counting from 0 in the order the dropdown lists them
      */
-    private boolean pickByPosition(String containerId, int index, String expected) {
-        for (int attempt = 0; attempt < 3; attempt++) {
+    private boolean pickByPosition(String containerId, List<String> options, int index) {
+        String expected = options.get(index);
+        int aimAt = index;
+
+        for (int attempt = 0; attempt < 4; attempt++) {
             if (!tapField(containerId)) return false;
             pause(1400);
             org.openqa.selenium.Rectangle r;
@@ -192,21 +196,38 @@ public class ExternalUserFormPage extends BasePage {
             } catch (Exception e) { return false; }
 
             int itemH = itemHeightPx();
-            // A small gap sits between the field and the first row; attempt 0 assumes none,
-            // and the retries nudge down by a third of a row each time.
-            int gap = attempt * (itemH / 3);
             int x = r.getX() + r.getWidth() / 2;
-            int y = r.getY() + r.getHeight() + gap + itemH * index + itemH / 2;
+            int y = r.getY() + r.getHeight() + itemH * aimAt + itemH / 2;
             tapAt(x, y);
             pause(1400);
 
             String now = innerText(containerId, "autoCompleteDropDown");
             if (now != null && now.trim().equalsIgnoreCase(expected)) return true;
-            // Something else was selected, or nothing was: close whatever is open and
-            // retry with a different offset rather than leaving a popup up.
+
+            // Landed on a DIFFERENT known option: that says exactly how far out the aim
+            // was, so correct by the difference instead of nudging blindly. A popup that
+            // already has a selection often opens scrolled to it, which is why asking for
+            // the first item after choosing the third one missed — the list was not
+            // starting where the field ends.
+            int landed = indexOf(options, now);
+            if (landed >= 0) {
+                aimAt += (index - landed);
+                if (aimAt < 0) aimAt = 0;
+            } else {
+                aimAt = index;      // nothing recognisable; try the plain aim again
+            }
             dismissPopup();
         }
         return false;
+    }
+
+    private static int indexOf(List<String> options, String value) {
+        if (value == null) return -1;
+        String v = value.trim();
+        for (int i = 0; i < options.size(); i++) {
+            if (options.get(i).equalsIgnoreCase(v)) return i;
+        }
+        return -1;
     }
 
     /** One dropdown row, in pixels: the Material standard 48dp at this device's density. */

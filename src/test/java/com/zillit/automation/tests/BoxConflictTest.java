@@ -256,8 +256,10 @@ class BoxConflictTest extends BoxBaseTest {
     private BoxCreateSchedulePage openForm() {
         backToBox();
         BoxSchedulePage b = box();
-        assumeTrue(b.openDrawer(), "The drawer did not open. Toolbar: "
-                + b.toolbarState() + "; activity: " + resumedActivity());
+        if (!b.openDrawer()) {
+            assumeTrue(false, "The drawer did not open. Toolbar: "
+                    + b.toolbarState() + "; activity: " + resumedActivity());
+        }
         assumeTrue(b.drawerCreateSchedule(), "Create Schedule is not offered");
         BoxCreateSchedulePage f = new BoxCreateSchedulePage(driver);
         assumeTrue(f.isLoaded(Duration.ofSeconds(15)), "The schedule form did not open");

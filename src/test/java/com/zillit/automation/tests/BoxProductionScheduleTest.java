@@ -590,8 +590,13 @@ class BoxProductionScheduleTest extends BoxBaseTest {
         }
         backToBox();
         BoxSchedulePage b = box();
-        assumeTrue(b.openDrawer(), "The drawer did not open. Toolbar: " + b.toolbarState()
-                + "; activity: " + resumedActivity());
+        // Built only on failure: resumedActivity() shells out to adb, and this ran on every
+        // successful drawer open as well — once per case, and slower still over USB on a
+        // phone. assumeTrue evaluates its message before it looks at the condition.
+        if (!b.openDrawer()) {
+            assumeTrue(false, "The drawer did not open. Toolbar: " + b.toolbarState()
+                    + "; activity: " + resumedActivity());
+        }
         assumeTrue(b.drawerCreateSchedule(), "Create Schedule is not offered");
         assumeTrue(f.isLoaded(Duration.ofSeconds(15)), "The schedule form did not open");
         return f;

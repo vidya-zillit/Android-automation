@@ -531,6 +531,31 @@ prep_device() {  # $1 = adb device serial (may be empty for the only device)
   $ADB start-server >/dev/null 2>&1
   $ADB $flag shell am force-stop io.appium.uiautomator2.server      >/dev/null 2>&1
   $ADB $flag shell am force-stop io.appium.uiautomator2.server.test >/dev/null 2>&1
+  # WAKE AND UNLOCK, for a physical device.
+  #
+  # An emulator sits awake forever; a phone dozes and locks itself between runs. Appium
+  # then activates the app behind the lock screen and every lookup finds nothing, which
+  # surfaces as "No known landing screen appeared" after the full 120s — a device problem
+  # wearing a test failure's clothes.
+  #
+  # Waking and swiping the lock screen away is enough for a device with no PIN. A device
+  # WITH one stops at the keypad, and this says so plainly rather than typing anything: a
+  # PIN belongs to its owner, not to a test script or a repository.
+  if [[ "$(printf '%s' "${ZILLIT_UDID:-}" | cut -c1-8)" != "emulator" ]]; then
+    $ADB $flag shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1
+    sleep 1
+    $ADB $flag shell input keyevent KEYCODE_MENU   >/dev/null 2>&1
+    sleep 1
+    $ADB $flag shell input swipe 540 1800 540 600 200 >/dev/null 2>&1
+    sleep 1
+    if $ADB $flag shell dumpsys window 2>/dev/null | grep -q 'mDreamingLockscreen=true'; then
+      echo "  ⚠ $ZILLIT_UDID is still locked — unlock it on the device and run again."
+      echo "    (the run will keep going, but every case will fail to find a screen)"
+    else
+      echo "  device is awake and unlocked"
+    fi
+  fi
+
   for i in 1 2 3; do
     $ADB $flag push "$FX/zl_test_image.jpg" /sdcard/Pictures/zl_test_$i.jpg >/dev/null 2>&1
   done

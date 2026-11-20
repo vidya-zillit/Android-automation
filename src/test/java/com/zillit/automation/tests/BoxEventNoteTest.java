@@ -219,8 +219,10 @@ class BoxEventNoteTest extends BoxBaseTest {
     private BoxCreateEventPage openEvent() {
         backToBox();
         BoxSchedulePage b = box();
-        assumeTrue(b.openDrawer(), "The drawer did not open. Toolbar: "
-                + b.toolbarState() + "; activity: " + resumedActivity());
+        if (!b.openDrawer()) {
+            assumeTrue(false, "The drawer did not open. Toolbar: "
+                    + b.toolbarState() + "; activity: " + resumedActivity());
+        }
         assumeTrue(b.drawerCreateEvent(), "Create Event is not offered — needs posting rights");
         BoxCreateEventPage f = new BoxCreateEventPage(driver);
         assumeTrue(f.isLoaded(Duration.ofSeconds(15)), "The event form did not open");
@@ -230,8 +232,10 @@ class BoxEventNoteTest extends BoxBaseTest {
     private BoxCreateEventPage openNote() {
         backToBox();
         BoxSchedulePage b = box();
-        assumeTrue(b.openDrawer(), "The drawer did not open. Toolbar: "
-                + b.toolbarState() + "; activity: " + resumedActivity());
+        if (!b.openDrawer()) {
+            assumeTrue(false, "The drawer did not open. Toolbar: "
+                    + b.toolbarState() + "; activity: " + resumedActivity());
+        }
         assumeTrue(b.drawerCreateNote(), "Create Note is not offered — needs posting rights");
         BoxCreateEventPage f = new BoxCreateEventPage(driver);
         assumeTrue(f.isLoaded(Duration.ofSeconds(15)), "The note form did not open");

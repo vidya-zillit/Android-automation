@@ -127,8 +127,10 @@ class BoxTypeTest extends BoxBaseTest {
         // The create-schedule page offers its own inline type form. A type made there must
         // be selectable without reopening the form — otherwise the shortcut is pointless.
         BoxSchedulePage b = box();
-        assumeTrue(b.openDrawer(), "The drawer did not open. Toolbar: "
-                + b.toolbarState() + "; activity: " + resumedActivity());
+        if (!b.openDrawer()) {
+            assumeTrue(false, "The drawer did not open. Toolbar: "
+                    + b.toolbarState() + "; activity: " + resumedActivity());
+        }
         assumeTrue(b.drawerCreateSchedule(), "Create Schedule is not offered");
 
         com.zillit.automation.pages.BoxCreateSchedulePage form =
@@ -198,8 +200,10 @@ class BoxTypeTest extends BoxBaseTest {
     private BoxTypeManagerPage openTypes() {
         backToBox();
         BoxSchedulePage b = box();
-        assumeTrue(b.openDrawer(), "The drawer did not open. Toolbar: "
-                + b.toolbarState() + "; activity: " + resumedActivity());
+        if (!b.openDrawer()) {
+            assumeTrue(false, "The drawer did not open. Toolbar: "
+                    + b.toolbarState() + "; activity: " + resumedActivity());
+        }
         assumeTrue(b.drawerEditTypes(), "Edit Types is not offered — needs posting rights");
         BoxTypeManagerPage t = new BoxTypeManagerPage(driver);
         assumeTrue(t.isLoaded(Duration.ofSeconds(15)), "The type manager did not open");

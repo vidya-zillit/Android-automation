@@ -231,8 +231,10 @@ class BoxScheduleCrudTest extends BoxBaseTest {
     private BoxCreateSchedulePage openForm() {
         backToBox();
         BoxSchedulePage b = box();
-        assumeTrue(b.openDrawer(), "The drawer did not open. Toolbar: "
-                + b.toolbarState() + "; activity: " + resumedActivity());
+        if (!b.openDrawer()) {
+            assumeTrue(false, "The drawer did not open. Toolbar: "
+                    + b.toolbarState() + "; activity: " + resumedActivity());
+        }
         assumeTrue(b.drawerCreateSchedule(),
                 "Create Schedule is not offered — it needs posting rights");
         BoxCreateSchedulePage f = new BoxCreateSchedulePage(driver);
