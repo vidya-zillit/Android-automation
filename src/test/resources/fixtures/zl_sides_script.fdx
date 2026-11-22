@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<FinalDraft DocumentType="Script" Template="No" Version="1">
+  <Content>
+    <Paragraph Number="1" Type="Scene Heading">
+      <SceneProperties Number="1"/>
+      <Text>INT. PRODUCTION OFFICE - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action"><Text>A desk. A laptop.</Text></Paragraph>
+    <Paragraph Type="Character"><Text>VIDYA</Text></Paragraph>
+    <Paragraph Type="Dialogue"><Text>We ship when the tests pass.</Text></Paragraph>
+    <Paragraph Number="2" Type="Scene Heading">
+      <SceneProperties Number="2"/>
+      <Text>EXT. STUDIO LOT - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action"><Text>Trucks roll in.</Text></Paragraph>
+    <Paragraph Type="Character"><Text>AD</Text></Paragraph>
+    <Paragraph Type="Dialogue"><Text>Scene two, take one.</Text></Paragraph>
+    <Paragraph Number="3" Type="Scene Heading">
+      <SceneProperties Number="3"/>
+      <Text>INT. EDIT SUITE - NIGHT</Text>
+    </Paragraph>
+    <Paragraph Type="Action"><Text>Monitors glow.</Text></Paragraph>
+    <Paragraph Type="Character"><Text>EDITOR</Text></Paragraph>
+    <Paragraph Type="Dialogue"><Text>One more pass.</Text></Paragraph>
+    <Paragraph Number="4" Type="Scene Heading">
+      <SceneProperties Number="4"/>
+      <Text>EXT. ROOFTOP - DUSK</Text>
+    </Paragraph>
+    <Paragraph Type="Action"><Text>The city below.</Text></Paragraph>
+    <Paragraph Type="Character"><Text>VIDYA</Text></Paragraph>
+    <Paragraph Type="Dialogue"><Text>That is the shot.</Text></Paragraph>
+    <Paragraph Number="5" Type="Scene Heading">
+      <SceneProperties Number="5"/>
+      <Text>INT. PRODUCTION OFFICE - DAY</Text>
+    </Paragraph>
+    <Paragraph Type="Action"><Text>Empty now.</Text></Paragraph>
+    <Paragraph Type="Character"><Text>VIDYA</Text></Paragraph>
+    <Paragraph Type="Dialogue"><Text>Wrap.</Text></Paragraph>
+  </Content>
+</FinalDraft>

@@ -24,6 +24,7 @@ package com.zillit.automation.core;
  *   90–99   destructive / global-state (tools)     ← VIDYA
  *  100–149  ADMIN SETTINGS                         ← BHAVIK
  *  150–169  SETTINGS TAB (non-admin)               ← BHAVIK
+ *  170–189  tools overflow (Schedule Dist, Continuity…) ← VIDYA
  *   (70–89 retired — the admin block moved to 100+ to make room)
  * </pre>
  *
@@ -99,6 +100,7 @@ public final class TestOrder {
      * hand over to the Email module and to the dialer.
      */
     public static final int EXTERNAL_USERS             = 50;
+
 
     // Drive OVERFLOW — 62–69 (Drive's own range) is full, and renumbering an existing
     // suite to make room is exactly what this file forbids. These four claim the next
@@ -307,6 +309,16 @@ public final class TestOrder {
     public static final int CREATE_NEW_DESIGNATION          = 112;
     public static final int CREATE_REMOTE_SHOOTING_UNIT     = 115;
     public static final int CREATE_UPDATE_HOME_UNIT         = 118;
+    // Sides OVERFLOW — the tools range 48–69 is full end to end (48–51 tools,
+    // 52–69 Drive and Doc Distribution), and the file's own rule is to claim the next
+    // free slot rather than renumber a suite that already has a run behind it. 119 is
+    // the first one free after the Box block (110–117).
+    /**
+     * Sides: both tabs, the two §9.1 gates, scripts and pages, the manual generate flow
+     * through review and publish, the row actions, History and the Autogenerate sheet.
+     */
+    public static final int SIDES                           = 119;
+
     public static final int CUSTOMIZATION_OF_TOOLS_ALL      = 121;
     public static final int EDIT_PROJECT_NAME               = 124;
     public static final int MANAGE_TOOL_GROUPS              = 127;
@@ -349,4 +361,23 @@ public final class TestOrder {
      */
     public static final int ZILLIT_HELP                  = 162;
     // free: 151–152, 154–155, 157–158, 160–161, 163–169
+
+    // 170–189 · tools overflow · VIDYA ----------------------------------------
+    // The tools ranges are full (48–69 end to end; 90–99 taken by Tools Management, Doc
+    // Distribution and Map), and the gaps between Bhavik's admin constants are kept for new
+    // admin modules — so new tool modules start a range of their own here. Steps of 5 leave
+    // room for a second suite per module.
+    /**
+     * Schedule Distribution (Tools tile "Schedule Full &amp; One Line"): the three tabs, the
+     * sentinel Full / One Line upload and its Replace, View / Download / counts, page uploads
+     * and their validation, the Pages search and folders, delete, publish (to Cancel), History.
+     */
+    public static final int SCHEDULE_DIST                = 170;
+    /**
+     * Continuity: both tabs, adding a record through the app's gallery, the grid and its
+     * card menu, edit, forward to All Department, distribute, download, delete per level,
+     * the All Department department list, and a sweep of everything marked ZLAUTO.
+     */
+    public static final int CONTINUITY                   = 175;
+    // free: 171–174, 176–189
 }

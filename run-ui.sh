@@ -29,6 +29,9 @@ Common modules
   --tools             Tools module
   --external-users    External Users: listing, filters, 3 types, validation, detail
   --recce             Recce
+  --sides             Sides: scripts, scene pickers, generate/publish, Autogenerate
+  --continuity        Continuity: add via gallery, grid, edit, forward, delete per level
+  --schedule-dist     Schedule Distribution ("Schedule Full & One Line"): upload/replace, pages, history
   --box               Production Diary / Box Schedule
   --map               Map module (city panel, toolbar, carousel, View All)
   --map-pins          Map's Shortlisted/Final shoot-location overlay

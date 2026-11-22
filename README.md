@@ -364,5 +364,10 @@ run alone to re-push the latest results.
 
 ## Adding flows
 
-Create a page object per screen in `pages/` (locators use the app's view IDs,
-prefix `com.zillit.zillitapp:id/`), then compose them in a test under `tests/`.
+Create a page object per screen in `pages/<module>/` (locators use the app's view IDs,
+prefix `com.zillit.zillitapp:id/`), then compose them in a test under `tests/<module>/`.
+Each module has its own package on both sides, e.g. `tests.continuity` and
+`pages.continuity`. Shared bases and screens used by several modules (`BasePage`,
+`VisiblePage`, `BottomNavPage`, `ToolsPage`, `ProjectListPage`, the popup and file
+picker pages) live in `pages.common`. The runner selects suites by simple class name
+(`--tests '*.ContinuityTest'`), so a suite can move package without touching it.

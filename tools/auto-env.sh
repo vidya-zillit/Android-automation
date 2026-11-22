@@ -29,6 +29,16 @@ ANDROID_SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
 ANDROID_SDK="${ANDROID_SDK//\\//}"
 export ANDROID_HOME="$ANDROID_SDK"
 
+# adb's mDNS discovery (Wi-Fi debugging announcements) panics on a name it cannot parse —
+# platform-tools 37.0.1 on macOS 27.2.1, 44 crash reports on 2026-11-21, every one aborting
+# in adbmdns_bridge::zero_config. Something on the local network advertises that name, so
+# the adb SERVER dies every few seconds, and with it the UiAutomator2 instrumentation that
+# runs under it: suites then read empty screens and fail or skip for no reason of their own.
+# The runner never uses Wi-Fi pairing (USB and emulators only), so turn discovery off for
+# any adb server started from here. Has no effect on a server already running WITH it on —
+# if the symptom returns, `adb kill-server` once and run again.
+export ADB_MDNS=0
+
 ADB="$ANDROID_SDK/platform-tools/adb"
 [[ -x "$ADB" ]] || ADB="$ANDROID_SDK/platform-tools/adb.exe"
 [[ -x "$ADB" ]] || ADB="$(command -v adb 2>/dev/null || true)"
@@ -196,8 +206,31 @@ _ae_say "using $ZILLIT_UDID ($("$ADB" -s "$ZILLIT_UDID" shell getprop ro.product
 # later the report says "no project" — when the real answer was that this flavour
 # was never installed on this phone.
 ZILLIT_PKG="${ZILLIT_APP_PACKAGE:-$(sed -nE 's/^zillit\.appPackage=(.*)$/\1/p' config/config.properties 2>/dev/null | tr -d '\r ' | head -1)}"
+# One `pm list packages` is not evidence. This platform-tools build drops a shell
+# command now and then — measured here: the same query that returns 265 packages by
+# hand came back EMPTY inside this script twice in a row, and the run aborted saying
+# the app was not installed while it was sitting right there and launching by hand.
+# An empty list means adb hiccuped, never that the device has no packages, so ask
+# again before believing it.
+_ae_pkg_list() {
+  local out=""
+  for _ae_try in 1 2 3 4 5; do
+    out="$("$ADB" -s "$ZILLIT_UDID" shell pm list packages 2>/dev/null | tr -d '\r' | grep '^package:')"
+    [[ -n "$out" ]] && { printf '%s\n' "$out"; return 0; }
+    sleep 2
+  done
+  return 1
+}
+
 if [[ -n "$ZILLIT_PKG" ]]; then
-  if "$ADB" -s "$ZILLIT_UDID" shell pm list packages 2>/dev/null | tr -d '\r' | grep -qx "package:$ZILLIT_PKG"; then
+  _ae_packages="$(_ae_pkg_list || true)"
+  if [[ -z "$_ae_packages" ]]; then
+    _ae_fail "adb would not list the packages on $ZILLIT_UDID (five tries)."
+    _ae_say  "That is the device connection, not the app — nothing about the build is known."
+    _ae_say  "Try:  adb kill-server && adb start-server,  then run again."
+    return 1 2>/dev/null || exit 1
+  fi
+  if printf '%s\n' "$_ae_packages" | grep -qx "package:$ZILLIT_PKG"; then
     _ae_say "app:   $ZILLIT_PKG ($("$ADB" -s "$ZILLIT_UDID" shell dumpsys package "$ZILLIT_PKG" 2>/dev/null | grep -m1 versionName | tr -d '\r ' | cut -d= -f2))"
   else
     # Nothing was ASKED for — config/config.properties just defaulted — and exactly one
@@ -208,7 +241,7 @@ if [[ -n "$ZILLIT_PKG" ]]; then
     # returning here would skip the Appium settings helper and everything after it.
     _ae_auto_pkg=""
     if [[ -z "${ZILLIT_FLAVOR:-}" && -z "${ZILLIT_APP_PACKAGE:-}" ]]; then
-      _ae_found=$("$ADB" -s "$ZILLIT_UDID" shell pm list packages 2>/dev/null | tr -d '\r' \
+      _ae_found=$(printf '%s\n' "$_ae_packages" \
         | grep '^package:com\.zillit\.zillitapp' | sed 's/^package://')
       if [[ $(printf '%s\n' "$_ae_found" | grep -c .) -eq 1 ]]; then
         _ae_auto_pkg="$(printf '%s\n' "$_ae_found" | grep . | head -1)"
@@ -222,8 +255,7 @@ if [[ -n "$ZILLIT_PKG" ]]; then
     else
       _ae_fail "$ZILLIT_PKG is not installed on $ZILLIT_UDID."
       _ae_say  "Zillit builds that ARE on this device:"
-      "$ADB" -s "$ZILLIT_UDID" shell pm list packages 2>/dev/null | tr -d '\r' \
-        | grep 'com.zillit.zillitapp' | sed 's/^package:/      /'
+      printf '%s\n' "$_ae_packages" | grep 'com.zillit.zillitapp' | sed 's/^package:/      /'
       _ae_say  ""
       _ae_say  "Install it, or pick another flavour:  ZILLIT_FLAVOR=dev ./run-ui.sh --home"
       return 1 2>/dev/null || exit 1

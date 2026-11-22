@@ -651,8 +651,8 @@ public abstract class BaseTest {
     // popup stays on screen, and every following case fails or skips against a blocked
     // UI — which is exactly the cascade this suite kept producing after a Delete.
 
-    private com.zillit.automation.pages.ConfirmPopupPage popup() {
-        return new com.zillit.automation.pages.ConfirmPopupPage(driver);
+    private com.zillit.automation.pages.common.ConfirmPopupPage popup() {
+        return new com.zillit.automation.pages.common.ConfirmPopupPage(driver);
     }
 
     /** True while the app's confirm popup is on screen. */

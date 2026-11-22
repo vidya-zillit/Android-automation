@@ -30,88 +30,121 @@ export MSYS2_ARG_CONV_EXCL='*'
 
 GRADLE_ARGS=(test --continue)
 if [[ "${1:-}" == "--no-e2e" ]]; then
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.JoinProjectTest'
-                --tests 'com.zillit.automation.tests.CreateProjectValidationTest'
-                --tests 'com.zillit.automation.tests.CreateProjectSubTypeTest'
-                --tests 'com.zillit.automation.tests.ProjectListTest')
+  GRADLE_ARGS+=(--tests '*.JoinProjectTest'
+                --tests '*.CreateProjectValidationTest'
+                --tests '*.CreateProjectSubTypeTest'
+                --tests '*.ProjectListTest')
 elif [[ "${1:-}" == "--flow" ]]; then
   # Just the ordered happy-path journey: create -> join -> select project.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.ProjectFlowE2ETest')
+  GRADLE_ARGS+=(--tests '*.ProjectFlowE2ETest')
 elif [[ "${1:-}" == "--sweep" ]]; then
   # Clean unit-by-unit flow: finish each unit fully (send every type + check
   # long-press on each) before the next — Bulletin → Call Sheet → … → Calendar.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.AllUnitsMediaTest'
-                --tests 'com.zillit.automation.tests.CalendarTest')
+  GRADLE_ARGS+=(--tests '*.AllUnitsMediaTest'
+                --tests '*.CalendarTest')
 elif [[ "${1:-}" == "--home" ]]; then
   # In-project suites (need a logged-in project): Home chat, media send/view/
   # reply, call-sheet, calendar.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.HomeChatTest'
-                --tests 'com.zillit.automation.tests.PostingRightsTest'
-                --tests 'com.zillit.automation.tests.MediaPreviewTest'
-                --tests 'com.zillit.automation.tests.MediaSystemPickerTest'
-                --tests 'com.zillit.automation.tests.ChatOptionsTest'
-                --tests 'com.zillit.automation.tests.CallSheetTest'
-                --tests 'com.zillit.automation.tests.RegressionStressTest'
-                --tests 'com.zillit.automation.tests.AllUnitsMediaTest'
-                --tests 'com.zillit.automation.tests.CalendarTest')
+  GRADLE_ARGS+=(--tests '*.HomeChatTest'
+                --tests '*.PostingRightsTest'
+                --tests '*.MediaPreviewTest'
+                --tests '*.MediaSystemPickerTest'
+                --tests '*.ChatOptionsTest'
+                --tests '*.CallSheetTest'
+                --tests '*.RegressionStressTest'
+                --tests '*.AllUnitsMediaTest'
+                --tests '*.CalendarTest')
 elif [[ "${1:-}" == "--call-sheet-upload" ]]; then
   # ZL-21154 upload-mode sheet (Continuation / New / Replace) on the Call Sheet unit.
   # Its own flag rather than part of --home: every case drives a full picker round-trip to
   # reach the sheet, so folding 17 of them into an already hour-long --home would roughly
   # double it for one feature.
   # Add -Dzillit.callSheetDestructive=true to also run the "New wipes the unit" case.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.CallSheetUploadModeTest')
+  GRADLE_ARGS+=(--tests '*.CallSheetUploadModeTest')
 elif [[ "${1:-}" == "--calendar" ]]; then
   # CALENDAR ONLY — its own fresh session, nothing to do with chat. Full field
   # coverage, all pickers, and CRUD (create / view / update / delete + recurring).
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.CalendarTest')
+  GRADLE_ARGS+=(--tests '*.CalendarTest')
 elif [[ "${1:-}" == "--chat" ]]; then
   # CHAT ONLY — every chat suite, no calendar. Sending, options, media, stress.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.HomeChatTest'
-                --tests 'com.zillit.automation.tests.PostingRightsTest'
-                --tests 'com.zillit.automation.tests.MediaPreviewTest'
-                --tests 'com.zillit.automation.tests.MediaSystemPickerTest'
-                --tests 'com.zillit.automation.tests.ChatOptionsTest'
-                --tests 'com.zillit.automation.tests.CallSheetTest'
-                --tests 'com.zillit.automation.tests.RegressionStressTest'
-                --tests 'com.zillit.automation.tests.AllUnitsMediaTest')
+  GRADLE_ARGS+=(--tests '*.HomeChatTest'
+                --tests '*.PostingRightsTest'
+                --tests '*.MediaPreviewTest'
+                --tests '*.MediaSystemPickerTest'
+                --tests '*.ChatOptionsTest'
+                --tests '*.CallSheetTest'
+                --tests '*.RegressionStressTest'
+                --tests '*.AllUnitsMediaTest')
 elif [[ "${1:-}" == "--email" ]]; then
   # EMAIL ONLY — its own fresh session. Landing/list, folder drawer, compose
   # (To/Cc/Bcc + subject + body + rich-text + attach + send) with validation,
   # open/read, reply/forward, delete, search, groups CRUD, settings.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.EmailTest'
-                --tests 'com.zillit.automation.tests.EmailDrawerTest'
-                --tests 'com.zillit.automation.tests.EmailExtrasTest'
-                --tests 'com.zillit.automation.tests.EmailActionsTest'
-                --tests 'com.zillit.automation.tests.EmailCalendarTest')
+  GRADLE_ARGS+=(--tests '*.EmailTest'
+                --tests '*.EmailDrawerTest'
+                --tests '*.EmailExtrasTest'
+                --tests '*.EmailActionsTest'
+                --tests '*.EmailCalendarTest')
 elif [[ "${1:-}" == "--cc" ]]; then
   # C&C (Chat & Calling) ONLY — landing, group create/manage, chat thread, calling.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.CcGroupCreateTest'
-                --tests 'com.zillit.automation.tests.CcGroupChatTest'
-                --tests 'com.zillit.automation.tests.CcGroupManageTest'
-                --tests 'com.zillit.automation.tests.CcDirectChatTest'
-                --tests 'com.zillit.automation.tests.CcChatMediaTest'
-                --tests 'com.zillit.automation.tests.CcCallTest'
-                --tests 'com.zillit.automation.tests.CcCallTabTest'
-                --tests 'com.zillit.automation.tests.CcContactsTest')
+  GRADLE_ARGS+=(--tests '*.CcGroupCreateTest'
+                --tests '*.CcGroupChatTest'
+                --tests '*.CcGroupManageTest'
+                --tests '*.CcDirectChatTest'
+                --tests '*.CcChatMediaTest'
+                --tests '*.CcCallTest'
+                --tests '*.CcCallTabTest'
+                --tests '*.CcContactsTest')
 elif [[ "${1:-}" == "--tools" ]]; then
   # TOOLS page — the two Bulletin-style chat modules (Confidential Info + Info)
   # PLUS the Tools page management (search, change group order, enable/disable).
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.ToolsManagementTest'
-                --tests 'com.zillit.automation.tests.ConfidentialInfoTest'
-                --tests 'com.zillit.automation.tests.InfoTest'
-                --tests 'com.zillit.automation.tests.CateringTest'
-                --tests 'com.zillit.automation.tests.ExternalUserTest'
-                --tests 'com.zillit.automation.tests.RecceTest')
+  GRADLE_ARGS+=(--tests '*.ToolsManagementTest'
+                --tests '*.ConfidentialInfoTest'
+                --tests '*.InfoTest'
+                --tests '*.CateringTest'
+                --tests '*.ExternalUserTest'
+                --tests '*.RecceTest')
 elif [[ "${1:-}" == "--external-users" ]]; then
   # EXTERNAL USERS — the listing and its filters, the three user types with their
   # show/hide rules, every field's validation, the read-only detail screen, and the taps
   # that hand over to the Email module and to the dialer.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.ExternalUserTest')
+  GRADLE_ARGS+=(--tests '*.ExternalUserTest')
+elif [[ "${1:-}" == "--sides" ]]; then
+  # SIDES — the day's pages cut out of the script. Covers both tabs, the two gates that
+  # guard Generate and Autogenerate, a script with and without a file, the scene pickers
+  # read out of the uploaded PDF, the manual generate flow through review and publish,
+  # the row's four actions, History, and the Autogenerate sheet.
+  #
+  # It needs the two fixture PDFs on the device; the prep step above pushes them to
+  # /sdcard/Documents. The script one carries five numbered scene headings on purpose —
+  # the backend derives the scene list from the PDF's text, so a blank stub would leave
+  # every picker empty.
+  GRADLE_ARGS+=(--tests '*.SidesTest')
+elif [[ "${1:-}" == "--continuity" ]]; then
+  # CONTINUITY — the department's photo record of each scene. Covers both tabs, adding a
+  # record through the app's own gallery, the scene grid and its card menu, edit, forward
+  # to All Department, distribute (stops at the confirm), download, delete on each level,
+  # the All Department department list, and a final sweep of every scene marked ZLAUTO.
+  #
+  # Records are made from the gallery's first photos — the zl_test_*.jpg the prep step
+  # pushes to /sdcard/Pictures and touches to the top. Adding is asynchronous (upload,
+  # then a background create, then a socket), so the add cases wait up to 150s for a row.
+  GRADLE_ARGS+=(--tests '*.ContinuityTest')
+elif [[ "${1:-}" == "--schedule-dist" ]]; then
+  # SCHEDULE DISTRIBUTION — the Tools tile reads "Schedule Full & One Line" (server label;
+  # identifier schedule_distribution_tool). Covers the three tabs, the Full and One Line
+  # upload and Replace, View (hands off to an external PDF app), Download, counts, page
+  # uploads and their validation, the Pages search and folders, page delete, the publish
+  # confirm (stops at Cancel unless -Dzillit.schedule.publish=true), and the History screens.
+  #
+  # Full / One Line rows can never be deleted from the app, so the suite keeps ONE sentinel
+  # row per tab (episode 9900 on a TV project) and Replaces it on every run after the first.
+  # Pages are made under scene 99ZLAUTO<run> and swept at the end. Fixture: zl_test_doc.pdf,
+  # pushed to /sdcard/Documents by the prep step above.
+  GRADLE_ARGS+=(--tests '*.ScheduleDistTest')
 elif [[ "${1:-}" == "--recce" ]]; then
   # RECCE ONLY — the location-scout module: list/search/filters, create form +
   # publish validation, drafts, stops, personnel, location picker, detail, delete.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.RecceTest')
+  GRADLE_ARGS+=(--tests '*.RecceTest')
 elif [[ "${1:-}" == "--only" ]]; then
   # ONE SUITE — ./run-and-report.sh --only MapCityCrudTest
   #
@@ -124,30 +157,30 @@ elif [[ "${1:-}" == "--only" ]]; then
     echo "--only needs a test class, e.g. --only MapCityCrudTest" >&2
     exit 2
   fi
-  GRADLE_ARGS+=(--tests "com.zillit.automation.tests.${2}")
+  GRADLE_ARGS+=(--tests "*.${2}")
 elif [[ "${1:-}" == "--map" ]]; then
   # MAP ONLY — Tools → LOCATION → Map (new_map): landing state, tutorial card,
   # city panel + last-visited persistence, city-gated toolbar, search, map type,
   # filter panel, carousel and the View All list.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapModuleTest')
+  GRADLE_ARGS+=(--tests '*.MapModuleTest')
 elif [[ "${1:-}" == "--map-pins" ]]; then
   # MAP OVERLAY ONLY — the Location tool's Shortlisted/Final shoot locations drawn
   # over the Map: toggle gating, ON-by-default, count label, persistence across an
   # app kill, the two label registers, read-only enforcement and project-wide scope.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapLocationPinsTest')
+  GRADLE_ARGS+=(--tests '*.MapLocationPinsTest')
 elif [[ "${1:-}" == "--location" ]]; then
   # LOCATION TOOL ONLY — Select / Shortlist / Final tabs, the source of the Map
   # overlay. Skips wholesale when the tool is not enabled on the project.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.LocationToolTest')
+  GRADLE_ARGS+=(--tests '*.LocationToolTest')
 elif [[ "${1:-}" == "--map-crud" ]]; then
   # MAP WRITE PATHS — cities, studio zones, pin boundary verdicts, locations.
   # These CREATE and DELETE real records on the project. Every fixture is named
   # "ZL AUTO …" and each suite deletes only what it created.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapCityCrudTest'
-                --tests 'com.zillit.automation.tests.MapZoneCrudTest'
-                --tests 'com.zillit.automation.tests.MapPinBoundaryTest'
-                --tests 'com.zillit.automation.tests.MapTypeManagerTest'
-                --tests 'com.zillit.automation.tests.MapLocationCrudTest')
+  GRADLE_ARGS+=(--tests '*.MapCityCrudTest'
+                --tests '*.MapZoneCrudTest'
+                --tests '*.MapPinBoundaryTest'
+                --tests '*.MapTypeManagerTest'
+                --tests '*.MapLocationCrudTest')
 elif [[ "${1:-}" == "--box" ]]; then
   # PRODUCTION DIARY / BOX SCHEDULE — one module, two names. Suites run in an order where
   # each starts from what the one before it made: a type, then a schedule day, then the
@@ -159,7 +192,7 @@ elif [[ "${1:-}" == "--box" ]]; then
   for C in "${BOX_SUITES[@]}"; do
     echo ""; echo "════════════════════════════════════════════════════════════"
     echo "▶ $C"; echo "════════════════════════════════════════════════════════════"
-    ./gradlew cleanTest test --continue --tests "com.zillit.automation.tests.$C" || TEST_EXIT=1
+    ./gradlew cleanTest test --continue --tests "*.$C" || TEST_EXIT=1
     if ls build/test-results/test/*.xml >/dev/null 2>&1; then
       for f in build/test-results/test/*.xml; do cp "$f" "$ACC/${C}__$(basename "$f")" 2>/dev/null || true; done
     fi
@@ -173,20 +206,20 @@ elif [[ "${1:-}" == "--box" ]]; then
 elif [[ "${1:-}" == "--map-cities" ]]; then
   # A SECOND CITY, and what only two cities can prove: switching, per-city pin scoping
   # and city search. Small on purpose — these cases are worthless unless they finish.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapCityMultiTest')
+  GRADLE_ARGS+=(--tests '*.MapCityMultiTest')
 elif [[ "${1:-}" == "--map-cleanup" ]]; then
   # HOUSEKEEPING — deletes ZL AUTO locations/zones/types left on the project when a Map
   # run lost its session before its own cleanup case. Deliberately NOT in --map-all or
   # --all: it removes data, and nothing should do that unasked.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapCleanupTest')
+  GRADLE_ARGS+=(--tests '*.MapCleanupTest')
 elif [[ "${1:-}" == "--map-crud-full" ]]; then
   # THE DATA LIFECYCLE — creates several locations by dropping pins, renames one, sets a
   # scene number, exercises the out-of-city choices, drags a pin, deletes, and cleans up
   # after itself. This is the suite that finds data bugs; the others read screens.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapCrudLifecycleTest')
+  GRADLE_ARGS+=(--tests '*.MapCrudLifecycleTest')
 elif [[ "${1:-}" == "--map-directions" ]]; then
   # DIRECTIONS + SHARE — both hand off to other apps, so they run last.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.MapDirectionsShareTest')
+  GRADLE_ARGS+=(--tests '*.MapDirectionsShareTest')
 elif [[ "${1:-}" == "--map-all" ]]; then
   # EVERYTHING map-related — but ONE APPIUM SESSION PER SUITE, not one session for all
   # ten. Handing every class to a single Gradle run is what this branch used to do, and
@@ -210,7 +243,7 @@ elif [[ "${1:-}" == "--map-all" ]]; then
     echo "════════════════════════════════════════════════════════════"
     echo "▶ $C"
     echo "════════════════════════════════════════════════════════════"
-    ./gradlew cleanTest test --continue --tests "com.zillit.automation.tests.$C" || TEST_EXIT=1
+    ./gradlew cleanTest test --continue --tests "*.$C" || TEST_EXIT=1
     if ls build/test-results/test/*.xml >/dev/null 2>&1; then
       for f in build/test-results/test/*.xml; do
         cp "$f" "$ACC/${C}__$(basename "$f")" 2>/dev/null || true
@@ -228,13 +261,13 @@ elif [[ "${1:-}" == "--map-all" ]]; then
 elif [[ "${1:-}" == "--drive" ]]; then
   # DRIVE ONLY — Tools → ADMIN → Drive: home shell (tabs/chips/select/drawer),
   # create-folder validation + access control, folder navigation and cleanup.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveTest')
+  GRADLE_ARGS+=(--tests '*.DriveTest')
 elif [[ "${1:-}" == "--drive-e2e" ]]; then
   # SYMMETRIC TWO-DEVICE JOURNEY — A uploads/shares → B receives and verifies rights →
   # B uploads INTO A's folder → B shares back → A receives → both edit → both edits
   # survive → A revokes and it disappears from B.
   #   ZILLIT_SENDER_UDID=<A> ZILLIT_RECEIVER_UDID=<B> ./run-and-report.sh --drive-e2e
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveTwoDeviceE2ETest')
+  GRADLE_ARGS+=(--tests '*.DriveTwoDeviceE2ETest')
 elif [[ "${1:-}" == "--drive-two-device" ]]; then
   # FULL TWO-DEVICE DRIVE SWEEP — the owner suites on device A, then the recipient
   # suites on device B, then collaborative editing across both. Each phase is its own
@@ -250,117 +283,117 @@ elif [[ "${1:-}" == "--drive-collab" ]]; then
   # COLLABORATIVE EDITING — the SAME document open on TWO devices as two users.
   # Proves live sync and that concurrent edits to different cells both survive.
   #   ZILLIT_SENDER_UDID=<devA> ZILLIT_RECEIVER_UDID=<devB> ./run-and-report.sh --drive-collab
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveCollabEditTest')
+  GRADLE_ARGS+=(--tests '*.DriveCollabEditTest')
 elif [[ "${1:-}" == "--drive-editor" ]]; then
   # DOCUMENT EDITING — the Collabora editor: the Edit gate (editable type + canEdit +
   # posting access), read-only vs edit mode, the full toolbar, and Leave confirmation.
   # Needs the editable fixtures (zl_drive_book.xlsx) pushed by prep_device.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveEditorTest')
+  GRADLE_ARGS+=(--tests '*.DriveEditorTest')
 elif [[ "${1:-}" == "--drive-organise" ]]; then
   # ORGANISING — move an item into a folder, bulk select + bulk delete, and the Trash
   # lifecycle. The destructive operations, each verified by where the item ENDS UP.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveOrganiseTest')
+  GRADLE_ARGS+=(--tests '*.DriveOrganiseTest')
 elif [[ "${1:-}" == "--drive-view" ]]; then
   # VIEW CONTROLS — list/grid toggle, favourites-only, sort, tag filter, kind tabs,
   # and the Search screen with its type chips.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveViewTest')
+  GRADLE_ARGS+=(--tests '*.DriveViewTest')
 elif [[ "${1:-}" == "--drive-upload" ]]; then
   # DRIVE UPLOADS — file to root, file INSIDE a folder, whole-folder upload, staging
   # options, cancel, and the offline/retry path.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveUploadTest')
+  GRADLE_ARGS+=(--tests '*.DriveUploadTest')
 elif [[ "${1:-}" == "--drive-share" ]]; then
   # DRIVE SHARING (OWNER side) — grant a project user View/Edit/Download, share a
   # folder, and the share-by-link flow. Set ZILLIT_SHARE_USER to the other user.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveShareTest')
+  GRADLE_ARGS+=(--tests '*.DriveShareTest')
 elif [[ "${1:-}" == "--drive-shared" ]]; then
   # DRIVE SHARING (RECIPIENT side) — run on the SECOND device, signed in as the user
   # --drive-share shared with. Proves the share actually arrived and that the
   # recipient's rights are enforced.
   #   ZILLIT_UDID=<second-device> ./run-and-report.sh --drive-shared
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveSharedWithMeTest')
+  GRADLE_ARGS+=(--tests '*.DriveSharedWithMeTest')
 elif [[ "${1:-}" == "--drive-comments" ]]; then
   # COMMENTS (area P) — the comments block on a file's detail screen and the full
   # "View all N comments" screen: post, edit, delete, empty-comment guard.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveCommentsTest')
+  GRADLE_ARGS+=(--tests '*.DriveCommentsTest')
 elif [[ "${1:-}" == "--drive-requests" ]]; then
   # FILE REQUESTS (area S) — the folder-scoped "Request Files" sheet (form, validation,
   # recipient chips, created link, copy) and "View File Requests" (list + revoke).
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveRequestFilesTest')
+  GRADLE_ARGS+=(--tests '*.DriveRequestFilesTest')
 elif [[ "${1:-}" == "--drive-activity" ]]; then
   # ACTIVITY LOG (area M) — drawer → Activity: the log opens, a create is recorded,
   # swipe-refresh reloads it.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveActivityTest')
+  GRADLE_ARGS+=(--tests '*.DriveActivityTest')
 elif [[ "${1:-}" == "--drive-settings" ]]; then
   # SETTINGS / "More" (area N) — mostly a GUARD: the screen is built but nothing
   # navigates to it in this build, so the suite asserts it is still unreachable and
   # covers Trash/Activity via the drawer entry points that do ship.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveSettingsTest')
+  GRADLE_ARGS+=(--tests '*.DriveSettingsTest')
 elif [[ "${1:-}" == "--doc-dist" ]]; then
   # DOCUMENT DISTRIBUTION — areas A+B (entry, shell, library listing). See
   # DOC_DISTRIBUTION_TEST_CASES.md for the full 152-case map and the suite plan.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistributionTest')
+  GRADLE_ARGS+=(--tests '*.DocDistributionTest')
 elif [[ "${1:-}" == "--doc-dist-folders" ]]; then
   # DOCUMENT DISTRIBUTION — area C (folders) plus the area-B cases that need content.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistFoldersTest')
+  GRADLE_ARGS+=(--tests '*.DocDistFoldersTest')
 elif [[ "${1:-}" == "--doc-dist-files" ]]; then
   # DOCUMENT DISTRIBUTION — area D (files & selection): upload a fixture PDF into a
   # QA folder, preview it (FilePreviewActivity), row menu, selection bar, move sheet,
   # delete. Needs /sdcard/Download/zl_dd_doc.pdf (pushed by prep_device below).
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistFilesTest')
+  GRADLE_ARGS+=(--tests '*.DocDistFilesTest')
 elif [[ "${1:-}" == "--doc-dist-composer" ]]; then
   # DOCUMENT DISTRIBUTION — areas E+F core: the composer (chips, Cc/Bcc, subject,
   # send-gating, preview round-trip) and the attach-from-library picker. Seeds its own
   # folder + upload; NEVER sends a real email.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistComposerTest')
+  GRADLE_ARGS+=(--tests '*.DocDistComposerTest')
 elif [[ "${1:-}" == "--doc-dist-lists" ]]; then
   # Areas G+H — distribution lists (presets) and email templates: CRUD, badges, apply.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistPresetsTest'
-                --tests 'com.zillit.automation.tests.DocDistTemplatesTest')
+  GRADLE_ARGS+=(--tests '*.DocDistPresetsTest'
+                --tests '*.DocDistTemplatesTest')
 elif [[ "${1:-}" == "--doc-dist-contacts" ]]; then
   # Area I — address book, contact detail/editor, CSV import, export.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistContactsTest')
+  GRADLE_ARGS+=(--tests '*.DocDistContactsTest')
 elif [[ "${1:-}" == "--doc-dist-history" ]]; then
   # Areas J+K+L — history list, distribution detail, analytics. Read-mostly, and
   # meaningful only against a project that HAS distributions (see --doc-dist-send).
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistHistoryTest')
+  GRADLE_ARGS+=(--tests '*.DocDistHistoryTest')
 elif [[ "${1:-}" == "--doc-dist-watermark" ]]; then
   # Area M — watermark wizard, batch screen, download.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistWatermarkTest')
+  GRADLE_ARGS+=(--tests '*.DocDistWatermarkTest')
 elif [[ "${1:-}" == "--doc-dist-publish" ]]; then
   # Area N — the publish sheet. Drives every control and CANCELS: a real publish
   # writes into OTHER modules and cannot be cleaned up from here.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistPublishTest')
+  GRADLE_ARGS+=(--tests '*.DocDistPublishTest')
 elif [[ "${1:-}" == "--doc-dist-rights" ]]; then
   # Area O — the click-time permission gate. Two cases need a SECOND account.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistRightsTest')
+  GRADLE_ARGS+=(--tests '*.DocDistRightsTest')
 elif [[ "${1:-}" == "--doc-dist-regression" ]]; then
   # Area P — offline, rotation, long/special names, rapid BACK. Toggles device
   # connectivity and restores it; do not run it against a device you are using.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistRegressionTest')
+  GRADLE_ARGS+=(--tests '*.DocDistRegressionTest')
 elif [[ "${1:-}" == "--doc-dist-send" ]]; then
   # F-25 — the ONLY suite that really sends. Recipients are @example.com (RFC 2606),
   # so nothing can reach a real mailbox. Verifies the distribution in History.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistSendTest')
+  GRADLE_ARGS+=(--tests '*.DocDistSendTest')
 elif [[ "${1:-}" == "--doc-dist-cleanup" ]]; then
   # HOUSEKEEPING — deletes stray QA_* folders / lists / templates left behind when a case
   # failed before its own cleanup. Opt-in only: it removes data. Touches nothing whose
   # name does not start with QA_. Run it before the empty-state cases (H-2) if a previous
   # run died mid-way.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistCleanupTest')
+  GRADLE_ARGS+=(--tests '*.DocDistCleanupTest')
 elif [[ "${1:-}" == "--doc-dist-grid" ]]; then
   # GRID VIEW — the second layout family. A grid FILE row carries Send/Publish/Watermark/
   # Download/Delete as inline buttons and no ⋮ at all, so the list-view row-menu cases
   # cover none of it.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistGridViewTest')
+  GRADLE_ARGS+=(--tests '*.DocDistGridViewTest')
 elif [[ "${1:-}" == "--doc-dist-publish-types" ]]; then
   # PUBLISH TYPE RULES — most destinations are PDF-ONLY (Call Sheet, Production Report,
   # Schedule*, Script, Page); Info and Confidential Info take anything. Uploads one file
   # of every supported family and checks the per-row gate. Never publishes.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistPublishTypesTest')
+  GRADLE_ARGS+=(--tests '*.DocDistPublishTypesTest')
 elif [[ "${1:-}" == "--doc-dist-nested" ]]; then
   # NESTED FOLDERS — folder inside folder inside folder, the breadcrumb at depth, and
   # uploading every supported media type at the deepest level.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistNestedFoldersTest')
+  GRADLE_ARGS+=(--tests '*.DocDistNestedFoldersTest')
 elif [[ "${1:-}" == "--doc-dist-verify" ]]; then
   # RE-CHECK after a fix round: whichever suites still carry a failure. Much faster than
   # --doc-dist-all when you only need to know whether the last fixes took. Keep this list
@@ -369,97 +402,97 @@ elif [[ "${1:-}" == "--doc-dist-verify" ]]; then
   # Round 1 (H-4/H-5, N-5/N-6, NEST-7) all passed and dropped off. Still open: presets
   # (G-7's keyboard-tap fix, G-10 downstream of it), publish-types (the sheet was only
   # getting 3 of 5 files) and rights (O-2 now seeds its own document instead of skipping).
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistPresetsTest'
-                --tests 'com.zillit.automation.tests.DocDistRightsTest'
-                --tests 'com.zillit.automation.tests.DocDistPublishTypesTest')
+  GRADLE_ARGS+=(--tests '*.DocDistPresetsTest'
+                --tests '*.DocDistRightsTest'
+                --tests '*.DocDistPublishTypesTest')
 elif [[ "${1:-}" == "--doc-dist-all" ]]; then
   # Everything EXCEPT the real send and the device-state regression suite — those two
   # are opt-in on purpose (--doc-dist-send, --doc-dist-regression).
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDistributionTest'
-                --tests 'com.zillit.automation.tests.DocDistFoldersTest'
-                --tests 'com.zillit.automation.tests.DocDistFilesTest'
-                --tests 'com.zillit.automation.tests.DocDistComposerTest'
-                --tests 'com.zillit.automation.tests.DocDistPresetsTest'
-                --tests 'com.zillit.automation.tests.DocDistTemplatesTest'
-                --tests 'com.zillit.automation.tests.DocDistContactsTest'
-                --tests 'com.zillit.automation.tests.DocDistHistoryTest'
-                --tests 'com.zillit.automation.tests.DocDistWatermarkTest'
-                --tests 'com.zillit.automation.tests.DocDistPublishTest'
-                --tests 'com.zillit.automation.tests.DocDistGridViewTest'
-                --tests 'com.zillit.automation.tests.DocDistPublishTypesTest'
-                --tests 'com.zillit.automation.tests.DocDistNestedFoldersTest'
-                --tests 'com.zillit.automation.tests.DocDistRightsTest')
+  GRADLE_ARGS+=(--tests '*.DocDistributionTest'
+                --tests '*.DocDistFoldersTest'
+                --tests '*.DocDistFilesTest'
+                --tests '*.DocDistComposerTest'
+                --tests '*.DocDistPresetsTest'
+                --tests '*.DocDistTemplatesTest'
+                --tests '*.DocDistContactsTest'
+                --tests '*.DocDistHistoryTest'
+                --tests '*.DocDistWatermarkTest'
+                --tests '*.DocDistPublishTest'
+                --tests '*.DocDistGridViewTest'
+                --tests '*.DocDistPublishTypesTest'
+                --tests '*.DocDistNestedFoldersTest'
+                --tests '*.DocDistRightsTest')
 elif [[ "${1:-}" == "--doc-dist-everything" ]]; then
   # Literally every Document Distribution suite, including the real send and the
   # regression suite that toggles the network.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DocDist*')
+  GRADLE_ARGS+=(--tests '*.DocDist*')
 elif [[ "${1:-}" == "--drive-editor-probe" ]]; then
   # EXPERIMENT HARNESS (plan §2.2), not coverage — writes a marker to a cell with each
   # candidate strategy and reports which ones survive a write → move away → return read.
   # Needs Appium with --relaxed-security.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveEditorWriteProbeTest')
+  GRADLE_ARGS+=(--tests '*.DriveEditorWriteProbeTest')
 elif [[ "${1:-}" == "--drive-folder-share" ]]; then
   # FOLDER SHARING, isolated (plan §2.1) — splits "A shares a folder with B" into its two
   # links: did the grant SAVE (re-read on the owner's own Share screen), and did it REACH
   # the recipient. Reports what the recipient can see when it does not arrive.
   #   ZILLIT_SENDER_UDID=<A> ZILLIT_RECEIVER_UDID=<B> ./run-and-report.sh --drive-folder-share
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveFolderShareTest')
+  GRADLE_ARGS+=(--tests '*.DriveFolderShareTest')
 elif [[ "${1:-}" == "--drive-all" ]]; then
   # Every OWNER-side Drive suite in order (recipient side needs the 2nd device).
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DriveTest'
-                --tests 'com.zillit.automation.tests.DriveUploadTest'
-                --tests 'com.zillit.automation.tests.DriveShareTest'
-                --tests 'com.zillit.automation.tests.DriveEditorTest'
-                --tests 'com.zillit.automation.tests.DriveViewTest'
-                --tests 'com.zillit.automation.tests.DriveOrganiseTest'
-                --tests 'com.zillit.automation.tests.DriveCommentsTest'
-                --tests 'com.zillit.automation.tests.DriveRequestFilesTest'
-                --tests 'com.zillit.automation.tests.DriveActivityTest'
-                --tests 'com.zillit.automation.tests.DriveSettingsTest')
+  GRADLE_ARGS+=(--tests '*.DriveTest'
+                --tests '*.DriveUploadTest'
+                --tests '*.DriveShareTest'
+                --tests '*.DriveEditorTest'
+                --tests '*.DriveViewTest'
+                --tests '*.DriveOrganiseTest'
+                --tests '*.DriveCommentsTest'
+                --tests '*.DriveRequestFilesTest'
+                --tests '*.DriveActivityTest'
+                --tests '*.DriveSettingsTest')
 elif [[ "${1:-}" == "--recce-pagination" ]]; then
   # PAGINATION stress: seed N recces (ZILLIT_RECCE_COUNT, default 120) then verify
   # every one is reachable by scrolling. Black-box — needs only the APK.
   #   ZILLIT_RECCE_COUNT=300 ./run-and-report.sh --recce-pagination
   #   ZILLIT_RECCE_SEED=false ./run-and-report.sh --recce-pagination   # verify only
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.RecceePaginationTest')
+  GRADLE_ARGS+=(--tests '*.RecceePaginationTest')
 elif [[ "${1:-}" == "--admin-settings" ]]; then
   # SETTINGS → ADMIN SETTINGS — every admin-settings sub-feature test class, in the
   # agreed running order (that order lives in TestOrder, 100–149).
   # Add new admin-settings classes here AND give them a TestOrder constant.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.DepartmentListingOrderTest'
-                --tests 'com.zillit.automation.tests.AdminSettingsGroupsTest'
-                --tests 'com.zillit.automation.tests.CompanyDetailsTest'
-                --tests 'com.zillit.automation.tests.CreateAdditionalShootingUnitTest'
-                --tests 'com.zillit.automation.tests.CreateNewDepartmentTest'
-                --tests 'com.zillit.automation.tests.CreateNewDesignationTest'
-                --tests 'com.zillit.automation.tests.CreateRemoteShootingUnitTest'
-                --tests 'com.zillit.automation.tests.CreateUpdateHomeUnitTest'
-                --tests 'com.zillit.automation.tests.CustomizationOfToolsTest'
-                --tests 'com.zillit.automation.tests.EditProjectNameTest'
-                --tests 'com.zillit.automation.tests.ManageToolGroupsTest'
-                --tests 'com.zillit.automation.tests.PreApprovedUsersTest'
-                --tests 'com.zillit.automation.tests.ApproveNewUserRequestTest'
-                --tests 'com.zillit.automation.tests.SosReceiversTest'
-                --tests 'com.zillit.automation.tests.UserManagementTest'
-                --tests 'com.zillit.automation.tests.WatermarkLogoTest'
-                --tests 'com.zillit.automation.tests.DeleteProjectTest')
+  GRADLE_ARGS+=(--tests '*.DepartmentListingOrderTest'
+                --tests '*.AdminSettingsGroupsTest'
+                --tests '*.CompanyDetailsTest'
+                --tests '*.CreateAdditionalShootingUnitTest'
+                --tests '*.CreateNewDepartmentTest'
+                --tests '*.CreateNewDesignationTest'
+                --tests '*.CreateRemoteShootingUnitTest'
+                --tests '*.CreateUpdateHomeUnitTest'
+                --tests '*.CustomizationOfToolsTest'
+                --tests '*.EditProjectNameTest'
+                --tests '*.ManageToolGroupsTest'
+                --tests '*.PreApprovedUsersTest'
+                --tests '*.ApproveNewUserRequestTest'
+                --tests '*.SosReceiversTest'
+                --tests '*.UserManagementTest'
+                --tests '*.WatermarkLogoTest'
+                --tests '*.DeleteProjectTest')
 elif [[ "${1:-}" == "--settings" ]]; then
   # SETTINGS TAB (non-admin) — separate from Admin Settings. Run this after
   # --admin-settings. TestOrder range 150–169.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.EditMyProfileTest'
-                --tests 'com.zillit.automation.tests.AppPreferencesTest'
-                --tests 'com.zillit.automation.tests.LinkedDeviceTest'
-                --tests 'com.zillit.automation.tests.InviteUsersTest'
-                --tests 'com.zillit.automation.tests.ZillitHelpTest')
+  GRADLE_ARGS+=(--tests '*.EditMyProfileTest'
+                --tests '*.AppPreferencesTest'
+                --tests '*.LinkedDeviceTest'
+                --tests '*.InviteUsersTest'
+                --tests '*.ZillitHelpTest')
 elif [[ "${1:-}" == "--manual-media" ]]; then
   # Interactive: YOU pick Video/Location/Contact on the device and reach the
   # send screen; automation sends + verifies. Set ZILLIT_PICK_WAIT for a longer
   # picking window (default 120s).
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.ManualPickSendTest')
+  GRADLE_ARGS+=(--tests '*.ManualPickSendTest')
 elif [[ "${1:-}" == "--two-device" ]]; then
   # Cross-device, two-user: every message type is RECEIVED on the 2nd device,
   # edits update on the receiver, deletes disappear on the receiver.
-  GRADLE_ARGS+=(--tests 'com.zillit.automation.tests.TwoUserChatTest')
+  GRADLE_ARGS+=(--tests '*.TwoUserChatTest')
 elif [[ "${1:-}" == "--all" ]]; then
   # FULL BUILD SWEEP — every module, one after another (Home/Bulletin → Calendar →
   # Email → C&C → Tools), each run SEPARATELY so a degraded emulator on one module
@@ -488,7 +521,7 @@ elif [[ "${1:-}" == -* ]]; then
              --doc-dist-publish --doc-dist-rights --doc-dist-regression --doc-dist-send
              --doc-dist-grid --doc-dist-nested --doc-dist-publish-types --doc-dist-verify --doc-dist-all --doc-dist-everything --doc-dist-cleanup"
   echo "             --drive-two-device --drive-all --admin-settings --manual-media"
-  echo "             --two-device --all --all-in-project"
+  echo "             --sides --continuity --schedule-dist --two-device --all --all-in-project"
   echo "  (no option at all = the full suite, including the manual-OTP E2E)"
   exit 2
 fi
@@ -529,6 +562,19 @@ prep_device() {  # $1 = adb device serial (may be empty for the only device)
   #   "could not install *smartsocket* listener: Address already in use"
   # after which the device is unreachable for the rest of the run. Seen in a real --map-all.
   $ADB start-server >/dev/null 2>&1
+
+  # SILENCE THE SYSTEM "isn't responding" DIALOGS.
+  #
+  # An emulator under load lets SystemUI ANR, and Android draws "System UI isn't
+  # responding / Close app / Wait" OVER everything. It is a system window, so the app's
+  # own views drop out of the accessibility tree entirely: every lookup returns zero and
+  # the suite reports "No known landing screen appeared within 120s" while the app is
+  # sitting right there, perfectly healthy, behind the dialog. Measured here — it cost a
+  # cold boot and six runs before a screenshot showed what the tree could not.
+  #
+  # This is the standard setting for an automation device and nothing else depends on it;
+  # a real user's phone is untouched because this only runs against the device under test.
+  $ADB $flag shell settings put global hide_error_dialogs 1 >/dev/null 2>&1
   $ADB $flag shell am force-stop io.appium.uiautomator2.server      >/dev/null 2>&1
   $ADB $flag shell am force-stop io.appium.uiautomator2.server.test >/dev/null 2>&1
   # WAKE AND UNLOCK, for a physical device.
@@ -559,6 +605,16 @@ prep_device() {  # $1 = adb device serial (may be empty for the only device)
   for i in 1 2 3; do
     $ADB $flag push "$FX/zl_test_image.jpg" /sdcard/Pictures/zl_test_$i.jpg >/dev/null 2>&1
   done
+  # Sides needs a script PDF with real scene headings: the backend derives the scene list
+  # from the text, so the generic 426-byte stub yields zero scenes and every picker comes
+  # back empty. These two carry five numbered scenes and a call sheet naming three of them.
+  for f in zl_sides_script.pdf zl_sides_callsheet.pdf zl_sides_script.fdx; do
+    if [[ -f "$FX/$f" ]]; then
+      $ADB $flag push "$FX/$f" /sdcard/Documents/$f >/dev/null 2>&1
+      $ADB $flag shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
+        -d file:///sdcard/Documents/$f >/dev/null 2>&1
+    fi
+  done
   [[ -f "$FX/zl_test_doc.pdf" ]] && $ADB $flag push "$FX/zl_test_doc.pdf" /sdcard/Documents/zl_test_doc.pdf >/dev/null 2>&1
   [[ -f "$FX/zl_test_audio.wav" ]] && $ADB $flag push "$FX/zl_test_audio.wav" /sdcard/Music/zl_test_audio.wav >/dev/null 2>&1
   # Drive upload fixtures: a single file, plus a TREE for the whole-folder upload.
@@ -580,14 +636,15 @@ prep_device() {  # $1 = adb device serial (may be empty for the only device)
   # is the difference between the upload cases running and silently failing to find
   # their own fixture.
   $ADB $flag shell 'touch /sdcard/Download/zl_dd_*' >/dev/null 2>&1
-  # Same treatment for the zl_test_* fixtures, for the same reason. These are what the
+  # Same treatment for everything in Documents (zl_test_*, and the Sides/Schedule
+  # zl_sides_* scripts) plus the zl_test_* media, for the same reason. These are what the
   # chat/media suites ask the SYSTEM picker for ("zl_test"), and zl_test_doc.pdf lives in
   # Documents, not Downloads — so the picker opens on Recent without it in sight and the
   # suite has to fall back on search. adb push keeps each file's ORIGINAL mtime, so a
   # fixture copied today can carry a date from weeks back, sort below everything, and miss
   # Recent entirely. Touching them puts them on the first screenful, which is the
   # difference between the picker finding the file directly and depending on search.
-  $ADB $flag shell 'touch /sdcard/Documents/zl_test_* /sdcard/Pictures/zl_test_* /sdcard/Music/zl_test_*' >/dev/null 2>&1
+  $ADB $flag shell 'touch /sdcard/Documents/zl_* /sdcard/Pictures/zl_test_* /sdcard/Music/zl_test_*' >/dev/null 2>&1
   [[ -f "$FX/zl_test_image.jpg" ]] && $ADB $flag push "$FX/zl_test_image.jpg" /sdcard/Download/zl_drive_pic.jpg >/dev/null 2>&1
   # EDITABLE office fixtures — the Drive editor only appears for docx/xlsx/pptx/csv/txt,
   # so a PDF or JPG can never exercise it.
@@ -632,14 +689,14 @@ fi
 # it catches the clash before we spend an hour running against a device.
 TESTORDER_JAVA="src/test/java/com/zillit/automation/core/TestOrder.java"
 # Suites declare @Order(TestOrder.NAME), so resolve NAME -> value via TestOrder.java.
-ORDER_MAP=$(grep -H "^@Order(TestOrder\." src/test/java/com/zillit/automation/tests/*.java 2>/dev/null \
+ORDER_MAP=$(grep -rH --include="*.java" "^@Order(TestOrder\." src/test/java/com/zillit/automation/tests 2>/dev/null \
   | sed -E 's|.*/([A-Za-z0-9_]+)\.java:@Order\(TestOrder\.([A-Z0-9_]+)\)|\2 \1|' \
   | while read -r name cls; do
       val=$(sed -nE "s/.*public static final int[[:space:]]+$name[[:space:]]*=[[:space:]]*([0-9]+)[[:space:]]*;.*/\1/p" "$TESTORDER_JAVA")
       [[ -n "$val" ]] && echo "$val $cls"
     done)
 # A raw @Order(123) bypasses TestOrder entirely — that is how duplicates sneak in.
-RAW=$(grep -l "^@Order([0-9]" src/test/java/com/zillit/automation/tests/*.java 2>/dev/null \
+RAW=$(grep -rl --include="*.java" "^@Order([0-9]" src/test/java/com/zillit/automation/tests 2>/dev/null \
   | xargs -n1 basename 2>/dev/null | sed 's/\.java//')
 if [[ -n "$RAW" ]]; then
   echo "✗ These suites hardcode @Order instead of using a TestOrder constant:"
@@ -710,7 +767,7 @@ if [[ "${DRIVE_TWO_DEVICE:-0}" == "1" ]]; then
     echo "▶ $label   [$dev]"
     echo "════════════════════════════════════════════════════════════"
     args=(cleanTest test --continue)
-    for c in $classes; do args+=(--tests "com.zillit.automation.tests.$c"); done
+    for c in $classes; do args+=(--tests "*.$c"); done
     ZILLIT_UDID="$dev" ZILLIT_SENDER_UDID="$DEV_A" ZILLIT_RECEIVER_UDID="$DEV_B" \
       ./gradlew "${args[@]}"
     [[ $? -ne 0 ]] && TEST_EXIT=1
@@ -743,6 +800,9 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"
     "Tools::ConfidentialInfoTest InfoTest CateringTest ExternalUserTest RecceTest DriveTest ToolsManagementTest"
+    "Sides::SidesTest"
+    "Continuity::ContinuityTest"
+    "Schedule Distribution::ScheduleDistTest"
     "Production Diary / Box Schedule::BoxShellTest BoxTypeTest BoxScheduleCrudTest BoxConflictTest BoxEventNoteTest BoxProductionScheduleTest BoxScheduleEditTest BoxCrossViewTest BoxEventLifecycleTest"
     "Map & Location::MapModuleTest MapLocationPinsTest LocationToolTest MapCityCrudTest MapZoneCrudTest MapPinBoundaryTest MapTypeManagerTest MapLocationCrudTest MapDirectionsShareTest MapGuardsTest MapCrudLifecycleTest MapCityMultiTest"
     "Settings / Admin Settings::DepartmentListingOrderTest AdminSettingsGroupsTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest CreateRemoteShootingUnitTest CreateUpdateHomeUnitTest CustomizationOfToolsTest EditProjectNameTest ManageToolGroupsTest PreApprovedUsersTest ApproveNewUserRequestTest SosReceiversTest UserManagementTest WatermarkLogoTest DeleteProjectTest"
@@ -777,7 +837,7 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
       for c in $classes; do
         echo "  ── $c (own Appium session)"
         relaunch_app
-        ./gradlew cleanTest test --continue --tests "com.zillit.automation.tests.$c" \
+        ./gradlew cleanTest test --continue --tests "*.$c" \
           || TEST_EXIT=1
         if ls build/test-results/test/*.xml >/dev/null 2>&1; then
           cp -f build/test-results/test/*.xml "$ACC"/ 2>/dev/null
@@ -786,7 +846,7 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     else
       relaunch_app
       args=(cleanTest test --continue)
-      for c in $classes; do args+=(--tests "com.zillit.automation.tests.$c"); done
+      for c in $classes; do args+=(--tests "*.$c"); done
       ./gradlew "${args[@]}"
       [[ $? -ne 0 ]] && TEST_EXIT=1
     fi

@@ -6,7 +6,7 @@ app `com.zillit.zillitapp.dev` **Zillit_32537-dev**, source branch `vidya_AI/bug
 Captured 2026-11-19 by walking the Tools list and reading `groupTitleTv` / `groupCountTv` / `nameTv`.
 These are the tools **actually enabled on this project** — not everything that exists in source.
 
-**37 tools in 7 groups. 6 covered, 31 not covered.**
+**37 tools in 7 groups. 7 covered, 30 not covered.**
 
 ---
 
@@ -43,9 +43,17 @@ These are the tools **actually enabled on this project** — not everything that
 
 | # | Tool | Activity | Automation |
 |---|------|----------|-----------|
-| 20 | Breakup Stills | `FileCabinetContinuityActivity` | — |
+| 20 | Breakup Stills | `FileCabinetContinuityActivity` *(see note)* | — |
 | 21 | Costumes & Set Sync | `CssActivity` | — |
 | 22 | Transportation | `TransportationActivity` | — |
+
+> **Note on row 20 — read before automating Continuity.** `FileCabinetContinuityActivity`
+> is NOT the Tools route. Its only launcher is commented out
+> (`settings/admin/views/FileCabinetDocumentMainPage.kt:112-121`) and it belongs to the
+> admin File Cabinet screen, not to a Tools tile. The live route from Tools is
+> `CONTINUITY_TOOL -> ContinuityPage` (`bottomNav/tools/Tools.kt:558`), with
+> `ContinuitySceneListPage` behind it. Captured 2026-11-21 while planning the Continuity
+> suite; the original row was read off the class name and sent that work to a dead screen.
 
 ## LOCATION (2) — 1 covered
 
@@ -54,7 +62,7 @@ These are the tools **actually enabled on this project** — not everything that
 | 23 | Map | `MapViewActivity` / `ShootingLocationActivity` | — |
 | 24 | **Recce** | `RecceActivity` | ✅ `RecceTest`, `RecceePaginationTest` |
 
-## PRODUCTION (7) — 1 covered
+## PRODUCTION (7) — 2 covered
 
 | # | Tool | Activity | Automation |
 |---|------|----------|-----------|
@@ -62,7 +70,7 @@ These are the tools **actually enabled on this project** — not everything that
 | 26 | **Document Distribution** | `DocumentDistributionActivity` | ✅ 18 `DocDist*` suites |
 | 27 | Production Diary/Box Schedule | `BoxScheduleActivity` | — |
 | 28 | Script & Pages Distribution | `ScriptDistActivity` | — |
-| 29 | Sides | `SidesMainActivity` | — |
+| 29 | **Sides** | `SidesMainActivity` | ✅ `SidesTest` |
 | 30 | Weather | `WeatherProActivity` | — |
 | 31 | Z-E-Signature | `DocSignMainActivity` | — |
 
@@ -98,7 +106,8 @@ subclass. Cheapest coverage per module by a wide margin.
 | Production Report (chat) | `fragment_production_report_chat.xml` | same |
 
 **Tier 2 — self-contained list/detail tools.** One page object, one suite, no shared state.
-Crew DOOD · Schedule D.O.D. · Costumes & Set Sync · Transportation · Weather · Sides
+Crew DOOD · Schedule D.O.D. · Costumes & Set Sync · Transportation · Weather
+(Sides is done — [SIDES_MODULE_TESTCASES.md](SIDES_MODULE_TESTCASES.md).)
 
 **Tier 3 — document pipelines.** Structurally like the DocDist suites, so the patterns transfer.
 Script & Pages Distribution · Schedule Full & One Line · Z-E-Signature · Asset Register

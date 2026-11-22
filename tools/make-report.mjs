@@ -162,7 +162,7 @@ let totals = { tests: 0, passed: 0, failed: 0, skipped: 0 };
 for (const f of files) {
   const xml = fs.readFileSync(path.join(RESULTS_DIR, f), 'utf8');
   const suiteTag = (xml.match(/<testsuite\b[^>]*>/) || [''])[0];
-  const suiteName = attr(suiteTag, 'name').replace(/^com\.zillit\.automation\.tests\./, '');
+  const suiteName = attr(suiteTag, 'name').replace(/^.*\./, '');
   const cases = [];
   // Self-closing MUST be tried first, and its attribute run must be lazy: `[^>]*` will
   // otherwise eat the trailing "/" of `<testcase .../>` , match the following ">", and
@@ -329,6 +329,9 @@ function moduleOf(suiteName) {
   if (n.match(/chat|media|regression|postingrights|allunits/)) return { label: 'Home · Chat', nav: ['Open a chat unit (e.g. Bulletin) from the Home units strip.'] };
   if (n.includes('maplocationpins')) return { label: 'Map · Shoot-location overlay', nav: ['Open the Tools tab.', 'Open "Map".', 'Select a city, then use the "Shoot Locations" toggle in the toolbar.'] };
   if (n.startsWith('externaluser')) return { label: 'External Users', nav: ['Open the Tools tab.', 'Open "External Users".'] };
+  if (n.startsWith('sides')) return { label: 'Sides', nav: ['Open the Tools tab.', 'Open "Sides".'] };
+  if (n.startsWith('continuity')) return { label: 'Continuity', nav: ['Open the Tools tab.', 'Open "Continuity".'] };
+  if (n.startsWith('scheduledist')) return { label: 'Schedule Distribution', nav: ['Open the Tools tab.', 'Open "Schedule Full & One Line" (Schedule Distribution\'s tile).'] };
   if (n.startsWith('box')) return { label: 'Production Diary / Box Schedule', nav: ['Open the Tools tab.', 'Open "Production Diary/Box Schedule".'] };
   if (n.includes('mapcrudlifecycle')) return { label: 'Map · Data lifecycle', nav: ['Open the Tools tab.', 'Open "Map".', 'Select a city, then use Pin Location to add, edit and delete locations.'] };
   if (n.includes('mapcity')) return { label: 'Map · Cities', nav: ['Open the Tools tab.', 'Open "Map".', 'Tap the Cities button in the toolbar.'] };
