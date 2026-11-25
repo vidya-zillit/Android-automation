@@ -63,36 +63,11 @@ The same thing from a terminal:
 ./run-ui.sh --help            # the module list
 ```
 
-### Choosing the build (QA / DEV / PROD)
+### The build: dev only
 
-Every flavour is a separate app with its own applicationId, so switching is one
-variable — and because **resource ids are prefixed by the applicationId**, that
-same variable decides what every locator in the suite resolves against:
-
-| `ZILLIT_FLAVOR` | Package | Notes |
-|---|---|---|
-| `dev` | `com.zillit.zillitapp.dev` | develop flavour |
-| `qa` | `com.zillit.zillitapp.qa` | the config default |
-| `stg` | `com.zillit.zillitapp.stg` | staging builds, where installed |
-| `prod` | `com.zillit.zillitapp` | **also needs `ZILLIT_ALLOW_PROD=1`** |
-
-```bash
-ZILLIT_FLAVOR=dev ./run-ui.sh --home
-```
-
-The launcher activity does **not** change with the flavour — `.splash.SplashActivity`
-resolves against the manifest namespace, which stays `com.zillit.zillitapp` for all
-of them — so `zillit.appActivity` is correct as it is and needs no edit.
-
-Prod is gated deliberately. These suites send messages, replace documents and can
-clear a Call Sheet unit; on prod that lands in a live production.
-
-To change the default permanently, edit `zillit.appPackage` in
-`config/config.properties`.
-
-Before the run starts, the chosen flavour is checked against what is actually
-installed on the chosen device. If it is missing you get the list of Zillit builds
-that *are* there, instead of an hour of locator timeouts that look like "no project".
+Every run uses the dev build, `com.zillit.zillitapp.dev`. QA, staging and production are
+refused by `run-ui.sh`, `run-and-report.sh` and `DriverFactory`, and no `ZILLIT_FLAVOR` is
+needed. If the dev build is not installed on the chosen device the run stops and says so.
 
 ### Choosing which device to run on
 
@@ -105,17 +80,16 @@ See everything attached and what is installed on each:
 ```
   34281FDH2005XC  —  Pixel 7, Android 17
       ZILLIT_FLAVOR=dev   com.zillit.zillitapp.dev    Zillit_32535-dev
-      ZILLIT_FLAVOR=qa    com.zillit.zillitapp.qa     Zillit_22533-qa
 ```
 
 Then:
 
 ```bash
-ZILLIT_UDID=34281FDH2005XC ZILLIT_FLAVOR=qa ./run-ui.sh --home
+ZILLIT_UDID=34281FDH2005XC ./run-ui.sh --home
 ```
 
 **For a physical device the only requirements are:** USB debugging on, the device
-authorised (`adb devices` shows `device`, not `unauthorized`), the flavour you want
+authorised (`adb devices` shows `device`, not `unauthorized`), the dev build
 installed, and that build **logged in with a project you can post in**. The location
 grant that Android 14+ needs for Appium's helper app is applied automatically.
 

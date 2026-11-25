@@ -42,6 +42,17 @@ public class DocDistPickerPage extends BasePage {
         } catch (WebDriverException e) { return List.of(); }
     }
 
+    /** The meta line of every rendered picker row named exactly this (DD-30: folder path first). */
+    public List<String> metasOf(String name) {
+        try {
+            return driver.findElements(AppiumBy.xpath(
+                            "//*[@resource-id='" + appPackage() + ":id/dd_row']"
+                                    + "[.//*[@resource-id='" + appPackage() + ":id/dd_name' and @text='" + name + "']]"
+                                    + "//*[@resource-id='" + appPackage() + ":id/dd_meta']"))
+                    .stream().map(WebElement::getText).toList();
+        } catch (WebDriverException e) { return List.of(); }
+    }
+
     public boolean isEmptyShown() { return isVisible("dd_empty", Duration.ofSeconds(3)); }
 
     /** Ticks the row containing this name (dd_check on the picker row). */

@@ -281,9 +281,17 @@ class MapCityCrudTest extends MapBaseTest {
 
     // ---------------- update ----------------
 
+    /**
+     * C-18 used to open a city's edit form from the city panel. That path no longer exists:
+     * CityAdapter hides {@code btnCityEdit} on every row ("Edit removed — cities can only be
+     * deleted", new_map/ui/map/CityAdapter.kt), and the only other edit entry,
+     * CityListFragment, has no navigation into it (action_map_to_cityList is never used).
+     * So the case asserts the app's actual rule: rows offer no Edit, and Delete stays
+     * available to a user with posting rights.
+     */
     @Test
     @Order(8)
-    @DisplayName("C-18 A city opens prefilled for editing and the change sticks")
+    @DisplayName("C-18 City rows offer no Edit — cities can only be deleted")
     void updateCity() {
         MapPage m = map();
         assumeTrue(m.openCityPanel(), "Cities button not available");
@@ -291,32 +299,16 @@ class MapCityCrudTest extends MapBaseTest {
 
         MapCityFormPage panel = new MapCityFormPage(driver);
         java.util.List<String> names = panel.cityNames();
-        assumeTrue(!names.isEmpty(), "No cities to edit");
-        String target = names.get(0);
+        assumeTrue(!names.isEmpty(), "No cities listed — no row to inspect");
 
-        assumeTrue(panel.editCity(target), "Edit not available on the city row");
-        MapCityFormPage form = new MapCityFormPage(driver);
-        assumeTrue(form.isLoaded(Duration.ofSeconds(12)), "Edit form did not open");
-
-        // parseEditCity() should have repopulated the coordinates, not left them blank.
-        assertTrue(form.placePicked(),
-                "Edit form opened without the city's coordinates — parseEditCity() did not "
-                        + "prefill; lat read: " + form.latShown());
-
-        // The centre point and radius are NOT editable: parseEditCity() hides the whole
-        // "Center Point & Zone" section and its divider in edit mode. So a city's boundary
-        // radius is fixed at creation — worth asserting, because every pin verdict is
-        // measured against it and there is no way to correct it later from this screen.
-        assertFalse(form.centerPointSectionShown(),
-                "The Center Point & Zone section is visible in EDIT mode — it is hidden by "
-                        + "design, and its appearance would mean a city's radius had become "
-                        + "editable after creation");
-
-        assumeTrue(form.save(), "Save not available");
-        sleep(4000);
-        assertFalse(form.stillOpen(),
-                "Edit form stayed open after saving — the save was rejected");
+        int edits = panel.cityEditButtonCount();
+        System.out.println(">>> city rows " + names + " | btnCityEdit rendered=" + edits);
+        m.closeCityPanel();
         backToMap();
+        assertTrue(edits == 0,
+                "The city panel rendered " + edits + " Edit button(s) across " + names.size()
+                        + " rows. Edit was removed on purpose (cities can only be deleted); "
+                        + "a visible Edit would open a form the app no longer supports.");
     }
 
     // ---------------- switch ----------------

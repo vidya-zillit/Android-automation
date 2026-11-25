@@ -20,6 +20,7 @@ import org.openqa.selenium.WebDriverException;
 import java.time.Duration;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -142,8 +143,8 @@ class EmailExtrasTest extends BaseTest {
         // Verify in Sent.
         EmailPage e = new EmailPage(driver);
         assumeTrue(e.openFolder("Sent"), "Could not open Sent");
-        assertTrue(e.isEmailShown(subject, Duration.ofSeconds(30)) || e.emailCount() > 0,
-                "The sent email '" + subject + "' should appear in Sent");
+        assertTrue(e.isEmailShown(subject, Duration.ofSeconds(30)),
+                "The sent email '" + subject + "' should appear in Sent; listed: " + e.subjects());
         System.out.println(">>> sent to project user, verified in Sent: " + subject);
         screenshot("email-sent-verified");
         recoverToEmailList();
@@ -236,6 +237,176 @@ class EmailExtrasTest extends BaseTest {
             backTo(2);
         }
         recoverToEmailList();
+    }
+
+    // ================================================== web-gap cases (W10, EMAIL-01, EMAIL-02)
+
+    /** The signed-in mailbox, but only when it is one of the two test accounts (never invented). */
+    private String ownTestAddress(ComposeEmailPage c) {
+        // The compose From row (tv_from_email) is the mailbox the mail goes out from
+        // (ComposeActivity.setupFromRow) — more reliable than the drawer header.
+        String mine = c.fromEmail();
+        for (String known : new String[]{com.zillit.automation.core.TestEmails.self(),
+                com.zillit.automation.core.TestEmails.recipient()}) {
+            if (known.equalsIgnoreCase(mine)) return known;
+        }
+        return null;
+    }
+
+    @Test
+    @Order(8)
+    @DisplayName("[WEB EMAIL W10] Closing Compose saves a draft; it reopens from Drafts as 'Draft'; 'Delete drafts' removes it")
+    void draftSaveReopenDelete() {
+        String subject = "ZL_AUTO draft " + System.currentTimeMillis() % 1000000;
+        ComposeEmailPage c = openCompose();
+        assumeTrue(c.isLoaded(Duration.ofSeconds(15)), "Compose did not open");
+        c.addTo(com.zillit.automation.core.TestEmails.recipient());
+        c.setSubject(subject);
+        c.setBody("Draft body " + subject);
+        c.closeWithToolbarX();   // handleClose() → saveDraft(); never Send
+        recoverToEmailList();
+        EmailPage e = email();
+        assertTrue(e.openFolder("Drafts"), "Could not open Drafts");
+        boolean listed = e.waitRowWithRefresh(subject, Duration.ofSeconds(40));
+        assertTrue(listed, "The closed compose should be saved in Drafts; listed " + e.subjects());
+        try {
+            ComposeEmailPage d = new ComposeEmailPage(driver);
+            // A reopened draft shows its To as a COLLAPSED chip row (collapsed_to; et_to is hidden),
+            // so ComposeEmailPage.isLoaded (et_to + btn_send) never holds — use subject + Send.
+            boolean reopened = false;
+            boolean loading = false;
+            for (int i = 0; i < 2 && !reopened; i++) {   // a tap on the subject text does not always reach the row
+                if (!e.isLoaded(Duration.ofSeconds(2))) break;   // something else is on top — do not tap through it
+                if (!e.openEmailContaining(subject, Duration.ofSeconds(5))) break;
+                reopened = d.isOpenWithSubject(Duration.ofSeconds(25));
+                if (!reopened) {
+                    loading = d.textShown("Loading", Duration.ofSeconds(1)) || d.textShown("Please wait", Duration.ofSeconds(1));
+                    screenshot("email-draft-reopen-attempt-" + i);
+                }
+            }
+            assertTrue(reopened, "Tapping a draft should reopen Compose (ComposeActivity with EXTRA_DRAFT_ID); after 25 s it was not "
+                    + "usable" + (loading ? " — the draft content loader never finished (ComposeActivity.initDraft)" : ""));
+            String title = d.toolbarTitle();
+            String subj = d.subjectText();
+            screenshot("email-draft-reopened");
+            d.closeWithToolbarX();
+            assertEquals("Draft", title, "Reopened draft toolbar title (ComposeActivity.kt:152)");
+            assertEquals(subject, subj, "The draft should reopen with its subject");
+        } finally {
+            recoverToEmailList();
+            EmailPage list = email();
+            if (list.openFolder("Drafts") && list.waitRowWithRefresh(subject, Duration.ofSeconds(15))
+                    && list.longPressRow(subject)) {
+                list.tapSelectionAction("Delete drafts");
+                list.confirmPositiveButton(Duration.ofSeconds(6));   // dialog title is also "Delete"
+                sleep(2000);
+            }
+        }
+        EmailPage after = email();
+        after.pullToRefresh();
+        assertTrue(after.subjects().stream().noneMatch(x -> x.contains(subject)),
+                "'Delete drafts' should remove the draft; Drafts lists " + after.subjects());
+        recoverToEmailList();
+    }
+
+    @Test
+    @Order(9)
+    @DisplayName("[WEB EMAIL EMAIL-02, W8] Mail sent to your own mailbox arrives UNREAD (dot, Inbox count, Unread filter)")
+    void selfMailArrivesUnread() {
+        String subject = "ZL_AUTO self-unread " + System.currentTimeMillis() % 1000000;
+        // The result has varied (dot shown twice, not shown once): record the Conversation-view
+        // setting, which groups the read Sent copy with the new Inbox copy into one thread.
+        Boolean conversation = null;
+        try {
+            EmailSettingsPage set = openSettings();
+            conversation = set.isConversationOn();
+        } catch (Exception ignored) {
+        }
+        recoverToEmailList();
+        final String conv = String.valueOf(conversation);
+        System.out.println(">>> conversation view on: " + conv);
+        ComposeEmailPage c = openCompose();
+        assumeTrue(c.isLoaded(Duration.ofSeconds(15)), "Compose did not open");
+        String own = ownTestAddress(c);
+        if (own == null) c.close();
+        assumeTrue(own != null, "The sending mailbox '" + c.fromEmail() + "' is not one of the two test accounts — not sending");
+        c.addTo(own);
+        c.setSubject(subject);
+        c.setBody("Self-addressed unread check " + subject);
+        assumeTrue(c.isSendEnabled(), "Send not enabled");
+        c.tapSend();
+        assertTrue(c.waitClosed(Duration.ofSeconds(30)), "Compose should close after sending to self");
+        recoverToEmailList();
+        EmailPage e = email();
+        try {
+            assertTrue(e.openFolder("Inbox"), "Could not open Inbox");
+            assertTrue(e.waitRowWithRefresh(subject, Duration.ofSeconds(90)), "The self-addressed mail did not arrive in Inbox");
+            Boolean dot = e.unreadDotFor(subject);
+            String count = e.drawerUnreadCount("Inbox");
+            System.out.println(">>> self mail: unread_dot=" + dot + " inbox count='" + count + "'");
+            screenshot("email-self-unread");
+            assertEquals(Boolean.TRUE, dot, "[EMAIL-02] A mail to your own mailbox must arrive unread (unread_dot); "
+                    + "conversation view on=" + conv);
+            assertTrue(count.matches("\\d+") && Integer.parseInt(count) >= 1, "Inbox unread count should be >= 1, got '" + count + "'");
+            // the drawer read above can leave the drawer/scrim up — back to the plain list first
+            if (e.isDrawerOpen(Duration.ofSeconds(1))) { driver.navigate().back(); sleep(1000); }
+            recoverToEmailList();
+            boolean sheet = false;
+            for (int i = 0; i < 3 && !sheet; i++) {   // the drawer's closing scrim can swallow the first tap
+                sleep(800);
+                sheet = e.tapFilter() && e.isFilterSheetOpen(Duration.ofSeconds(5));
+            }
+            if (!sheet) screenshot("email-self-unread-no-filter");
+            assumeTrue(sheet, "Filter sheet did not open after 3 taps (unread dot + Inbox count were already verified)");
+            e.tapFilterChip("chip_unread");
+            driver.navigate().back();
+            sleep(1500);
+            boolean stillListed = e.subjects().stream().anyMatch(x -> x.contains(subject));
+            boolean empty = e.isListEmptyView(Duration.ofSeconds(1));
+            assertTrue(stillListed && !empty, "Under the Unread filter the self mail should still be listed; rows " + e.subjects());
+        } finally {
+            if (e.tapFilter() && e.isFilterSheetOpen(Duration.ofSeconds(4))) {
+                e.tapFilterChip("chip_all");
+                driver.navigate().back();
+                sleep(1000);
+            }
+            for (String folder : new String[]{"Inbox", "Sent"}) {
+                recoverToEmailList();
+                EmailPage f = email();
+                if (f.openFolder(folder) && f.openEmailContaining(subject, Duration.ofSeconds(10))) {
+                    com.zillit.automation.pages.email.EmailDetailPage d = new com.zillit.automation.pages.email.EmailDetailPage(driver);
+                    if (d.isLoaded(Duration.ofSeconds(15)) && d.tapDelete()) d.confirmDelete(Duration.ofSeconds(8));
+                    sleep(1500);
+                }
+            }
+            recoverToEmailList();
+        }
+    }
+
+    @Test
+    @Order(10)
+    @DisplayName("[WEB EMAIL EMAIL-01] Email Rules: the live readback shows the whole sentence (every condition)")
+    void ruleReadbackShowsFullSentence() {
+        EmailSettingsPage set = openSettings();
+        assumeTrue(set.tapEmailRules(), "Email Rules not offered (hidden while the join request is pending)");
+        assumeTrue(set.openNewRule(), "New-rule screen did not open");
+        String from = com.zillit.automation.core.TestEmails.recipient();
+        String subj = "quarterly production budget review";
+        String words = "invoice, purchase order, approval";
+        set.setRuleField("etName", "ZL_AUTO rule " + System.currentTimeMillis() % 100000);
+        set.setRuleField("etFrom", from);
+        set.setRuleField("etSubject", subj);
+        set.setRuleField("etHasWords", words);
+        set.tickRuleHasAttachment();
+        String readback = set.ruleReadback();
+        screenshot("email-rule-readback");
+        System.out.println(">>> rule readback: " + readback);
+        // Never saved: back out of the edit screen and the rules list.
+        backTo(2);
+        recoverToEmailList();
+        assertEquals("When an email arrives and the sender contains " + from + ", the subject contains " + subj
+                        + ", the subject or body contains " + words + ", it has an attachment.", readback,
+                "[EMAIL-01] tvReadback (RuleSummary.readback, no maxLines) should hold every condition in full");
     }
 
     // ============================================================ helpers

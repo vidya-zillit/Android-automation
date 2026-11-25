@@ -234,26 +234,45 @@ public class MapCityFormPage extends BasePage {
      * XPath, sometimes returning the OUTERMOST matching ancestor rather than the nearest,
      * which taps the wrong row's button — or nothing, silently.
      */
+    /**
+     * Taps a button on ONE city row, found by the row's own name.
+     *
+     * <p>Scoped to the rows of {@code rvCities} ({@code item_city.xml}) on purpose. The Map's
+     * header ALSO carries the id {@code tvCityName} and shows the SELECTED city's name; an
+     * unscoped lookup matched the header first, climbed to the nearest ancestor holding a
+     * delete button — the whole panel — and tapped the FIRST row's Delete. Asked to delete
+     * the selected city, it deleted a different one. There is no index fallback for the
+     * same reason: a wrong row is worse than no row.
+     */
     private boolean tapRowButton(String cityName, String buttonId) {
+        String pkg = appPackage();
         try {
-            driver.findElement(AppiumBy.xpath(
-                    "//*[@resource-id='" + appPackage() + ":id/tvCityName' and @text='" + cityName + "']"
-                            + "/ancestor::*[.//*[@resource-id='" + appPackage() + ":id/" + buttonId + "']][1]"
-                            + "//*[@resource-id='" + appPackage() + ":id/" + buttonId + "']")).click();
-            pause(1200);
-            return true;
-        } catch (Exception ignored) { }
-        try {
-            List<String> names = cityNames();
-            int idx = names.indexOf(cityName);
-            if (idx < 0) return false;
-            List<WebElement> btns = driver.findElements(byId(buttonId));
-            if (idx >= btns.size()) return false;
-            btns.get(idx).click();
+            List<WebElement> rows = driver.findElements(AppiumBy.xpath(
+                    "//*[@resource-id='" + pkg + ":id/rvCities']/*"
+                            + "[.//*[@resource-id='" + pkg + ":id/tvCityName' and @text='" + cityName + "']]"));
+            if (rows.size() != 1) return false;
+            List<WebElement> btn = rows.get(0).findElements(byId(buttonId));
+            if (btn.isEmpty()) return false;
+            btn.get(0).click();
             pause(1200);
             return true;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /**
+     * Edit buttons rendered on the city rows. CityAdapter sets {@code btnCityEdit} to GONE on
+     * every row ("Edit removed — cities can only be deleted"), and a GONE view is not in the
+     * accessibility tree, so this is 0 on a correct build.
+     */
+    public int cityEditButtonCount() {
+        try {
+            return driver.findElements(AppiumBy.xpath(
+                    "//*[@resource-id='" + appPackage() + ":id/rvCities']"
+                            + "//*[@resource-id='" + appPackage() + ":id/btnCityEdit']")).size();
+        } catch (Exception e) {
+            return 0;
         }
     }
 

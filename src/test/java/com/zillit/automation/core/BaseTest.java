@@ -281,6 +281,7 @@ public abstract class BaseTest {
         // and braces, not the only guard.
         if (!requiresLoggedOutStart() && landing == Landing.BOTTOM_NAV) {
             selectHomeTabIfPresent();
+            leaveOtherProject();
         }
         if (requiresLoggedOutStart() && landing != Landing.START_AND_JOIN) {
             System.out.println(">>> App is logged in (" + landing
@@ -296,6 +297,21 @@ public abstract class BaseTest {
         }
     }
 
+    /**
+     * When the run is tied to one project and the app is inside another, goes back to the
+     * project list; the suite's own entry code then opens the right one.
+     */
+    private void leaveOtherProject() {
+        String run = com.zillit.automation.pages.common.ProjectListPage.runProject();
+        if (run.isEmpty() || landing != Landing.BOTTOM_NAV) return;
+        var nav = new com.zillit.automation.pages.common.BottomNavPage(driver);
+        String current = nav.currentProjectName();
+        if (current.isBlank() || com.zillit.automation.pages.common.ProjectListPage.sameProject(current, run)) return;
+        System.out.println(">>> inside \"" + current + "\" — this run uses \"" + run + "\", changing project");
+        nav.tapChangeProject();
+        landing = Landing.PROJECT_LIST;
+    }
+
     /** Kills and reopens the app, settling on its landing screen again. */
     protected void relaunchApp() {
         driver.executeScript("mobile: terminateApp", Map.of("appId", appPackage));
@@ -307,6 +323,7 @@ public abstract class BaseTest {
         // project → project list → Start & Join. Every in-project suite then skips with
         // "Could not enter a project", on a device that was logged in the whole time.
         landing = settleLanding(90, false);
+        leaveOtherProject();
         if (requiresLoggedOutStart() && landing != Landing.START_AND_JOIN) {
             throw new IllegalStateException("Expected Start & Join after relaunch, got " + landing);
         }

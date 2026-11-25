@@ -2,6 +2,7 @@ package com.zillit.automation.tests.drive;
 
 import com.zillit.automation.core.BaseTest;
 import com.zillit.automation.core.TestOrder;
+import com.zillit.automation.core.ReasonLogger;
 import com.zillit.automation.pages.common.BottomNavPage;
 import com.zillit.automation.pages.drive.CreateFolderSheet;
 import com.zillit.automation.pages.drive.DriveFolderPage;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.Duration;
@@ -42,6 +44,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *       "Drive" itself, so the tool row must be matched on its row id, not on text.</li>
  * </ul>
  */
+@ExtendWith(ReasonLogger.class)
 @Order(TestOrder.DRIVE)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class DriveTest extends BaseTest {
@@ -100,7 +103,7 @@ class DriveTest extends BaseTest {
         tools.searchTools("Drive");
         sleep(1500);
         if (!tools.isModuleListed("Drive", Duration.ofSeconds(6))) return false;
-        if (!tools.openModule("Drive")) return false;
+        if (!tools.openModuleContaining("Drive")) return false;
         return drive.isLoaded(Duration.ofSeconds(20));
     }
 
@@ -607,6 +610,236 @@ class DriveTest extends BaseTest {
         assertFalse(after.stream().anyMatch(n -> n.equalsIgnoreCase(FOLDER_A)),
                 "The deleted folder should be gone from the list. Got: " + after);
         screenshot("drive-folder-deleted");
+    }
+
+    // =====================================================================================
+    // WEB GAP cases (web-e2e/gaps/drive.md M13 create-folder rules, M21 details, M26 nesting,
+    // M33 back to Tools / description cap). Every folder is QA_… and purged at the end.
+    // =====================================================================================
+
+    private static final long GS = System.currentTimeMillis() % 100000;
+    private static final String G_DA = "QA_DA_" + GS;
+    private static final String G_DB = "QA_DB_" + GS;
+    private static final String G_IN = "QA_In_" + GS;
+    private static final java.util.Set<String> G_FOLDERS = new java.util.LinkedHashSet<>();
+
+    private com.zillit.automation.pages.drive.DriveFlows gf() { return new com.zillit.automation.pages.drive.DriveFlows(driver); }
+
+    private void gFolder(String name) {
+        DriveHomePage home = new DriveHomePage(driver);
+        home.showFolders();
+        if (!home.hasItem(name)) assumeTrue(gf().createFolder(name), "Could not create " + name);
+        G_FOLDERS.add(name);
+    }
+
+    private CreateFolderSheet openCreateSheet() {
+        DriveHomePage home = new DriveHomePage(driver);
+        assumeTrue(home.openFab() && home.tapCreateFolder(), "Create Folder not offered");
+        CreateFolderSheet sheet = new CreateFolderSheet(driver);
+        assumeTrue(sheet.waitOpen(Duration.ofSeconds(10)), "Create Folder sheet did not open");
+        return sheet;
+    }
+
+    private boolean pickDestination(String folder) {
+        try {
+            driver.findElement(io.appium.java_client.AppiumBy.xpath("//*[@resource-id='" + driver.getCurrentPackage()
+                    + ":id/drive_pick_folder_name' and @text='" + folder + "']")).click();
+            sleep(1200);
+            return true;
+        } catch (Exception e) { return false; }
+    }
+
+    @Test
+    @Order(40)
+    @DisplayName("[WEB L137/L289] CREATE FOLDER: 'Inside a folder' with nothing picked is refused; picking a folder creates it there")
+    void gCreateInsidePicked() {
+        gFolder(G_DA);
+        CreateFolderSheet sheet = openCreateSheet();
+        sheet.setName(G_IN);
+        assertTrue(sheet.chooseInsideFolder(), "'Inside a folder' option");
+        sleep(1500);
+        sheet.create();
+        sleep(2500);
+        boolean stillOpen = sheet.isOpen();
+        assertTrue(stillOpen, "With no destination picked, Create must not go through");
+        assertTrue(pickDestination(G_DA), G_DA + " should be offered as a destination");
+        assertTrue(sheet.create(), "Create");
+        sleep(4000);
+        DriveHomePage home = new DriveHomePage(driver);
+        home.showFolders();
+        assertFalse(home.hasItem(G_IN), G_IN + " must not land at the root");
+        assertTrue(gf().openFolder(G_DA), "Open " + G_DA);
+        List<String> inside = new DriveFolderPage(driver).allItemNamesScrolled();
+        gf().backToHome();
+        assertTrue(inside.contains(G_IN), G_IN + " should be inside " + G_DA + ": " + inside);
+    }
+
+    @Test
+    @Order(41)
+    @DisplayName("[WEB L295] CREATE FOLDER: a second folder with the same name at the root is refused")
+    void gCreateDuplicate() {
+        gFolder(G_DA);
+        CreateFolderSheet sheet = openCreateSheet();
+        boolean closed = sheet.createNamed(G_DA);
+        // On a duplicate the app closes the sheet, waits for the server's refusal and then
+        // REOPENS it with tvFolderNameError (HomeViewModel.createFolderDuplicate) — poll for it.
+        boolean err = false;
+        for (int i = 0; i < 24 && !err; i++) {
+            err = !driver.findElements(byAppId("tvFolderNameError")).isEmpty();
+            if (!err) sleep(500);
+        }
+        if (sheet.isOpen()) sheet.close();
+        sleep(1500);
+        DriveHomePage home = new DriveHomePage(driver);
+        home.showFolders();
+        long copies = home.allItemNamesScrolled().stream().filter(G_DA::equals).count();
+        System.out.println(">>> duplicate create closed=" + closed + " inlineError=" + err + " copies=" + copies);
+        assertEquals(1, copies, "Only one folder may carry the name " + G_DA);
+        assertTrue(err || !closed, "The duplicate should be refused in the sheet (tvFolderNameError)");
+    }
+
+    @Test
+    @Order(42)
+    @DisplayName("[WEB L1166] CREATE FOLDER: the same name is accepted inside ANOTHER folder")
+    void gCreateSameNameElsewhere() {
+        gFolder(G_DA);
+        gFolder(G_DB);
+        assumeTrue(gf().openFolder(G_DB), "Open " + G_DB);
+        boolean ok = gf().createFolder(G_DA);
+        List<String> inside = new DriveFolderPage(driver).allItemNamesScrolled();
+        gf().backToHome();
+        assertTrue(ok && inside.contains(G_DA), "The same name should be allowed in another folder: " + inside);
+    }
+
+    @Test
+    @Order(43)
+    @DisplayName("[WEB L1135] CREATE FOLDER: a 100-character name is accepted; 101 is refused")
+    void gCreateLongNames() {
+        String base = "QA_L" + GS + "_";
+        String n100 = base + "x".repeat(100 - base.length());
+        String n101 = base + "y".repeat(101 - base.length());
+        DriveHomePage home = new DriveHomePage(driver);
+        CreateFolderSheet s1 = openCreateSheet();
+        s1.createNamed(n100);
+        if (s1.isOpen()) s1.close();
+        CreateFolderSheet s2 = openCreateSheet();
+        s2.createNamed(n101);
+        boolean refusedInSheet = s2.isOpen();
+        if (s2.isOpen()) s2.close();
+        home.showFolders();
+        List<String> all = home.allItemNamesScrolled();
+        if (all.contains(n100)) G_FOLDERS.add(n100);
+        if (all.contains(n101)) G_FOLDERS.add(n101);
+        System.out.println(">>> 100 listed=" + all.contains(n100) + " 101 listed=" + all.contains(n101) + " 101 sheetOpen=" + refusedInSheet);
+        assertTrue(all.contains(n100), "A 100-character name must be accepted");
+        assertFalse(all.contains(n101), "A 101-character name should be refused (web ZL-21806; Android has no client cap)");
+    }
+
+    @Test
+    @Order(44)
+    @DisplayName("[WEB L902] CREATE FOLDER: the description stops at 500 characters and the counter says 500 / 500")
+    void gDescriptionCap() {
+        CreateFolderSheet sheet = openCreateSheet();
+        sheet.setDescription("d".repeat(510));
+        sleep(800);
+        String count = sheet.charCount();
+        String text = "";
+        try { text = driver.findElement(byAppId("etDescription")).getText(); } catch (Exception ignored) { }
+        sheet.close();
+        System.out.println(">>> description len=" + text.length() + " counter='" + count + "'");
+        assertEquals(500, text.length(), "The description must stop at 500 characters");
+        assertTrue(count.replace(" ", "").startsWith("500/500"), "The counter should read 500 / 500, was '" + count + "'");
+    }
+
+    @Test
+    @Order(45)
+    @DisplayName("[WEB DRIVE-01] ROW: a folder with two subfolders says so in its subtitle, never '0 files, 0 folders'")
+    void gRowSubtitleCounts() {
+        gFolder(G_DB);
+        assumeTrue(gf().openFolder(G_DB), "Open " + G_DB);
+        List<String> inside = new DriveFolderPage(driver).allItemNamesScrolled();
+        if (!inside.contains("s1")) gf().createFolder("s1");
+        if (!inside.contains("s2")) gf().createFolder("s2");
+        inside = new DriveFolderPage(driver).allItemNamesScrolled();
+        assumeTrue(inside.contains("s1") && inside.contains("s2"), "Subfolders s1/s2 were not created: " + inside);
+        gf().backToHome();
+        DriveHomePage home = new DriveHomePage(driver);
+        home.showFolders();
+        home.pullToRefresh();
+        sleep(3000);
+        home.hasItem(G_DB);
+        String sub = gf().rowSubtitle(G_DB);
+        System.out.println(">>> subtitle of " + G_DB + " = '" + sub + "'");
+        assertTrue(sub != null && sub.contains("folder"), "The row should count its subfolders: '" + sub + "'");
+        assertFalse(sub.contains("0 files, 0 folders"), "DRIVE-01: never '0 files, 0 folders'");
+    }
+
+    @Test
+    @Order(46)
+    @DisplayName("[WEB L457] DETAILS: a favourited folder's Details show Favorited, owner, access, tags and activity")
+    void gFolderDetailsContent() {
+        gFolder(G_DA);
+        DriveHomePage home = new DriveHomePage(driver);
+        home.showFolders();
+        gf().tapRowStar(G_DA);
+        assumeTrue(home.openItemMenu(G_DA), "Row menu");
+        DriveItemMenuPage menu = new DriveItemMenuPage(driver);
+        assumeTrue(menu.isOpen() && menu.tapDetails() && menu.detailsOpen(), "Details sheet");
+        boolean pill = menu.detailsFavoritePill();
+        String owner = menu.detailsOwner();
+        // The sheet fills its metadata after it opens; give the owner line a moment.
+        for (int i = 0; i < 16 && owner.isBlank(); i++) { sleep(500); owner = menu.detailsOwner(); }
+        String access = menu.detailsAccessHeader();
+        boolean tags = menu.detailsTagsShown();
+        boolean activity = menu.detailsActivityShown();
+        System.out.println(">>> details pill=" + pill + " owner='" + owner + "' access='" + access + "' tags=" + tags + " activity=" + activity);
+        try { driver.navigate().back(); } catch (Exception ignored) { }
+        gf().tapRowStar(G_DA);
+        assertTrue(pill, "A favourited folder should show its favourite pill");
+        assertFalse(owner.isBlank(), "Owner should be shown");
+        assertTrue(access.startsWith("Access"), "Access header expected, was '" + access + "'");
+        assertTrue(tags, "Tags (or 'No tags') should be shown");
+        assertTrue(activity, "Activity (or 'No activity yet') should be shown");
+    }
+
+    @Test
+    @Order(47)
+    @DisplayName("[WEB L283] NESTED: inside a folder the Create Folder sheet has no Location picker")
+    void gNoLocationInsideFolder() {
+        gFolder(G_DA);
+        assumeTrue(gf().openFolder(G_DA), "Open " + G_DA);
+        DriveFolderPage in = new DriveFolderPage(driver);
+        assumeTrue(in.openFab() && in.tapCreateFolder(), "Create Folder inside");
+        CreateFolderSheet sheet = new CreateFolderSheet(driver);
+        assumeTrue(sheet.waitOpen(Duration.ofSeconds(10)), "Sheet");
+        boolean picker = !driver.findElements(byAppId("drive_pick_root")).isEmpty()
+                && driver.findElement(byAppId("drive_pick_root")).isDisplayed();
+        sheet.close();
+        gf().backToHome();
+        assertFalse(picker, "Inside a folder the new folder always lands there — no Location picker");
+    }
+
+    @Test
+    @Order(48)
+    @DisplayName("[WEB L62] BACK from Drive home leaves Drive for the Tools list")
+    void gBackLeavesDrive() {
+        DriveHomePage home = new DriveHomePage(driver);
+        assumeTrue(home.isHome(Duration.ofSeconds(5)), "Not on Drive home");
+        try { driver.navigate().back(); } catch (Exception ignored) { }
+        sleep(2500);
+        boolean left = !home.isDriveActivity();
+        boolean tools = new ToolsPage(driver).isLoaded(Duration.ofSeconds(10));
+        assertTrue(left, "Back from Drive home should leave DriverMainActivity");
+        assertTrue(tools, "…and land on the Tools list");
+    }
+
+    @Test
+    @Order(97)
+    @DisplayName("WEB GAP CLEANUP: remove the QA_ folders these cases created")
+    void gDriveCleanup() {
+        List<String> failed = new java.util.ArrayList<>();
+        for (String f : G_FOLDERS) if (!gf().purge(f, true)) failed.add(f);
+        assertTrue(failed.isEmpty(), "Could not remove: " + failed);
     }
 
     private void sleep(long ms) {

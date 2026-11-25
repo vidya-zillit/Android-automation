@@ -347,6 +347,70 @@ public class ExternalUserFormPage extends BasePage {
 
     public String moreInfoTitle() { return innerText("addMoreField", "tvTitle"); }
 
+    /**
+     * The "Add More Information" dialog ({@code dialog_edit_text_multiple.xml}): title in
+     * {@code editText1}, description in {@code editText2}, Cancel / Add as
+     * {@code leftButton} / {@code rightButton}. [WEB EXT-01a]
+     */
+    public boolean moreInfoDialogShown() { return displayed("editText1") && displayed("rightButton"); }
+
+    /**
+     * Fills the open dialog and taps Add. Returns true when the dialog is gone afterwards,
+     * i.e. the entry was accepted.
+     */
+    public boolean submitMoreInfo(String title, String description) {
+        // No hideKeyboard here: on UiAutomator2 it is a BACK press, and in this cancelable
+        // dialog a BACK dismisses the dialog — which would read as "accepted".
+        if (!typeInDialog("editText1", title)) return false;
+        if (!typeInDialog("editText2", description)) return false;
+        try {
+            for (WebElement b : driver.findElements(byId("rightButton"))) {
+                if (b.isDisplayed()) { b.click(); break; }
+            }
+        } catch (Exception ignored) { }
+        pause(1200);
+        return !moreInfoDialogShown();
+    }
+
+    private boolean typeInDialog(String containerId, String value) {
+        try {
+            List<WebElement> boxes = driver.findElements(byId(containerId));
+            if (boxes.isEmpty()) return false;
+            WebElement input = boxes.get(0).findElement(AppiumBy.className("android.widget.EditText"));
+            input.click();
+            input.clear();
+            input.sendKeys(value);
+            pause(400);
+            return true;
+        } catch (Exception e) { return false; }
+    }
+
+    /** Titles of the rows in "Add More Information" ({@code recMoreField} → {@code titleTv}). */
+    public List<String> moreInfoTitles() {
+        List<String> out = new ArrayList<>();
+        try {
+            List<WebElement> holder = driver.findElements(byId("recMoreField"));
+            if (holder.isEmpty()) return out;
+            for (WebElement t : holder.get(0).findElements(byId("titleTv"))) {
+                String s = t.getText();
+                if (s != null && !s.isBlank()) out.add(s.trim());
+            }
+        } catch (Exception ignored) { }
+        return out;
+    }
+
+    /** Taps the toolbar's own back chevron ({@code toolbar → backBtn}), not system back. [WEB EXT-02] */
+    public boolean tapToolbarBack() {
+        try {
+            List<WebElement> bars = driver.findElements(byId("toolbar"));
+            WebElement back = bars.isEmpty()
+                    ? driver.findElement(byId("backBtn"))
+                    : bars.get(0).findElement(byId("backBtn"));
+            back.click();
+            return true;
+        } catch (Exception e) { return false; }
+    }
+
     // ───────────────────────────── save ─────────────────────────────
 
     /** The Save button's label: "Submit" when adding, "Update" when editing. */

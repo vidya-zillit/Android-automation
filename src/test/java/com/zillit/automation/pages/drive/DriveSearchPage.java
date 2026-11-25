@@ -80,6 +80,17 @@ public class DriveSearchPage extends BasePage {
         for (String[] c : CHIPS) {
             if (c[1].equalsIgnoreCase(label)) {
                 try {
+                    // The chip row is a HorizontalScrollView; Folders / Date range sit past the
+                    // right edge on a phone and are not in the tree until scrolled to.
+                    if (driver.findElements(byId(c[0])).isEmpty()) {
+                        String pre = appPackage() + ":id/";
+                        try {
+                            driver.findElement(AppiumBy.androidUIAutomator(
+                                    "new UiScrollable(new UiSelector().resourceId(\"" + pre + "filterChipScroll\"))"
+                                            + ".setAsHorizontalList().scrollIntoView(new UiSelector().resourceId(\""
+                                            + pre + c[0] + "\"))"));
+                        } catch (Exception ignored) { }
+                    }
                     driver.findElement(byId(c[0])).click();
                     Thread.sleep(1500);
                     return true;

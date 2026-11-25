@@ -30,15 +30,12 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * <b>Shortlist</b>, <b>Final</b>. Only the last two reach the Map; anything sitting in
  * Select has no stage tag and {@code LocationPinStatus.tagFor()} drops it.
  *
- * <p><b>This tool is not enabled on every project.</b> {@code Tools.kt} only dispatches
- * {@code LOCATION_TOOL} where the project has it switched on, and on
- * {@code ZL-Android-Automation} it currently is not — which is also why the Map's
- * "Shoot Locations" toggle is hidden there. Every case skips with that reason rather than
- * failing; switch the tool on via Tools &rarr; "Click here to select tools" to make them run.
+ * <p>The tool is enabled on {@code ZL-Android-Automation} (since 2026-11-23). Where a
+ * project lacks it, every case skips with that reason.
  *
- * <p><b>Read-only.</b> Moving a location between tabs writes to the shared backend, so the
- * move cases (LT-07…LT-10, and the cross-module round trips) stay manual for now — they are
- * written up in {@code MAP_LOCATION_TESTCASES.md}.
+ * <p><b>Read-only smoke.</b> The write paths (create, moves, edit, delete, PDF) and every
+ * form validation live in {@code tests/location/LocationToolFullTest} (LOC-xx) and
+ * {@code LocationToolTwoUserTest}; see {@code LOCATION_TOOL_TESTCASES.md}.
  */
 @Order(TestOrder.LOCATION_TOOL)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -89,7 +86,10 @@ class LocationToolTest extends BaseTest {
         assumeTrue(tools.isModuleListed("Location", Duration.ofSeconds(6)),
                 "Location tool not enabled on this project — switch it on under "
                         + "Tools → 'Click here to select tools' to run this suite");
-        assumeTrue(tools.openModule("Location"), "Could not open the Location tool");
+        // Not tools.openModule("Location"): its (?i) match hits the group header "LOCATION"
+        // above the row first, and the tool never opens.
+        assumeTrue(new LocationToolPage(driver).tapToolRow("Location"),
+                "Could not open the Location tool");
         assumeTrue(new LocationToolPage(driver).isLoaded(Duration.ofSeconds(25)),
                 "Location tool did not load");
     }
@@ -117,7 +117,7 @@ class LocationToolTest extends BaseTest {
 
     @Test
     @Order(2)
-    @DisplayName("LT-02 Three tabs in order: Select, Shortlist, Final")
+    @DisplayName("LT-02 Three tabs in order: Selects, Shortlist, Final")
     void tabsInOrder() {
         LocationToolPage p = page();
         List<String> tabs = p.tabLabels();
@@ -159,18 +159,21 @@ class LocationToolTest extends BaseTest {
 
     @Test
     @Order(5)
-    @DisplayName("LT-12 The filter icon is available on the toolbar")
+    @DisplayName("LT-12 The toolbar group-by icon opens the Scene no / Episode No / location name menu")
     void filterAvailable() {
+        // LocationPage hides filterIv for good (showHideFilter: filterIv.isVisible = false) and
+        // hangs R.menu.library_filter on the toolbar's settingImage instead.
         LocationToolPage p = page();
-        assumeTrue(p.filterIconShown(), "No filter icon on this build");
-        assertTrue(p.openFilter(), "Filter icon did not respond");
-        try { driver.navigate().back(); } catch (Exception ignored) { }
-        sleep(1000);
+        assertTrue(p.groupByIconShown(), "No group-by icon (toolbar settingImage) on the Location tool");
+        List<String> items = p.openGroupByMenu();
+        p.back();
+        assertTrue(items.contains("Filter by Episode No"),
+                "The group-by menu did not open or lacks 'Filter by Episode No': " + items);
     }
 
     @Test
     @Order(6)
-    @DisplayName("LT-13 Back from the Location tool returns to Tools, not out of the app")
+    @DisplayName("LT-13 Back from the Location tool returns to the Tools list, not out of the app")
     void backReturnsToTools() {
         page();
         try { driver.navigate().back(); } catch (Exception ignored) { }
@@ -179,6 +182,8 @@ class LocationToolTest extends BaseTest {
         try { pkg = driver.getCurrentPackage(); } catch (Exception ignored) { }
         assertFalse(pkg == null || !pkg.contains("zillit"),
                 "BACK from the Location tool left the app entirely (package=" + pkg + ")");
+        assertTrue(new ToolsPage(driver).isLoaded(Duration.ofSeconds(8)) || onBottomNavScreen(),
+                "BACK from the Location tool did not land on Tools");
     }
 
     private void sleep(long ms) {

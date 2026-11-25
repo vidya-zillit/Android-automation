@@ -61,25 +61,18 @@ EMU="$ANDROID_SDK/emulator/emulator"
 # Resource ids ARE prefixed by the applicationId, so this one variable also decides
 # what every locator in the suite resolves against. Setting it wrong does not error;
 # it just matches nothing, and the whole run skips or times out.
-case "$(printf '%s' "${ZILLIT_FLAVOR:-}" | tr '[:upper:]' '[:lower:]')" in
-  "")                 ;;  # nothing asked for — config/config.properties decides
-  dev|develop)        export ZILLIT_APP_PACKAGE="com.zillit.zillitapp.dev" ;;
-  qa)                 export ZILLIT_APP_PACKAGE="com.zillit.zillitapp.qa" ;;
-  stg|staging)        export ZILLIT_APP_PACKAGE="com.zillit.zillitapp.stg" ;;
-  prod|production)
-    # The suites post real messages, replace real documents and can wipe a Call Sheet
-    # unit. On prod that lands in someone's live production, so it takes one more word.
-    if [[ "${ZILLIT_ALLOW_PROD:-}" != "1" ]]; then
-      _ae_fail "ZILLIT_FLAVOR=prod runs the suites against PRODUCTION data."
-      _ae_say  "These tests send messages, replace documents and can clear a Call Sheet unit."
-      _ae_say  "If that is really what you want:  ZILLIT_ALLOW_PROD=1 ZILLIT_FLAVOR=prod ./run-ui.sh …"
-      return 1 2>/dev/null || exit 1
-    fi
-    export ZILLIT_APP_PACKAGE="com.zillit.zillitapp" ;;
+# DEV BUILD ONLY — qa, stg and prod are refused, so no run can open another build.
+case "$(printf '%s' "${ZILLIT_FLAVOR:-dev}" | tr '[:upper:]' '[:lower:]')" in
+  dev|develop) ;;
   *)
-    _ae_fail "Unknown ZILLIT_FLAVOR '$ZILLIT_FLAVOR' — use dev, qa, stg or prod."
+    _ae_fail "ZILLIT_FLAVOR=$ZILLIT_FLAVOR — this project automates the DEV build only."
     return 1 2>/dev/null || exit 1 ;;
 esac
+if [[ -n "${ZILLIT_APP_PACKAGE:-}" && "$ZILLIT_APP_PACKAGE" != "com.zillit.zillitapp.dev" ]]; then
+  _ae_fail "ZILLIT_APP_PACKAGE=$ZILLIT_APP_PACKAGE — this project automates the DEV build only."
+  return 1 2>/dev/null || exit 1
+fi
+export ZILLIT_APP_PACKAGE="com.zillit.zillitapp.dev"
 
 APPIUM_PORT="${ZILLIT_APPIUM_PORT:-4723}"
 APPIUM_URL="http://127.0.0.1:$APPIUM_PORT"
@@ -233,33 +226,13 @@ if [[ -n "$ZILLIT_PKG" ]]; then
   if printf '%s\n' "$_ae_packages" | grep -qx "package:$ZILLIT_PKG"; then
     _ae_say "app:   $ZILLIT_PKG ($("$ADB" -s "$ZILLIT_UDID" shell dumpsys package "$ZILLIT_PKG" 2>/dev/null | grep -m1 versionName | tr -d '\r ' | cut -d= -f2))"
   else
-    # Nothing was ASKED for — config/config.properties just defaulted — and exactly one
-    # Zillit build is on the device. Use that one instead of aborting. The alternative is
-    # the run dying on "com.zillit.zillitapp.qa is not installed" when the only build
-    # present is .dev, which is a confusing way to say "you forgot ZILLIT_FLAVOR=dev".
-    # NOTE: this file is SOURCED, so the success path must fall through, never `return` —
-    # returning here would skip the Appium settings helper and everything after it.
-    _ae_auto_pkg=""
-    if [[ -z "${ZILLIT_FLAVOR:-}" && -z "${ZILLIT_APP_PACKAGE:-}" ]]; then
-      _ae_found=$(printf '%s\n' "$_ae_packages" \
-        | grep '^package:com\.zillit\.zillitapp' | sed 's/^package://')
-      if [[ $(printf '%s\n' "$_ae_found" | grep -c .) -eq 1 ]]; then
-        _ae_auto_pkg="$(printf '%s\n' "$_ae_found" | grep . | head -1)"
-      fi
-    fi
-    if [[ -n "$_ae_auto_pkg" ]]; then
-      export ZILLIT_APP_PACKAGE="$_ae_auto_pkg"
-      ZILLIT_PKG="$_ae_auto_pkg"
-      _ae_say "app:   $ZILLIT_PKG  (the only Zillit build on this device, so it was picked"
-      _ae_say "       for you — set ZILLIT_FLAVOR if you meant a different one)"
-    else
-      _ae_fail "$ZILLIT_PKG is not installed on $ZILLIT_UDID."
-      _ae_say  "Zillit builds that ARE on this device:"
-      printf '%s\n' "$_ae_packages" | grep 'com.zillit.zillitapp' | sed 's/^package:/      /'
-      _ae_say  ""
-      _ae_say  "Install it, or pick another flavour:  ZILLIT_FLAVOR=dev ./run-ui.sh --home"
-      return 1 2>/dev/null || exit 1
-    fi
+    # Never fall back to another build that happens to be installed: dev or nothing.
+    _ae_fail "$ZILLIT_PKG (the dev build) is not installed on $ZILLIT_UDID."
+    _ae_say  "Zillit builds that ARE on this device:"
+    printf '%s\n' "$_ae_packages" | grep 'com.zillit.zillitapp' | sed 's/^package:/      /'
+    _ae_say  ""
+    _ae_say  "Install the dev build there, then run again."
+    return 1 2>/dev/null || exit 1
   fi
 fi
 

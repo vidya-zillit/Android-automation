@@ -61,43 +61,72 @@ public class BoxCalendarPage extends BoxSchedulePage {
      * accessibility tree, not merely hidden.
      */
     public Map<String, List<String>> typesByDay() {
+        return textsByDay("pillContainer");
+    }
+
+    /**
+     * Day number → the texts inside {@code containerId} in that day's cell, matched by
+     * POSITION. Each container is filed under the day label in its column that sits closest
+     * above it.
+     *
+     * <p>Not by walking up from the day label with an {@code ./ancestor::} XPath: UiAutomator2
+     * evaluates an element-scoped XPath inside that element's own subtree, so the walk found
+     * no cell and every day read as empty — XV-02..04 failed with a blank grid on screen
+     * that plainly had pills, and FL-10 could not see an event on its day.
+     *
+     * <p>Padding days of the neighbouring months repeat a number; the first non-empty
+     * reading wins.
+     */
+    private Map<String, List<String>> textsByDay(String containerId) {
         Map<String, List<String>> out = new LinkedHashMap<>();
         try {
-            // NOT the grid's direct children. The grid nests its cells, so ./* returns one
-            // wrapper; reading a day number off that wrapper returns the FIRST one in the
-            // whole month and lumps every pill in the grid under it. That produced a map of
-            // a single entry — "{30=[Prep, Prep, ...]}" — and made the calendar look as
-            // though it had lost every day that was saved.
-            //
-            // So start from the day numbers themselves, and walk up from each to the cell
-            // that holds it. One tvDayNumber is one cell, however the grid is nested.
-            for (WebElement label : driver.findElements(byId("tvDayNumber"))) {
-                String day = safe(label);
-                if (day == null) continue;
-                out.put(day, pillsBeside(label));
+            List<WebElement> labels = driver.findElements(byId("tvDayNumber"));
+            List<int[]> boxes = new ArrayList<>();          // x, y of each label
+            List<String> days = new ArrayList<>();
+            for (WebElement l : labels) {
+                String d = safe(l);
+                if (d == null) continue;
+                org.openqa.selenium.Rectangle r = l.getRect();
+                boxes.add(new int[]{r.getX(), r.getY()});
+                days.add(d);
+                out.putIfAbsent(d, new ArrayList<>());
+            }
+            int col = columnWidth(boxes);
+            List<List<String>> perLabel = new ArrayList<>();
+            for (int k = 0; k < days.size(); k++) perLabel.add(new ArrayList<>());
+            for (WebElement holder : driver.findElements(byId(containerId))) {
+                org.openqa.selenium.Rectangle r = holder.getRect();
+                int cx = r.getX() + Math.min(r.getWidth(), col) / 2;
+                int best = -1;
+                for (int k = 0; k < boxes.size(); k++) {
+                    int[] b = boxes.get(k);
+                    boolean sameColumn = cx >= b[0] - col / 4 && cx < b[0] + col;
+                    if (sameColumn && b[1] <= r.getY() && (best < 0 || b[1] > boxes.get(best)[1])) best = k;
+                }
+                if (best < 0) continue;
+                for (WebElement t : holder.findElements(AppiumBy.className("android.widget.TextView"))) {
+                    String txt = safe(t);
+                    if (txt != null) perLabel.get(best).add(txt);
+                }
+            }
+            for (int k = 0; k < days.size(); k++) {
+                if (out.get(days.get(k)).isEmpty() && !perLabel.get(k).isEmpty()) out.put(days.get(k), perLabel.get(k));
             }
         } catch (Exception ignored) { }
         return out;
     }
 
-    /** The type names in the cell that holds this day number. */
-    private List<String> pillsBeside(WebElement dayLabel) {
-        List<String> pills = new ArrayList<>();
-        try {
-            WebElement cell = dayLabel.findElement(AppiumBy.xpath(
-                    "./ancestor::*[.//*[contains(@resource-id,'pillContainer')]][1]"));
-            for (WebElement holder : cell.findElements(byId("pillContainer"))) {
-                for (WebElement t : holder.findElements(
-                        AppiumBy.className("android.widget.TextView"))) {
-                    String s = safe(t);
-                    if (s != null) pills.add(s);
-                }
-            }
-        } catch (Exception ignored) {
-            // A cell with nothing on it has no pillContainer to walk up to, which is the
-            // ordinary case for a free day — an empty list, not a failure.
+    /** The smallest gap between distinct label columns — one cell's width. */
+    private static int columnWidth(List<int[]> boxes) {
+        java.util.TreeSet<Integer> xs = new java.util.TreeSet<>();
+        for (int[] b : boxes) xs.add(b[0]);
+        int best = Integer.MAX_VALUE;
+        Integer prev = null;
+        for (int x : xs) {
+            if (prev != null && x - prev > 20) best = Math.min(best, x - prev);
+            prev = x;
         }
-        return pills;
+        return best == Integer.MAX_VALUE ? 150 : best;
     }
 
     private String safe(WebElement e) {
@@ -114,22 +143,43 @@ public class BoxCalendarPage extends BoxSchedulePage {
 
     /** Event and note titles the grid shows on a day — the other half of a cell. */
     public List<String> titlesOn(String dayNumber) {
-        List<String> out = new ArrayList<>();
+        List<String> t = textsByDay("eventContainer").get(dayNumber);
+        return t == null ? new ArrayList<>() : t;
+    }
+
+    // ───────────────────────────── search (shared with the List) ─────────────────────────────
+
+    /** Types into the calendar's search box ({@code etCalendarSearch}); "" clears it. */
+    public boolean search(String term) {
         try {
-            for (WebElement label : driver.findElements(byId("tvDayNumber"))) {
-                if (!dayNumber.equals(safe(label))) continue;
-                WebElement cell = label.findElement(AppiumBy.xpath(
-                        "./ancestor::*[.//*[contains(@resource-id,'eventContainer')]][1]"));
-                for (WebElement holder : cell.findElements(byId("eventContainer"))) {
-                    for (WebElement t : holder.findElements(
-                            AppiumBy.className("android.widget.TextView"))) {
+            for (WebElement e : driver.findElements(byId("etCalendarSearch"))) {
+                if (!e.isDisplayed()) continue;
+                e.click();
+                e.clear();
+                if (!term.isEmpty()) e.sendKeys(term);
+                hideKeyboard();
+                pause(1500);
+                return true;
+            }
+        } catch (Exception ignored) { }
+        return false;
+    }
+
+    public String searchText() { return text("etCalendarSearch"); }
+
+    /** Every schedule pill and event/note title the grid draws on screen, as text. */
+    public List<String> everythingDrawn() {
+        List<String> out = new ArrayList<>();
+        for (String holder : List.of("pillContainer", "eventContainer")) {
+            try {
+                for (WebElement h : driver.findElements(byId(holder))) {
+                    for (WebElement t : h.findElements(AppiumBy.className("android.widget.TextView"))) {
                         String s = safe(t);
                         if (s != null) out.add(s);
                     }
                 }
-                return out;
-            }
-        } catch (Exception ignored) { }
+            } catch (Exception ignored) { }
+        }
         return out;
     }
 

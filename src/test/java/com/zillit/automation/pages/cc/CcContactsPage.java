@@ -97,6 +97,44 @@ public class CcContactsPage extends BasePage {
         catch (WebDriverException e) { return 0; }
     }
 
+    // ---------------- list geometry (CNC-02) ----------------
+
+    /** Bounds of the contact list (recMembers), or null. */
+    public org.openqa.selenium.Rectangle listRect() {
+        try { return driver.findElement(byId("recMembers")).getRect(); }
+        catch (WebDriverException e) { return null; }
+    }
+
+    private static final String[] ROW_PARTS = {"userNameTv", "designationTv", "message_button", "voice_call",
+            "video_call", "location_icon", "favorite_icon", "profileIv"};
+
+    /** Bottom edge of the lowest visible contact row (lowest bottom of any row part), or -1. */
+    public int lastRowBottom() {
+        int max = -1;
+        for (String id : ROW_PARTS) {
+            for (WebElement e : elementsById(id)) {
+                try { var r = e.getRect(); max = Math.max(max, r.getY() + r.getHeight()); }
+                catch (WebDriverException ignored) { }
+            }
+        }
+        return max;
+    }
+
+    /** Row pitch between two consecutive contact names, else one row's own height; -1 when empty. */
+    public int rowHeight() {
+        List<WebElement> names = elementsById("userNameTv");
+        try {
+            if (names.size() >= 2) return names.get(1).getRect().getY() - names.get(0).getRect().getY();
+            if (names.size() == 1) {
+                int top = names.get(0).getRect().getY();
+                int bottom = lastRowBottom();
+                return bottom > top ? bottom - top : -1;
+            }
+        } catch (WebDriverException ignored) {
+        }
+        return -1;
+    }
+
     private boolean has(String id) {
         try { return !driver.findElements(byId(id)).isEmpty(); }
         catch (WebDriverException e) { return false; }

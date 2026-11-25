@@ -135,6 +135,37 @@ public class RecceDetailPage extends BasePage {
         sleep(450);
     }
 
+    /**
+     * Every distinct timeline row as "kind|place|time", scrolled top to bottom. The kind is
+     * the row's {@code stopKind} label ("Rendezvous", "Lunch", …; RecceDetailFragment
+     * renders stop.kind). A blank Lunch stop has an empty place and time, so it still shows
+     * up as "Lunch||". [WEB RECCE-02]
+     */
+    public java.util.List<String> timelineRows() {
+        java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
+        for (int i = 0; i < 10; i++) swipe(0.35, 0.85);
+        int stable = 0;
+        for (int i = 0; i < 25 && stable < 3; i++) {
+            int before = seen.size();
+            try {
+                var tl = driver.findElements(byId("detailTimeline"));
+                var scope = tl.isEmpty() ? null : tl.get(0);
+                var kinds = scope == null ? driver.findElements(byId("stopKind")) : scope.findElements(byId("stopKind"));
+                var places = scope == null ? driver.findElements(byId("stopPlace")) : scope.findElements(byId("stopPlace"));
+                var times = scope == null ? driver.findElements(byId("stopTime")) : scope.findElements(byId("stopTime"));
+                for (int k = 0; k < kinds.size(); k++) {
+                    String kind = kinds.get(k).getText();
+                    String place = k < places.size() ? places.get(k).getText() : "";
+                    String time = k < times.size() ? times.get(k).getText() : "";
+                    seen.add(kind + "|" + (place == null ? "" : place) + "|" + (time == null ? "" : time));
+                }
+            } catch (WebDriverException ignored) { }
+            stable = (seen.size() == before) ? stable + 1 : 0;
+            swipe(0.80, 0.30);
+        }
+        return new java.util.ArrayList<>(seen);
+    }
+
     public int personnelCount() {
         try { return driver.findElements(byId("personName")).size(); }
         catch (WebDriverException e) { return 0; }

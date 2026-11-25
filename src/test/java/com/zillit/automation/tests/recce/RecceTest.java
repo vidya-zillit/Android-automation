@@ -1,6 +1,8 @@
 package com.zillit.automation.tests.recce;
 
+import com.zillit.automation.core.TestEmails;
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.ReasonLogger;
 import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.common.BottomNavPage;
 import com.zillit.automation.pages.common.ProjectListPage;
@@ -14,10 +16,12 @@ import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.time.Duration;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -31,6 +35,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *
  * Test data uses a "QA Recce" prefix and the delete case cleans up after itself.
  */
+@ExtendWith(ReasonLogger.class)
 @Order(TestOrder.RECCE)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class RecceTest extends BaseTest {
@@ -625,7 +630,7 @@ class RecceTest extends BaseTest {
         int after = f.personCount();
         System.out.println(">>> people " + before + " → " + after);
         assertTrue(after > before, "Adding a person should add a person row");
-        f.setPerson(after - 1, "QA Scout", "Location Manager", "qa.scout@example.com");
+        f.setPerson(after - 1, "QA Scout", "Location Manager", TestEmails.recipient());
         screenshot("recce-person");
         f.back();
     }
@@ -735,6 +740,232 @@ class RecceTest extends BaseTest {
         System.out.println(">>> after delete: cards=" + p.cardCount() + " gone=" + gone);
         assertTrue(gone, "The deleted recce '" + target + "' should no longer be listed");
         screenshot("recce-deleted");
+    }
+
+    // ---------------- web gap cases (sheet bugs RECCE-01/02/04/05) ----------------
+
+    @Test
+    @Order(16)
+    @DisplayName("RECCE-01 Crew picker: a member tapped while a search is active is ticked, added, and can be removed [WEB RECCE-01]")
+    void crewPickerTicksWhileSearching() {
+        // [WEB RECCE-01] On web the tick is lost when a search is active. Android keeps the
+        // selection as a set of user ids (RecceCrewPickerBottomSheet.kt:97-110), so this is a
+        // regression guard. Nothing is saved: the form is left with back.
+        RecceListPage p = list();
+        RecceFormPage f = p.tapCreate();
+        assumeTrue(f.isLoaded(Duration.ofSeconds(15)), "Form did not open");
+        try {
+            int before = f.personCountFromSummary();
+            assumeTrue(f.openAddFromCrew(), "\"Add from project crew\" not tappable");
+            assumeTrue(f.isCrewPickerOpen(Duration.ofSeconds(10)), "The crew picker did not open");
+            List<String> crew = f.crewNames();
+            String n = crew.stream().filter(c -> c.replaceAll("[^A-Za-z]", "").length() >= 3)
+                    .findFirst().orElse(null);
+            assumeTrue(n != null, "The crew picker lists no member with a 3-letter name: " + crew);
+            String q = n.replaceAll("[^A-Za-z]", "").substring(0, 3);
+            f.searchCrew(q);
+            System.out.println(">>> crew '" + n + "' search '" + q + "' → " + f.crewNames());
+            assertTrue(f.crewNames().contains(n), "Searching '" + q + "' hid '" + n + "': " + f.crewNames());
+            assertTrue(f.tapCrewRow(n), "Could not tap '" + n + "' in the filtered list");
+            assertEquals(Boolean.TRUE, f.crewChecked(n),
+                    "RECCE-01: '" + n + "' was tapped while the search '" + q + "' was active and is not ticked");
+            assertEquals("1 chosen", f.crewChosenText().trim(), "The chosen counter after one tick");
+            assertTrue(f.tapCrewDone(), "Done not tappable");
+
+            int afterAdd = f.personCountFromSummary();
+            System.out.println(">>> personnel " + before + " → " + afterAdd + " names=" + f.personNames());
+            assertEquals(before + 1, afterAdd, "Done should add exactly one personnel row");
+            assertTrue(f.personNames().stream().anyMatch(x -> x.trim().equals(n)),
+                    "No personnel row carries '" + n + "': " + f.personNames());
+
+            // Reopen with no search: still ticked. Untick → Done removes the row.
+            assertTrue(f.openAddFromCrew() && f.isCrewPickerOpen(Duration.ofSeconds(10)), "The picker did not reopen");
+            assertEquals(Boolean.TRUE, f.crewChecked(n), "'" + n + "' is not ticked on reopening the picker");
+            assertTrue(f.tapCrewRow(n), "Could not untick '" + n + "'");
+            assertEquals(Boolean.FALSE, f.crewChecked(n), "'" + n + "' stayed ticked after a second tap");
+            assertTrue(f.tapCrewDone(), "Done not tappable (2)");
+            assertEquals(before, f.personCountFromSummary(), "Unticking + Done should remove the crew row");
+            screenshot("recce-crew-picker");
+        } finally {
+            safeBackToList();
+        }
+    }
+
+    @Test
+    @Order(17)
+    @DisplayName("RECCE-02 A blank Lunch stop added in Edit survives publish and shows in the detail timeline [WEB RECCE-02]")
+    void blankLunchStopSurvivesEditPublish() {
+        // [WEB RECCE-02] The client sends every stop row (RecceFormFragment.kt:584-596), blank
+        // or not; Lunch is not counted on the Stops tile, so the timeline rows are read.
+        RecceListPage p = list();
+        RecceFormPage f = p.tapCreate();
+        assumeTrue(f.isLoaded(Duration.ofSeconds(15)), "Form did not open");
+        String title = PREFIX + " Lunch " + (System.currentTimeMillis() % 100000);
+        boolean created = false;
+        try {
+            f.setTitle(title);
+            f.pickFirstUnit();
+            f.pickDate();
+            f.pickRdvTime();
+            f.setRdvPlace("QA Lunch RDV");
+            // Name the form's default stop, so the timeline has a known row: it proves the
+            // reader sees the timeline, and isolates the blank Lunch stop as the only variable.
+            assumeTrue(f.scrollTo("stopPlace"), "No default stop row on the form");
+            f.setStopPlace(0, NAMED_STOP);
+            System.out.println(">>> default stop place='" + f.stopPlaceText(0) + "'");
+            // Publishing needs one crew-sourced person (RecceFormFragment.submit).
+            String crew = f.addFirstCrewMember();
+            assumeTrue(!crew.isEmpty(), "No crew member could be added — publish would be refused");
+            assumeTrue(f.publish(), "Publish not tappable");
+            sleep(3000);
+            backToList();
+            RecceListPage l = list();
+            l.tapChip("All");
+            assumeTrue(l.openRecce(title), "The new recce '" + title + "' was not listed after publish");
+            created = true;
+            RecceDetailPage d = new RecceDetailPage(driver);
+            assumeTrue(d.isLoaded(Duration.ofSeconds(15)), "Detail did not load");
+            long lunchBefore = d.timelineRows().stream().filter(r -> r.toLowerCase().startsWith("lunch|")).count();
+            assumeTrue(d.isEditVisible(), "Edit not offered");
+            RecceFormPage e = d.tapEdit();
+            assumeTrue(e.isLoaded(Duration.ofSeconds(15)), "Edit form did not open");
+            assumeTrue(e.addStop(), "Add stop not tappable");
+            boolean kindSet = e.setLastStopKind("Lunch");
+            if (!kindSet) screenshot("recce-lunch-kind-not-set");
+            assumeTrue(kindSet, "Could not set the new stop's kind to Lunch");
+            // The dropdown's text is not always exposed to UiAutomator; when it IS readable and
+            // is not Lunch, the pick failed — a test problem, not RECCE-02.
+            String kindShown = e.lastStopKindText();
+            System.out.println(">>> new stop kind='" + kindShown + "'");
+            assumeTrue(kindShown.isBlank() || kindShown.equalsIgnoreCase("Lunch"),
+                    "The new stop's kind reads '" + kindShown + "', not Lunch — the pick did not take");
+            assumeTrue(e.publish(), "Publish (edit) not tappable");
+            sleep(3000);
+
+            backToList();
+            RecceListPage l2 = list();
+            l2.tapChip("All");
+            assumeTrue(l2.openRecce(title), "Could not reopen '" + title + "'");
+            RecceDetailPage d2 = new RecceDetailPage(driver);
+            assumeTrue(d2.isLoaded(Duration.ofSeconds(15)), "Detail did not reload");
+            List<String> rows = d2.timelineRows();
+            long lunch = rows.stream().filter(r -> r.toLowerCase().startsWith("lunch|")).count();
+            System.out.println(">>> timeline rows=" + rows + " lunch " + lunchBefore + " → " + lunch);
+            screenshot("recce-lunch-stop");
+            assumeTrue(rows.stream().anyMatch(r -> r.contains(NAMED_STOP)),
+                    "The timeline reader did not see the named stop '" + NAMED_STOP + "' either: " + rows
+                            + " — cannot tell a dropped Lunch stop from an unread timeline");
+            assertTrue(lunch > lunchBefore,
+                    "RECCE-02: a blank Lunch stop added in Edit was dropped on publish — the detail"
+                            + " timeline has no Lunch row: " + rows);
+        } finally {
+            // Cleanup must never throw: an assumption here would hide the real result.
+            try {
+                backToList();
+                RecceListPage l = new RecceListPage(driver);
+                if (l.isLoaded(Duration.ofSeconds(15))) {
+                    l.tapChip("All");
+                    if (created || l.hasRecce(title)) {
+                        boolean del = l.deleteRecce(title);
+                        System.out.println(">>> cleanup '" + title + "' deleted=" + del);
+                    }
+                }
+            } catch (Throwable t) {
+                System.out.println("!!! cleanup of '" + title + "' failed: " + t);
+            }
+        }
+    }
+
+    @Test
+    @Order(18)
+    @DisplayName("RECCE-04 Export PDF on a published recce opens the PDF viewer, with no failure toast [WEB RECCE-04]")
+    void exportOpensPdf() {
+        // [WEB RECCE-04] The PDF is generated on the server (POST /recce/:id/pdf). Appium cannot
+        // read the PDF body, so "Map error: g.co/staticmaperror" inside it stays a manual /
+        // API check; this pins that Export reaches the in-app viewer (DrivePdfViewerActivity).
+        RecceListPage p = list();
+        p.tapChip("Published");
+        sleep(1500);
+        assumeTrue(p.cardCount() > 0, "No published recce to export");
+        assumeTrue(p.openFirstRecce(), "Could not open a published recce");
+        RecceDetailPage d = new RecceDetailPage(driver);
+        assumeTrue(d.isLoaded(Duration.ofSeconds(15)), "Detail did not load");
+        assumeTrue(d.isExportVisible(), "Export not offered (no download rights?)");
+        String title = d.title();
+        try {
+            assertTrue(d.tapExport(), "Export not tappable");
+            String act = "";
+            boolean failed = false;
+            long end = System.currentTimeMillis() + 60_000;
+            while (System.currentTimeMillis() < end) {
+                try { act = String.valueOf(driver.currentActivity()); } catch (Exception ignored) { }
+                if (act.contains("PdfViewer")) break;
+                String pkg = "";
+                try { pkg = String.valueOf(driver.getCurrentPackage()); } catch (Exception ignored) { }
+                if (!pkg.isEmpty() && !pkg.equals(appPackage)) break;   // an external viewer
+                // ViewModel toast "PDF failed" (or the server's message); download toast
+                // "Couldn't export the PDF" (strings_recce.xml:140).
+                if (d.textShown("PDF failed", Duration.ofMillis(500))
+                        || d.textShown("export the PDF", Duration.ofMillis(300))) { failed = true; break; }
+                sleep(1500);
+            }
+            System.out.println(">>> export '" + title + "' → activity=" + act + " failedToast=" + failed);
+            screenshot("recce-export-pdf");
+            assertTrue(!failed, "RECCE-04: Export showed a failure toast for '" + title + "'");
+            assertTrue(act.contains("PdfViewer") || !appPackage.equals(safePkg()),
+                    "RECCE-04: Export did not open a PDF viewer within 60 s (activity " + act + ")");
+        } finally {
+            for (int i = 0; i < 3 && !appPackage.equals(safePkg()); i++) {
+                try { driver.navigate().back(); } catch (Exception ignored) { }
+                sleep(1000);
+            }
+            safeBackToList();
+        }
+    }
+
+    /** backToList() for finally blocks: never throws, so it cannot mask the case's result. */
+    private void safeBackToList() {
+        try { backToList(); } catch (Throwable t) { System.out.println("!!! backToList failed: " + t); }
+    }
+
+    private static final String NAMED_STOP = "QA Named Stop";
+
+    private String safePkg() {
+        try { return String.valueOf(driver.getCurrentPackage()); } catch (Exception e) { return ""; }
+    }
+
+    @Test
+    @Order(19)
+    @DisplayName("RECCE-05 The disabled \"Use this location\" button looks disabled, not brand orange [WEB RECCE-05]")
+    void disabledUseLooksDisabled() {
+        // [WEB RECCE-05] pickerUse is disabled until a point is chosen
+        // (RecceLocationPickerFragment.kt:102, :252), but its backgroundTint is the plain colour
+        // @color/recce_brand #F99300 (fragment_recce_location_picker.xml:194), not a state list,
+        // so the disabled button is drawn in full orange. Expected to FAIL today.
+        RecceListPage p = list();
+        RecceFormPage f = p.tapCreate();
+        assumeTrue(f.isLoaded(Duration.ofSeconds(15)), "Form did not open");
+        try {
+            assumeTrue(f.openRdvLocationPicker(), "Rendezvous pick not tappable");
+            assumeTrue(f.isLocationPickerOpen(Duration.ofSeconds(12)),
+                    "The location picker did not open (map not rendering?)");
+            sleep(1500);
+            String enabled = f.pickerUseEnabled();
+            int rgb = f.pickerUseDominantColor();
+            System.out.println(">>> pickerUse enabled=" + enabled + " fill=#" + String.format("%06X", rgb));
+            screenshot("recce-picker-use-disabled");
+            assertEquals("false", enabled, "\"Use this location\" is enabled before any place was chosen");
+            assumeTrue(rgb >= 0, "Could not capture the button's pixels");
+            int r = (rgb >> 16) & 0xFF, g = (rgb >> 8) & 0xFF, b = rgb & 0xFF;
+            boolean brand = Math.abs(r - 0xF9) <= 12 && Math.abs(g - 0x93) <= 12 && Math.abs(b - 0x00) <= 12;
+            assertTrue(!brand,
+                    "RECCE-05: the disabled \"Use this location\" button is drawn in the full brand"
+                            + " orange #" + String.format("%06X", rgb) + " (≈#F99300), so it looks tappable."
+                            + " Its backgroundTint is a plain colour, not a state list.");
+        } finally {
+            f.closeLocationPicker();
+            safeBackToList();
+        }
     }
 
     private void sleep(long ms) {

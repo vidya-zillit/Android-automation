@@ -1,5 +1,6 @@
 package com.zillit.automation.tests.email;
 
+import com.zillit.automation.core.TestEmails;
 import com.zillit.automation.core.BaseTest;
 import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.common.BottomNavPage;
@@ -104,11 +105,15 @@ class EmailTest extends BaseTest {
         assumeTrue(e.openDrawer(), "Could not open the folder drawer");
         List<String> folders = e.folderNames();
         System.out.println(">>> drawer folders: " + folders);
-        assertTrue(folders.stream().anyMatch(f -> f.equalsIgnoreCase("Inbox")),
-                "Drawer should list Inbox. Got: " + folders);
-        assertTrue(folders.stream().anyMatch(f -> f.toLowerCase().contains("sent"))
-                        || folders.stream().anyMatch(f -> f.toLowerCase().contains("draft")),
-                "Drawer should list Sent/Drafts. Got: " + folders);
+        // [WEB EMAIL W2] all four system folders, each one required (was: Sent OR Drafts, Trash never checked)
+        for (String want : List.of("Inbox", "Sent", "Drafts", "Trash")) {
+            assertTrue(folders.stream().anyMatch(f -> f.equalsIgnoreCase(want)),
+                    "[W2] Drawer should list the system folder '" + want + "'. Got: " + folders);
+        }
+        // [WEB EMAIL W1] the Email / Calendar / Contacts / Settings nav strip lives in the drawer
+        for (String nav : List.of("nav_mail", "nav_calendar", "nav_contacts", "nav_settings")) {
+            assertTrue(!driver.findElements(byAppId(nav)).isEmpty(), "[W1] Drawer nav item '" + nav + "' missing");
+        }
         screenshot("email-drawer");
         driver.navigate().back(); // close drawer
     }
@@ -136,7 +141,7 @@ class EmailTest extends BaseTest {
         ComposeEmailPage c = openCompose();
         assumeTrue(c.isLoaded(Duration.ofSeconds(15)), "Compose did not open");
         assertTrue(!c.isSendEnabled(), "Send should be DISABLED with no recipient");
-        c.addTo("qa.recipient@zillit.com");
+        c.addTo(TestEmails.recipient());
         assertTrue(c.recipientChipCount() >= 1 || c.isSendEnabled(),
                 "Adding a To recipient should create a chip / enable Send");
         screenshot("email-recipient-added");
@@ -150,8 +155,8 @@ class EmailTest extends BaseTest {
     void ccBccRecipients() {
         ComposeEmailPage c = openCompose();
         assumeTrue(c.isLoaded(Duration.ofSeconds(15)), "Compose did not open");
-        c.addCc("qa.cc@zillit.com");
-        c.addBcc("qa.bcc@zillit.com");
+        c.addCc(TestEmails.self());
+        c.addBcc(TestEmails.recipient());
         // Either the fields became visible or chips were added — both prove Cc/Bcc work.
         assertTrue(c.isCcVisible() || c.isBccVisible() || c.recipientChipCount() >= 1,
                 "Cc/Bcc should be usable");
@@ -219,7 +224,7 @@ class EmailTest extends BaseTest {
     void emptySubjectConfirm() {
         ComposeEmailPage c = openCompose();
         assumeTrue(c.isLoaded(Duration.ofSeconds(15)), "Compose did not open");
-        c.addTo("qa.recipient@zillit.com");
+        c.addTo(TestEmails.recipient());
         // leave subject empty
         assumeTrue(c.isSendEnabled(), "Send not enabled (recipient missing?) — skipping");
         c.tapSend();
@@ -246,7 +251,7 @@ class EmailTest extends BaseTest {
         ComposeEmailPage c = openCompose();
         assumeTrue(c.isLoaded(Duration.ofSeconds(15)), "Compose did not open");
         sentSubject = "QA Email " + (System.currentTimeMillis() % 1000000);
-        c.addTo("qa.recipient@zillit.com");
+        c.addTo(TestEmails.recipient());
         c.setSubject(sentSubject);
         c.setBody("Automated test body for " + sentSubject);
         assumeTrue(c.isSendEnabled(), "Send not enabled — skipping actual send");
@@ -268,8 +273,8 @@ class EmailTest extends BaseTest {
         assumeTrue(sentSubject != null, "No email was sent — skipping");
         EmailPage e = email();
         assumeTrue(e.openFolder("Sent"), "Could not open the Sent folder");
-        assertTrue(e.isEmailShown(sentSubject, Duration.ofSeconds(25)) || e.emailCount() > 0,
-                "The sent email '" + sentSubject + "' should appear in Sent");
+        assertTrue(e.isEmailShown(sentSubject, Duration.ofSeconds(25)),
+                "The sent email '" + sentSubject + "' should appear in Sent; listed: " + e.subjects());
         screenshot("email-sent-folder");
     }
 
@@ -364,20 +369,94 @@ class EmailTest extends BaseTest {
 
     @Test
     @Order(15)
-    @DisplayName("Search opens, accepts a query, and shows results or a no-results state")
+    @DisplayName("Search finds an Inbox subject (only matching hits), and a miss shows no-results")
     void searchEmails() {
+        EmailPage e = email();
+        assumeTrue(e.isSearchVisible(), "Search not available");
+        // The search screen defaults to the INBOX folder (SearchViewModel.selectedFolders),
+        // so a real Inbox subject is the known-hit query.
+        assumeTrue(e.openFolder("Inbox"), "Could not open the Inbox");
+        String query = e.subjects().stream()
+                .filter(sub -> sub.length() >= 4 && !sub.toLowerCase().contains("no subject"))
+                .findFirst().orElse(null);
+        assumeTrue(query != null, "Inbox has no email with a usable subject — skipping");
+        System.out.println(">>> email search query (Inbox subject): '" + query + "'");
+
+        EmailSearchPage s = e.tapSearch();
+        assumeTrue(s.isLoaded(Duration.ofSeconds(10)), "Search screen did not open");
+        assertTrue(s.areFieldChipsShown() || s.toggleFilters(),
+                "Search should offer field/scope filters");
+        // Search the Subject field only, so every hit must carry the query in its subject.
+        assumeTrue(s.areFieldChipsShown(), "Field chips not shown — skipping");
+        assumeTrue(s.setFieldChip("chip_subject", true)
+                        && s.setFieldChip("chip_from", false)
+                        && s.setFieldChip("chip_to", false),
+                "Could not restrict the search to Subject — skipping");
+
+        // ---- hit ----
+        s.type(query);
+        sleep(1500);   // 500 ms debounce, then the server
+        assertTrue(s.waitSearchSettled(Duration.ofSeconds(20)), "Search for '" + query + "' should finish");
+        List<String> hits = s.resultSubjects();
+        System.out.println(">>> search hits (" + s.resultCountText() + "): " + hits);
+        String q = query.toLowerCase();
+        assertTrue(!s.isNoResults(Duration.ofSeconds(1)) && !hits.isEmpty(),
+                "Searching an existing Inbox subject should return results, not no-results");
+        assertTrue(hits.stream().anyMatch(h -> h.toLowerCase().contains(q)),
+                "Results should include the email '" + query + "'; got " + hits);
+        assertTrue(hits.stream().allMatch(h -> h.toLowerCase().contains(q)),
+                "Every subject-search result should contain '" + query + "'; got " + hits);
+        screenshot("email-search");
+
+        // ---- miss ----
+        String miss = "zz-no-such-email-zz-" + System.currentTimeMillis();
+        s.type(miss);
+        sleep(2500);
+        assertTrue(s.isNoResults(Duration.ofSeconds(20)),
+                "A query matching nothing should show the no-results state; got " + s.resultSubjects());
+        assertTrue(s.resultSubjects().isEmpty(),
+                "No result rows should be listed for '" + miss + "'; got " + s.resultSubjects());
+        screenshot("email-search-no-results");
+        s.back();
+        recoverToEmailList();
+    }
+
+    @Test
+    @Order(15)
+    @DisplayName("[WEB EMAIL W6] Search with no match shows 'No emails found' and no rows; Clear brings back the start state")
+    void searchNoMatchShowsEmpty() {
         EmailPage e = email();
         assumeTrue(e.isSearchVisible(), "Search not available");
         EmailSearchPage s = e.tapSearch();
         assumeTrue(s.isLoaded(Duration.ofSeconds(10)), "Search screen did not open");
-        s.type("QA");
-        sleep(2500);
-        boolean settled = s.hasResults(Duration.ofSeconds(8)) || s.isNoResults() || s.isInitialState();
-        assertTrue(settled, "Search should show results, a no-results, or the initial state");
-        assertTrue(s.areFieldChipsShown() || s.toggleFilters(),
-                "Search should offer field/scope filters");
-        screenshot("email-search");
+        assertTrue(s.isInitialState(), "A fresh search should show the start state (empty_initial)");
+        String miss = "zz-no-such-email-zz-" + System.currentTimeMillis();
+        s.type(miss);
+        sleep(2500);   // 500 ms debounce, then the server
+        assertTrue(s.isNoResults(Duration.ofSeconds(20)),
+                "A query matching nothing should show 'No emails found' (empty_no_results); rows " + s.resultSubjects());
+        assertTrue(s.resultSubjects().isEmpty(), "No result rows should be listed for '" + miss + "': " + s.resultSubjects());
+        screenshot("email-search-miss");
+        assertTrue(s.clear(), "Clear (btn_clear) should be offered once text is typed");
+        assertTrue(s.isInitialState(), "Clear should bring back the start state (empty_initial)");
         s.back();
+        recoverToEmailList();
+    }
+
+    @Test
+    @Order(15)
+    @DisplayName("[WEB EMAIL EMAIL-03] Typing many lines in the body keeps the composer header (toolbar + Send) on screen")
+    void composeHeaderStaysWhileTyping() {
+        ComposeEmailPage c = openCompose();
+        assumeTrue(c.isLoaded(Duration.ofSeconds(15)), "Compose did not open");
+        c.typeBodyLines(12);
+        boolean keyboard = c.isKeyboardShown();
+        boolean header = c.isHeaderDisplayed();
+        screenshot("email-compose-typing");
+        System.out.println(">>> compose after 12 body lines: keyboard=" + keyboard + " header=" + header);
+        assertTrue(header, "[EMAIL-03] The toolbar and Send must stay displayed while typing in the body "
+                + "(the MaterialToolbar sits outside the ScrollView, activity_compose.xml:10-71)");
+        c.close();
         recoverToEmailList();
     }
 

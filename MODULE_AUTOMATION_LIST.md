@@ -6,7 +6,9 @@ app `com.zillit.zillitapp.dev` **Zillit_32537-dev**, source branch `vidya_AI/bug
 Captured 2026-11-19 by walking the Tools list and reading `groupTitleTv` / `groupCountTv` / `nameTv`.
 These are the tools **actually enabled on this project** — not everything that exists in source.
 
-**37 tools in 7 groups. 7 covered, 30 not covered.**
+Coverage column last updated 2026-11-23 from the suites under `src/test/java/com/zillit/automation/tests/<module>/`.
+
+**37 tools in 7 groups. 17 covered, 20 not covered.** (Supporting Artistes and Costumes & Set Sync in progress 2026-11-23.)
 
 ---
 
@@ -26,24 +28,24 @@ These are the tools **actually enabled on this project** — not everything that
 | 10 | Talent Deals | Account Hub → Deal Memo (`ahdm_tal_*`) | — |
 | 11 | Time Card | `TimecardHubActivity` | — |
 
-## ADS (8) — 2 covered
+## ADS (8) — 5 covered
 
 | # | Tool | Activity | Automation |
 |---|------|----------|-----------|
 | 12 | AD Dashboard | `AdDashboardActivity` (+27 more) | — |
-| 13 | **Call Sheet Creation** | `CallSheetDetailActivity` / `CallSheetEditorActivity` | ✅ `CallSheetTest`, `CallSheetUploadModeTest` |
+| 13 | **Call Sheet Creation** | `ProjectDetailActivity` (tile `callsheet_tool`) | ✅ `CallSheetCreationTest`, `CallSheetApprovalTest` (2 devices) (`--call-sheet-creation`) — [CALL_SHEET_CREATION_TESTCASES.md](CALL_SHEET_CREATION_TESTCASES.md) |
 | 14 | **Catering** | `CateringActivity` | ✅ `CateringTest` (via `ToolChatBaseTest`) |
 | 15 | Create Shooting Order | `new_boxschedule` / `schedule` | — |
-| 16 | Production Report Creation | `ProductionReportDashboardActivity` | — |
-| 17 | Schedule D.O.D. | `DodActivity` | — |
-| 18 | Schedule Full & One Line | `ScheduleDistActivity` | — |
+| 16 | **Production Report Creation** | `ProductionReportDashboardActivity` | ✅ `ProductionReportTest`, `ProductionReportApprovalTest` (2 devices) (`--production-report`) — [PRODUCTION_REPORT_CREATION_TESTCASES.md](PRODUCTION_REPORT_CREATION_TESTCASES.md) |
+| 17 | **Schedule D.O.D.** | `DodActivity` | ✅ `ScheduleDodTest` (`--schedule-dod`) — [SCHEDULE_DOD_TESTCASES.md](SCHEDULE_DOD_TESTCASES.md) |
+| 18 | **Schedule Full & One Line** | `ScheduleDistActivity` | ✅ `ScheduleDistTest` (`--schedule-dist`) — [SCHEDULE_DIST_MODULE_TESTCASES.md](SCHEDULE_DIST_MODULE_TESTCASES.md) |
 | 19 | Supporting Artistes / Extras | `SaPortalActivity` | — |
 
-## DEPARTMENTS (3) — 0 covered
+## DEPARTMENTS (3) — 1 covered
 
 | # | Tool | Activity | Automation |
 |---|------|----------|-----------|
-| 20 | Breakup Stills | `FileCabinetContinuityActivity` *(see note)* | — |
+| 20 | **Breakup Stills** | `ContinuityPage` *(see note)* | ✅ `ContinuityTest` (`--continuity`) — [CONTINUITY_MODULE_TESTCASES.md](CONTINUITY_MODULE_TESTCASES.md) |
 | 21 | Costumes & Set Sync | `CssActivity` | — |
 | 22 | Transportation | `TransportationActivity` | — |
 
@@ -55,40 +57,52 @@ These are the tools **actually enabled on this project** — not everything that
 > `ContinuitySceneListPage` behind it. Captured 2026-11-21 while planning the Continuity
 > suite; the original row was read off the class name and sent that work to a dead screen.
 
-## LOCATION (2) — 1 covered
+## LOCATION (2) — 2 covered
 
 | # | Tool | Activity | Automation |
 |---|------|----------|-----------|
-| 23 | Map | `MapViewActivity` / `ShootingLocationActivity` | — |
+| 23 | **Map** | `MapViewActivity` / `ShootingLocationActivity` | ✅ 12 `Map*` suites + `LocationToolTest` (`--map-all`) — 16 location-overlay cases skip by design while the Location tool is off |
 | 24 | **Recce** | `RecceActivity` | ✅ `RecceTest`, `RecceePaginationTest` |
 
-## PRODUCTION (7) — 2 covered
+## PRODUCTION (7) — 5 covered
 
 | # | Tool | Activity | Automation |
 |---|------|----------|-----------|
-| 25 | Crew DOOD | `CrewDoodActivity` | — |
+| 25 | **Crew DOOD** | `CrewDoodActivity` | ✅ `CrewDoodTest` (`--crew-dood`) — [CREW_DOOD_TESTCASES.md](CREW_DOOD_TESTCASES.md) |
 | 26 | **Document Distribution** | `DocumentDistributionActivity` | ✅ 18 `DocDist*` suites |
-| 27 | Production Diary/Box Schedule | `BoxScheduleActivity` | — |
+| 27 | **Production Diary/Box Schedule** | `BoxScheduleActivity` | ✅ 11 `Box*` suites (`--box`) — [BOX_MODULE_TESTCASES.md](BOX_MODULE_TESTCASES.md) |
 | 28 | Script & Pages Distribution | `ScriptDistActivity` | — |
-| 29 | **Sides** | `SidesMainActivity` | ✅ `SidesTest` |
+| 29 | **Sides** | `SidesMainActivity` | ✅ `SidesTest` (`--sides`) — [SIDES_MODULE_TESTCASES.md](SIDES_MODULE_TESTCASES.md) |
 | 30 | Weather | `WeatherProActivity` | — |
-| 31 | Z-E-Signature | `DocSignMainActivity` | — |
+| 31 | **Z-E-Signature** | `DocSignMainActivity` | ✅ `ESignatureTest` (`--e-signature`) — [E_SIGNATURE_TESTCASES.md](E_SIGNATURE_TESTCASES.md) |
 
-## ADMIN (5) — 3 covered
+## ADMIN (5) — 4 covered
 
 | # | Tool | Activity | Automation |
 |---|------|----------|-----------|
 | 32 | **Confidential Info** | `confidentialInfo` | ✅ `ConfidentialInfoTest` |
-| 33 | External Users | `external_invitees` flow | — (`InviteUsersTest` is Settings → Invite Users, a different screen) |
+| 33 | **External Users** | `external_invitees` flow | ✅ `ExternalUserTest`, `ExternalUserDropdownProbeTest` (`--external-users`) |
 | 34 | **Info** | Bulletin chat | ✅ `InfoTest` |
 | 35 | Viewing & Posting Rights Grid | `PermissionGridMainActivity` | — (`PostingRightsTest` is Home-unit gating, a different screen) |
-| 36 | **Z-Drive** | `DriverMainActivity` / `ZillitDriveActivity` | ✅ 15 `Drive*` suites |
+| 36 | **Z-Drive** | `DriverMainActivity` / `ZillitDriveActivity` | ✅ 15 `Drive*` suites — cases & status in `DRIVE_MODULE_TESTCASES.md` |
 
 ## UNGROUPED (1) — 0 covered
 
 | # | Tool | Activity | Automation |
 |---|------|----------|-----------|
 | 37 | Tasks | — | — |
+
+---
+
+## Still pending (20)
+
+- **Accounts / Payroll (11):** Asset Register, Budget Builder, Cost Report, Deal Memo, Message
+  Accounts, Payroll, Petty Cash Expenses, Production Expense Cards, Purchase Order, Talent Deals, Time Card
+- **ADs (3):** AD Dashboard, Create Shooting Order, Supporting Artistes / Extras (in progress)
+- **Departments (2):** Costumes & Set Sync (in progress), Transportation
+- **Production (2):** Script & Pages Distribution, Weather
+- **Admin (1):** Viewing & Posting Rights Grid
+- **Ungrouped (1):** Tasks
 
 ---
 
@@ -102,20 +116,18 @@ subclass. Cheapest coverage per module by a wide margin.
 |------|--------|--------------------|
 | Message Accounts | `activity_accounts.xml` | `activity_catering.xml` (covered) |
 | Budget Builder | `activity_budget_chat_page.xml` | same |
-| Breakup Stills | `activity_file_cabinet_chat_page.xml` | same |
 | Production Report (chat) | `fragment_production_report_chat.xml` | same |
 
 **Tier 2 — self-contained list/detail tools.** One page object, one suite, no shared state.
 Crew DOOD · Schedule D.O.D. · Costumes & Set Sync · Transportation · Weather
-(Sides is done — [SIDES_MODULE_TESTCASES.md](SIDES_MODULE_TESTCASES.md).)
 
 **Tier 3 — document pipelines.** Structurally like the DocDist suites, so the patterns transfer.
-Script & Pages Distribution · Schedule Full & One Line · Z-E-Signature · Asset Register
+Script & Pages Distribution · Z-E-Signature · Asset Register
 
 **Tier 4 — large subsystems.** Each needs its own multi-suite plan.
 AD Dashboard (28 activities) · Account Hub family — Cost Report, Petty Cash, Expense Cards,
 Payroll, Time Card, Talent Deals (81 activity files) · Purchase Order · Deal Memo ·
-Production Report Creation · Box Schedule · Map · SA Portal · Permission Grid
+Production Report Creation · Create Shooting Order · SA Portal · Permission Grid · Tasks
 
 ---
 

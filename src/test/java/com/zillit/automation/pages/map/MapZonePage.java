@@ -161,13 +161,32 @@ public class MapZonePage extends BasePage {
     public boolean customRadiusFieldShown() { return present("etCustomRadius"); }
 
     public boolean pickRadiusChip(String label) {
-        try {
-            driver.findElement(AppiumBy.xpath(
-                    "//*[@resource-id='" + appPackage() + ":id/chipGroupRadius']"
-                            + "//*[@text='" + label + "']")).click();
-            pause(700);
-            return true;
-        } catch (Exception e) { return false; }
+        // Two tries: after Find Intersection the form is scrolled down to the result and
+        // the radius chips are above the fold — absent from the tree, not just hidden.
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                driver.findElement(AppiumBy.xpath(
+                        "//*[@resource-id='" + appPackage() + ":id/chipGroupRadius']"
+                                + "//*[@text='" + label + "']")).click();
+                pause(700);
+                return true;
+            } catch (Exception e) {
+                if (attempt == 0) {
+                    // Typing the zone name leaves the IME up; the form resizes and the
+                    // chips under the name field fall out of the viewport. Close it and
+                    // pull the form up one notch.
+                    closeKeyboardIfStablyShown();
+                    pause(500);
+                    try {
+                        org.openqa.selenium.Dimension size = driver.manage().window().getSize();
+                        swipeVertically(size.getWidth() / 2, (int) (size.getHeight() * 0.70),
+                                (int) (size.getHeight() * 0.45));
+                        pause(600);
+                    } catch (Exception ignored) { }
+                }
+            }
+        }
+        return false;
     }
 
     /** The form renders a live preview of the circle it is about to save. */
@@ -176,7 +195,17 @@ public class MapZonePage extends BasePage {
         catch (Exception e) { return false; }
     }
 
-    public boolean save()   { scrollToId("btnSave"); return clickIfPresent("btnSave"); }
+    public boolean save()   {
+        scrollToId("btnSave");
+        if (clickIfPresent("btnSave")) return true;
+        // A typed radius or name can leave the IME up; the form resizes and btnSave drops
+        // out of the tree ("Save not available" in Z-08c/d). Only then close it and retry —
+        // closing it unconditionally sent a BACK that popped the form itself.
+        if (!closeKeyboardIfStablyShown()) return false;
+        pause(600);
+        scrollToId("btnSave");
+        return clickIfPresent("btnSave");
+    }
     public boolean cancel() { return clickIfPresent("btnCancel"); }
     public boolean close()  { return clickIfPresent("btnClose"); }
 
@@ -187,6 +216,120 @@ public class MapZonePage extends BasePage {
 
     public boolean formStillOpen() {
         return formLoaded(Duration.ofSeconds(3));
+    }
+
+    // ---------------- web-gap helpers ----------------
+
+    /** N from the list header "N zones" (all zones, whatever the search shows), or -1. */
+    public int totalFromHeader() {
+        String t = countText();
+        if (t == null) return -1;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)").matcher(t);
+        return m.find() ? Integer.parseInt(m.group(1)) : -1;
+    }
+
+    /** The Custom radius field's current text, or null when it is not shown. */
+    public String customRadiusValue() { return text("etCustomRadius"); }
+
+    /** The ZONE NAME field's current text. */
+    public String zoneNameValue() { return text("etZoneName"); }
+
+    /** Clears the zone name — setZoneName("") would leave the IME's last char on some builds. */
+    public boolean clearZoneName() {
+        scrollFormTo("etZoneName");
+        WebElement f = lastWithId("etZoneName");
+        if (f == null) return false;
+        try { f.click(); f.clear(); pause(600); return true; } catch (Exception e) { return false; }
+    }
+
+    /** Taps the "Custom" chip and leaves etCustomRadius EMPTY. */
+    public boolean chooseCustomRadiusLeftBlank() {
+        if (!present("etCustomRadius")) { pickRadiusChip("Custom"); pause(800); }
+        scrollToId("etCustomRadius");
+        WebElement f = lastWithId("etCustomRadius");
+        if (f == null) return false;
+        try { f.clear(); pause(400); return true; } catch (Exception e) { return false; }
+    }
+
+    /** Two taps on Save in one gesture — the double-submit case. */
+    public boolean doubleTapSave() {
+        scrollToId("btnSave");
+        WebElement b = lastWithId("btnSave");
+        if (b == null) return false;
+        try {
+            driver.executeScript("mobile: doubleClickGesture",
+                    java.util.Map.of("elementId", ((org.openqa.selenium.remote.RemoteWebElement) b).getId()));
+            return true;
+        } catch (Exception e) {
+            try { b.click(); b.click(); return true; } catch (Exception ex) { return false; }
+        }
+    }
+
+    /** Every zone name, following the list past the bottom of the screen. */
+    public List<String> allZoneNames() {
+        return readWholeList("rvZones", "tvName", this::zoneNames, s -> s);
+    }
+
+    /**
+     * How many rows read exactly {@code name} (a double submit makes two). Narrows the
+     * list with the zone search first, so the answer never depends on scrolling, then
+     * clears the search again.
+     */
+    public int rowsNamed(String name) {
+        boolean searched = searchZones(name);
+        pause(1200);
+        int n = (int) zoneNames().stream().filter(name::equals).count();
+        if (searched) clearZoneSearch();
+        return n;
+    }
+
+    public void clearZoneSearch() {
+        try {
+            WebElement f = lastWithId("etZoneSearch");
+            if (f != null) { f.clear(); pause(800); }
+        } catch (Exception ignored) { }
+    }
+
+    /**
+     * "N mi radius" on the row named exactly {@code name}, or null when absent.
+     *
+     * <p>In {@code item_studio_zone_card.xml} the radius sits ABOVE the name, so the usual
+     * name-anchored band (name → next name) holds the NEXT card's radius, not this one's —
+     * which once made a 4-mile zone read "30 mi". Take the closest tvRadius above the name.
+     */
+    public String radiusOf(String name) {
+        if (!scrollToRow("rvZones", "tvName", name)) return null;
+        for (WebElement e : elementsById("tvName")) {
+            try {
+                if (!name.equals(e.getText() == null ? null : e.getText().trim())) continue;
+                int nameY = e.getRect().getY();
+                WebElement best = null;
+                int bestY = Integer.MIN_VALUE;
+                for (WebElement r : elementsById("tvRadius")) {
+                    int y = r.getRect().getY();
+                    if (y < nameY && y > bestY) { best = r; bestY = y; }
+                }
+                return best == null ? null : best.getText().trim();
+            } catch (Exception ignored) { }
+        }
+        return null;
+    }
+
+    /** Taps a row button on the row named {@code name}, pairing by position. */
+    public boolean tapRowByBand(String name, String buttonId) {
+        if (!scrollToRow("rvZones", "tvName", name)) return false;
+        for (WebElement e : elementsById("tvName")) {
+            try {
+                if (name.equals(e.getText() == null ? null : e.getText().trim())) {
+                    WebElement b = elementIn(bandOfAnchor("tvName", e), buttonId);
+                    if (b == null) return false;
+                    b.click();
+                    pause(1300);
+                    return true;
+                }
+            } catch (Exception ignored) { }
+        }
+        return false;
     }
 
     // ---------------- helpers ----------------

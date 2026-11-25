@@ -32,10 +32,10 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * department is whichever option differs from the one already set. When the list
  * is empty the cases skip rather than fail.
  *
- * <p><b>This suite leaves two changes behind</b> — the user's department and
- * designation, and their Admin Access grant. Status is restored, since the run
- * disables and re-enables it. That is what the specified flow does; it is worth
- * knowing before adding this to a nightly sweep.
+ * <p><b>This suite leaves one change behind</b> — the user's department and
+ * designation. The Admin Access grant (TC9) is reverted in a {@code finally}, and
+ * Status is restored since the run disables and re-enables it. That is what the
+ * specified flow does; it is worth knowing before adding this to a nightly sweep.
  *
  * <p>Behaviour confirmed on the device while building this:
  * <ul>
@@ -272,7 +272,7 @@ class UserManagementTest extends BaseTest {
 
     @Test
     @Order(9)
-    @DisplayName("TC9: Admin Access can be granted, with confirmation")
+    @DisplayName("TC9: Admin Access can be granted (with confirmation) and Contacts tags it; the role is then restored")
     void grantAdminAccess() {
         assumeTrue(userName != null, "No user captured in TC1");
         UserManagementPage page = users();
@@ -281,24 +281,98 @@ class UserManagementTest extends BaseTest {
         assumeTrue(before != null, "Admin Access toggle not found for " + userName);
         assumeTrue(!before, userName + " already has Admin Access");
 
-        assertTrue(page.tapAdminAccessToggle(userName), "Admin Access toggle should be tappable");
-        assertTrue(page.isDialogShown(Duration.ofSeconds(15)),
-                "Granting Admin Access should ask for confirmation");
-        assertTrue(page.dialogMessage().startsWith(UserManagementPage.ADMIN_ACCESS_WARNING),
-                "Expected the admin-access warning; got " + page.dialogMessage());
-        assertTrue(page.tapDialogYes(), "Yes should be tappable");
+        boolean touched = false;
+        boolean passed = false;
+        try {
+            touched = true;
+            assertTrue(page.tapAdminAccessToggle(userName), "Admin Access toggle should be tappable");
+            assertTrue(page.isDialogShown(Duration.ofSeconds(15)),
+                    "Granting Admin Access should ask for confirmation");
+            assertTrue(page.dialogMessage().startsWith(UserManagementPage.ADMIN_ACCESS_WARNING),
+                    "Expected the admin-access warning; got " + page.dialogMessage());
+            assertTrue(page.tapDialogYes(), "Yes should be tappable");
 
-        assertTrue(page.waitForAdminAccess(userName, true, TOGGLE_WAIT),
-                "The Admin Access toggle should settle ON");
-        screenshot("user-management-admin-granted");
+            assertTrue(page.waitForAdminAccess(userName, true, TOGGLE_WAIT),
+                    "The Admin Access toggle should settle ON");
+            screenshot("user-management-admin-granted");
+
+            // Contacts must tag the new admin. Checked here (not in TC10) because the
+            // grant is reverted in the finally below.
+            assertTrue(page.tapBack(), "Back should leave User Management");
+            assertTrue(page.isOnAdminSettings(Duration.ofSeconds(20)), "Should land on ADMIN SETTINGS");
+            assertTrue(page.tapBack(), "Back should leave Admin Settings");
+            assertTrue(page.isOnSettingsTab(Duration.ofSeconds(20)), "Should land on the Settings tab");
+            assertTrue(page.openCncTab(), "C&C tab should be reachable");
+            assertTrue(page.openContactsTab(), "Contacts tab should open");
+            assertTrue(page.waitForContact(userName, true, CONTACTS_WAIT),
+                    userName + " should be listed in Contacts");
+            String label = page.contactLabel(userName);
+            screenshot("user-management-contacts-admin");
+            System.out.println(">>> contact after grant: " + label);
+            // The tag is appended to the NAME rather than shown as a separate view.
+            assertTrue(label.contains(UserManagementPage.ADMIN_TAG),
+                    "An admin should be tagged " + UserManagementPage.ADMIN_TAG + "; got " + label);
+            passed = true;
+        } finally {
+            if (touched) {
+                boolean restored = restoreAdminAccess(false);
+                System.out.println(">>> Admin Access for " + userName + " restored to OFF: " + restored);
+                // Only fail on the restore when the case itself passed, so an earlier
+                // failure is not masked.
+                if (passed) {
+                    assertTrue(restored, "Could not restore " + userName + " to non-admin after TC9");
+                }
+            }
+        }
+    }
+
+    /**
+     * Puts {@link #userName}'s Admin Access back to {@code original}. Turning it off
+     * saves straight away with no dialog (AddEditAdminsPage); an unanswered grant
+     * prompt is cancelled with No, which resets the switch. Never throws.
+     */
+    private boolean restoreAdminAccess(boolean original) {
+        try {
+            UserManagementPage page = new UserManagementPage(driver);
+            if (page.isDialogShown(Duration.ofSeconds(2))) {
+                page.tapDialogNo();   // ensureOnUserManagement below polls until the list is back
+            }
+            if (!page.ensureOnUserManagement(Duration.ofSeconds(60))) {
+                return false;
+            }
+            Boolean now = page.adminAccessEnabled(userName);
+            boolean searched = false;
+            if (now == null) {
+                searched = page.search(userName);
+                now = page.adminAccessEnabled(userName);
+            }
+            if (now == null) {
+                return false;
+            }
+            boolean ok = true;
+            if (now != original) {
+                page.tapAdminAccessToggle(userName);
+                if (page.isDialogShown(Duration.ofSeconds(3))) {
+                    page.tapDialogYes();
+                }
+                ok = page.waitForAdminAccess(userName, original, TOGGLE_WAIT);
+            }
+            if (searched) {
+                page.clearSearch();
+            }
+            return ok;
+        } catch (RuntimeException e) {
+            System.out.println(">>> Admin Access restore failed: " + e);
+            return false;
+        }
     }
 
     @Test
     @Order(10)
-    @DisplayName("TC10: Contacts shows the new designation and the (Admin) tag")
-    void contactsShowAdminAndDesignation() {
+    @DisplayName("TC10: Contacts shows the new designation")
+    void contactsShowDesignation() {
         assumeTrue(newDesignation != null, "TC6 did not set a designation");
-        UserManagementPage page = new UserManagementPage(driver);
+        UserManagementPage page = users();
 
         assertTrue(page.tapBack(), "Back should leave User Management");
         assertTrue(page.isOnAdminSettings(Duration.ofSeconds(20)), "Should land on ADMIN SETTINGS");
@@ -312,12 +386,10 @@ class UserManagementTest extends BaseTest {
 
         String label = page.contactLabel(userName);
         String designation = page.contactDesignation(userName);
-        screenshot("user-management-contacts-admin");
+        screenshot("user-management-contacts-designation");
         System.out.println(">>> contact: " + label + " / " + designation);
 
-        // The tag is appended to the NAME rather than shown as a separate view.
-        assertTrue(label.contains(UserManagementPage.ADMIN_TAG),
-                "An admin should be tagged " + UserManagementPage.ADMIN_TAG + "; got " + label);
+        // The (Admin) tag is asserted in TC9, before that grant is reverted.
         assertTrue(designation.trim().equalsIgnoreCase(newDesignation.trim()),
                 "Contacts should show the saved designation '" + newDesignation
                         + "'; got '" + designation + "'");

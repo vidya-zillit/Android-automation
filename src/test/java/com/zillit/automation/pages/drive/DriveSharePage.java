@@ -169,12 +169,40 @@ public class DriveSharePage extends BasePage {
      */
     public boolean rightsShown() {
         if (textShown(VIEW, Duration.ofSeconds(3)) && switches().size() >= 3) return true;   // file
-        return !roleSpinners().isEmpty();                                                    // folder
+        return !roleSpinners().isEmpty() || !roleBoxes().isEmpty();                          // folder
+    }
+
+    /** Folder roles, current build: cumulative CheckBoxes Viewer / Editor / Owner per person. */
+    public static final List<String> FOLDER_ROLES = List.of("Viewer", "Editor", "Owner");
+
+    private List<WebElement> roleBoxes() {
+        try {
+            return driver.findElements(AppiumBy.xpath(
+                    "//android.widget.CheckBox[@text='Viewer' or @text='Editor' or @text='Owner']"));
+        } catch (WebDriverException e) { return List.of(); }
+    }
+
+    /** The three role boxes on {@code user}'s access row: the first three below the name. */
+    private List<WebElement> roleBoxesFor(String user) {
+        try {
+            WebElement name = null;
+            for (WebElement t : driver.findElements(AppiumBy.xpath(
+                    "//*[@resource-id='" + appPackage() + ":id/accessContainer']//android.widget.TextView[@text='" + user + "']"))) {
+                name = t; break;
+            }
+            if (name == null) return List.of();
+            int y = name.getRect().getY();
+            List<WebElement> below = new java.util.ArrayList<>();
+            for (WebElement b : roleBoxes()) if (b.getRect().getY() > y) below.add(b);
+            below.sort(java.util.Comparator.comparingInt((WebElement b) -> b.getRect().getY())
+                    .thenComparingInt(b -> b.getRect().getX()));
+            return below.size() >= 3 ? below.subList(0, 3) : below;
+        } catch (WebDriverException e) { return List.of(); }
     }
 
     /** True when this screen is sharing a FOLDER (role dropdown instead of switches). */
     public boolean isFolderMode() {
-        return switches().size() < 3 && !roleSpinners().isEmpty();
+        return switches().size() < 3 && (!roleSpinners().isEmpty() || !roleBoxes().isEmpty());
     }
 
     private List<WebElement> roleSpinners() {
@@ -193,6 +221,20 @@ public class DriveSharePage extends BasePage {
      * routinely the wrong one.
      */
     public boolean setRole(String user, String role) {
+        List<WebElement> boxes = roleBoxesFor(user);
+        if (boxes.size() == 3) {
+            // Cumulative boxes: ticking Editor also means Viewer; unticking Editor leaves Viewer.
+            int target = -1;
+            for (int i = 0; i < 3; i++) if (FOLDER_ROLES.get(i).equalsIgnoreCase(role)) target = i;
+            if (target < 0) return false;
+            int current = rankOf(boxes);
+            if (current == target) return true;
+            try {
+                boxes.get(target > current ? target : target + 1).click();
+                sleep(2500);
+            } catch (WebDriverException e) { return false; }
+            return rankOf(roleBoxesFor(user)) == target;
+        }
         WebElement spinner = roleSpinnerFor(user);
         if (spinner == null) return false;
         try {
@@ -210,6 +252,11 @@ public class DriveSharePage extends BasePage {
 
     /** The role currently shown on a folder recipient's row ("viewer" / "editor" / "owner"). */
     public String currentRole(String user) {
+        List<WebElement> boxes = roleBoxesFor(user);
+        if (boxes.size() == 3) {
+            int r = rankOf(boxes);
+            return r < 0 ? "" : FOLDER_ROLES.get(r).toLowerCase();
+        }
         WebElement spinner = roleSpinnerFor(user);
         if (spinner == null) return "";
         try {
@@ -220,6 +267,15 @@ public class DriveSharePage extends BasePage {
             String own = spinner.getText();
             return own == null ? "" : own;
         } catch (WebDriverException e) { return ""; }
+    }
+
+    private static int rankOf(List<WebElement> boxes) {
+        int r = -1;
+        for (int i = 0; i < boxes.size(); i++) {
+            try { if ("true".equals(boxes.get(i).getAttribute("checked"))) r = i; }
+            catch (WebDriverException ignored) { }
+        }
+        return r;
     }
 
     private WebElement roleSpinnerFor(String user) {
@@ -289,6 +345,9 @@ public class DriveSharePage extends BasePage {
 
     public boolean save() {
         if (click("btnSave")) { sleep(3000); return true; }
+        // Folder role boxes call updateFolderRole straight away; with nothing pending the save
+        // bar stays hidden, and that is a saved state, not a failure.
+        if (isFolderMode() && !saveBarShown()) return true;
         boolean t = tapText("Save Permissions");
         sleep(3000);
         return t;
@@ -408,6 +467,130 @@ public class DriveSharePage extends BasePage {
     }
 
     public boolean generateEmailLink() { return click("btnGenerateEmailLink"); }
+
+    /** Picks {@code option} in a link-tab spinner ({@code spPermission} / {@code spExpires}). */
+    public boolean selectSpinner(String id, String option) {
+        try {
+            driver.findElement(byId(id)).click();
+            sleep(1000);
+            for (WebElement e : driver.findElements(AppiumBy.id("android:id/text1"))) {
+                if (option.equals(e.getText())) { e.click(); sleep(1000); return true; }
+            }
+            driver.navigate().back();
+        } catch (WebDriverException ignored) { }
+        return false;
+    }
+
+    /** The spinner's current value. */
+    public String spinnerValue(String id) {
+        try {
+            WebElement sp = driver.findElement(byId(id));
+            for (WebElement t : sp.findElements(org.openqa.selenium.By.className("android.widget.TextView"))) {
+                String s = t.getText();
+                if (s != null && !s.isBlank()) return s;
+            }
+        } catch (WebDriverException ignored) { }
+        return "";
+    }
+
+    /** Every text in the active emailed-links list ({@code emailLinksContainer}). */
+    public List<String> emailLinkTexts() {
+        try {
+            WebElement c = driver.findElement(byId("emailLinksContainer"));
+            return c.findElements(org.openqa.selenium.By.className("android.widget.TextView")).stream()
+                    .map(WebElement::getText).filter(t -> t != null && !t.isBlank()).toList();
+        } catch (WebDriverException e) { return List.of(); }
+    }
+
+    /** Count of active link rows (one "Expires…" line each), after scrolling the list into view. */
+    public int activeLinkCount() {
+        scrollToId("emailLinksContainer");
+        return (int) emailLinkTexts().stream().filter(t -> t.startsWith("Expires")).count();
+    }
+
+    /** The newest (first) link row's revoke icon → confirm. Returns the dialog message seen. */
+    public String revokeFirstLink() {
+        scrollToId("emailLinksContainer");
+        try {
+            List<WebElement> revoke = driver.findElements(AppiumBy.accessibilityId(REVOKE_CD));
+            if (revoke.isEmpty()) return null;
+            revoke.get(0).click();
+            sleep(1500);
+            String msg = "";
+            try { msg = driver.findElement(AppiumBy.id("android:id/message")).getText(); } catch (WebDriverException ignored) { }
+            driver.findElement(AppiumBy.id("android:id/button1")).click();
+            sleep(2500);
+            return msg;
+        } catch (WebDriverException e) { return null; }
+    }
+
+    public static final String REVOKE_CD = "Revoke link";
+
+    /** The newest (first) active link's "Expires…" line, or "" when there are none. */
+    public String firstLinkExpiry() {
+        scrollToId("emailLinksContainer");
+        return emailLinkTexts().stream().filter(t -> t.startsWith("Expires")).findFirst().orElse("");
+    }
+
+    public String generateButtonLabel() { return text("btnGenerateEmailLink"); }
+
+    /** The screen title ("Manage File Access" / "Manage Folder Access"). */
+    public String screenTitle() { return text("tvTitle"); }
+
+    public boolean saveBarVisible() {
+        try { return !driver.findElements(byId("saveBar")).isEmpty() && driver.findElement(byId("saveBar")).isDisplayed(); }
+        catch (WebDriverException e) { return false; }
+    }
+
+    /** Folder share: untick Viewer on {@code user}'s row — that stops sharing with them. */
+    public boolean removeFolderAccess(String user) {
+        List<WebElement> boxes = roleBoxesFor(user);
+        if (boxes.isEmpty()) return false;
+        try {
+            // From Editor/Owner, untick down to Viewer first, then untick Viewer.
+            for (int guard = 0; guard < 3 && rankOf(roleBoxesFor(user)) > 0; guard++) {
+                List<WebElement> b = roleBoxesFor(user);
+                b.get(rankOf(b)).click();
+                sleep(2000);
+            }
+            List<WebElement> b = roleBoxesFor(user);
+            if (b.isEmpty()) return true;
+            b.get(0).click();
+            sleep(2000);
+            try { driver.findElement(AppiumBy.id("android:id/button1")).click(); sleep(2000); } catch (WebDriverException ignored) { }
+            return !hasGrantFor(user);
+        } catch (WebDriverException e) { return false; }
+    }
+
+    /** Save Permissions is tappable (it is disabled until something changed). */
+    public boolean saveEnabled() {
+        try {
+            List<WebElement> b = driver.findElements(byId("btnSave"));
+            return !b.isEmpty() && b.get(0).isDisplayed() && "true".equals(b.get(0).getAttribute("enabled"));
+        } catch (WebDriverException e) { return false; }
+    }
+
+    /** Role checkbox labels on {@code user}'s folder access row. */
+    public List<String> folderRoleLabels(String user) {
+        return roleBoxesFor(user).stream().map(WebElement::getText).toList();
+    }
+
+    /** A toast, read the way UiAutomator2 exposes it. */
+    public boolean toastShown(String text, Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        String esc = text.replace("&", "&amp;").replace("'", "&apos;").replace("\"", "&quot;");
+        while (System.currentTimeMillis() < deadline) {
+            // A toast's element goes stale before getText() can read it; the page source holds
+            // its text while it is up (<android.widget.Toast text="…">).
+            try {
+                String src = driver.getPageSource();
+                if (src.contains("android.widget.Toast") && (src.contains(text) || src.contains(esc))) return true;
+            } catch (WebDriverException ignored) { }
+            sleep(200);
+        }
+        return false;
+    }
+
     public String  errorText()         { return text("tvError"); }
 
     // ---------------- helpers ----------------

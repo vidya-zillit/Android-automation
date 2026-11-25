@@ -824,7 +824,7 @@ class AppPreferencesTest extends BaseTest {
     /** The package the session is driving, so the restart targets the right app. */
     private String appPackageUnderTest() {
         String pkg = driver.getCurrentPackage();
-        return (pkg == null || pkg.isBlank()) ? "com.zillit.zillitapp.qa" : pkg;
+        return (pkg == null || pkg.isBlank()) ? "com.zillit.zillitapp.dev" : pkg;
     }
 
     private void sleep(long ms) {

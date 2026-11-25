@@ -2,6 +2,7 @@ package com.zillit.automation.tests.drive;
 
 import com.zillit.automation.core.BaseTest;
 import com.zillit.automation.core.TestOrder;
+import com.zillit.automation.core.ReasonLogger;
 import com.zillit.automation.pages.common.BottomNavPage;
 import com.zillit.automation.pages.drive.CreateFolderSheet;
 import com.zillit.automation.pages.drive.DriveFolderPage;
@@ -15,11 +16,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.Duration;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -34,6 +37,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * {@code /sdcard/Download/zl_drive_tree/} (root_pic.jpg + sub_a/ + sub_b/ + a .nomedia
  * the uploader is expected to skip).
  */
+@ExtendWith(ReasonLogger.class)
 @Order(TestOrder.DRIVE_UPLOAD)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class DriveUploadTest extends BaseTest {
@@ -41,6 +45,8 @@ class DriveUploadTest extends BaseTest {
     private static final String DOC = "zl_drive_doc.pdf";
     private static final String PIC = "zl_drive_pic.jpg";
     private static final String FOLDER = "QA_Up_" + (System.currentTimeMillis() % 100000);
+    /** The fixture tree is uploaded under this unique top-folder name (etFolderName). */
+    private static final String TREE = "QA_Tree_" + (System.currentTimeMillis() % 100000);
 
     private boolean insideProject;
 
@@ -79,7 +85,7 @@ class DriveUploadTest extends BaseTest {
         tools.searchTools("Drive");
         sleep(1500);
         if (!tools.isModuleListed("Drive", Duration.ofSeconds(6))) return false;
-        if (!tools.openModule("Drive")) return false;
+        if (!tools.openModuleContaining("Drive")) return false;
         return drive.isLoaded(Duration.ofSeconds(20));
     }
 
@@ -275,7 +281,7 @@ class DriveUploadTest extends BaseTest {
 
     @Test
     @Order(8)
-    @DisplayName("UPLOAD FOLDER opens the folder picker and stages a folders/files summary")
+    @DisplayName("UPLOAD FOLDER stages the tree summary, and the uploaded folder holds its subfolders and files")
     void uploadWholeFolder() {
         DriveHomePage drive = new DriveHomePage(driver);
         assumeTrue(drive.openFab(), "FAB did not open");
@@ -289,18 +295,86 @@ class DriveUploadTest extends BaseTest {
         assumeTrue(picker, "The system folder picker did not open — cannot stage a folder upload");
         screenshot("drive-folder-picker");
 
-        // Pick the seeded tree, then expect the staging summary.
-        if (up.pickFileNamed("zl_drive_tree", Duration.ofSeconds(15))) {
-            sleep(2000);
-            // Most pickers need an explicit "Use this folder" / "Allow" confirmation.
-            up.pickFileNamed("USE THIS FOLDER", Duration.ofSeconds(6));
-            up.pickFileNamed("ALLOW", Duration.ofSeconds(6));
-            sleep(4000);
-            String summary = up.folderSummary();
-            System.out.println(">>> folder-upload summary='" + summary + "'");
-            screenshot("drive-folder-staging");
+        // Pick the seeded tree (run-and-report.sh pushes src/test/resources/fixtures/drive_tree:
+        // root_pic.jpg, sub_a/{a_doc.pdf, a_pic.jpg}, sub_b/{b_doc.pdf}, and a 0-byte .nomedia).
+        boolean picked = up.pickFileNamed("zl_drive_tree", Duration.ofSeconds(15));
+        if (!picked) {
+            try { driver.navigate().back(); Thread.sleep(1500); } catch (Exception ignored) { }
         }
-        try { driver.navigate().back(); Thread.sleep(1500); } catch (Exception ignored) { }
+        assumeTrue(picked, "zl_drive_tree is not in the picker — fixture not pushed to /sdcard/Download");
+        sleep(2000);
+        // Most pickers need an explicit "Use this folder" / "Allow" confirmation.
+        up.pickFileNamed("USE THIS FOLDER", Duration.ofSeconds(6));
+        up.pickFileNamed("ALLOW", Duration.ofSeconds(6));
+        sleep(4000);
+        assumeTrue(up.isFolderStagingOpen(Duration.ofSeconds(15)),
+                "The folder-upload staging sheet did not open after picking the tree");
+
+        // Summary = DriveFolderTreeWalker counts: folders INCLUDE the picked root (depth 0),
+        // and the 0-byte .nomedia is skipped — so 3 folders · 4 files.
+        String summary = up.folderSummary();
+        System.out.println(">>> folder-upload summary='" + summary + "'");
+        screenshot("drive-folder-staging");
+        assertTrue(summary.contains("3 folders") && summary.contains("4 files"),
+                "Staging summary should count the fixture tree as '3 folders · 4 files'. Got: " + summary);
+
+        assumeTrue(up.setFolderUploadName(TREE),
+                "Could not rename the top folder to a unique name (etFolderName)");
+        assertTrue(up.upload(), "Upload on the folder staging sheet should be tappable");
+
+        // Folders are created first, then the files upload into them.
+        DriveHomePage home = new DriveHomePage(driver);
+        boolean treeListed = false;
+        for (int i = 0; i < 12 && !treeListed; i++) {
+            sleep(5000);
+            home = new DriveHomePage(driver);
+            home.showFolders();
+            treeListed = home.hasItem(TREE);
+        }
+        screenshot("drive-folder-uploaded");
+        assertTrue(treeListed, "The uploaded folder " + TREE + " should appear under Folders");
+
+        assertTrue(home.openItem(TREE), "Could not open the uploaded folder " + TREE);
+        sleep(2500);
+        DriveHomePage inTree = new DriveHomePage(driver);
+        inTree.showFolders();
+        List<String> subFolders = inTree.allItemNamesScrolled();
+        List<String> rootFiles = List.of();
+        for (int i = 0; i < 12; i++) {
+            inTree.showFiles();
+            rootFiles = inTree.allItemNamesScrolled();
+            if (rootFiles.stream().anyMatch(n -> n.equalsIgnoreCase("root_pic.jpg"))) break;
+            sleep(5000);
+        }
+        System.out.println(">>> " + TREE + " folders=" + subFolders + " files=" + rootFiles);
+        screenshot("drive-folder-tree-root");
+        assertTrue(subFolders.stream().anyMatch(n -> n.equalsIgnoreCase("sub_a"))
+                        && subFolders.stream().anyMatch(n -> n.equalsIgnoreCase("sub_b")),
+                TREE + " should contain subfolders sub_a and sub_b. Got: " + subFolders);
+        assertTrue(rootFiles.stream().anyMatch(n -> n.equalsIgnoreCase("root_pic.jpg")),
+                TREE + " should contain root_pic.jpg. Got: " + rootFiles);
+        assertFalse(rootFiles.stream().anyMatch(n -> n.equalsIgnoreCase(".nomedia")),
+                "The 0-byte .nomedia should be skipped, not uploaded. Got: " + rootFiles);
+
+        inTree.showFolders();
+        assertTrue(inTree.openItem("sub_a"), "Could not open sub_a inside " + TREE);
+        sleep(2500);
+        DriveHomePage inSub = new DriveHomePage(driver);
+        List<String> subFiles = List.of();
+        for (int i = 0; i < 12; i++) {
+            inSub.showFiles();
+            subFiles = inSub.allItemNamesScrolled();
+            if (subFiles.stream().anyMatch(n -> n.equalsIgnoreCase("a_doc.pdf"))
+                    && subFiles.stream().anyMatch(n -> n.equalsIgnoreCase("a_pic.jpg"))) break;
+            sleep(5000);
+        }
+        System.out.println(">>> " + TREE + "/sub_a files=" + subFiles);
+        screenshot("drive-folder-tree-sub-a");
+        assertTrue(subFiles.stream().anyMatch(n -> n.equalsIgnoreCase("a_doc.pdf"))
+                        && subFiles.stream().anyMatch(n -> n.equalsIgnoreCase("a_pic.jpg")),
+                TREE + "/sub_a should contain a_doc.pdf and a_pic.jpg. Got: " + subFiles);
+
+        new DriveHomePage(driver).returnHome();
     }
 
     // ==================== retry / failure path ====================
@@ -364,17 +438,19 @@ class DriveUploadTest extends BaseTest {
         // to re-upload, and when that failed every one of their cases skipped.
         // Each suite cleans up only the FOLDERS it created.
 
-        DriveHomePage home = new DriveHomePage(driver);
-        home.showFolders();
-        if (home.allItemNamesScrolled().stream().anyMatch(n -> n.equalsIgnoreCase(FOLDER))
-                && home.openItemMenu(FOLDER)) {
-            DriveItemMenuPage menu = new DriveItemMenuPage(driver);
-            if (menu.isOpen() && menu.tapDelete()) {
-                sleep(1200);
-                home.confirmDeleteDialog(Duration.ofSeconds(8));
-                sleep(3000);
-            } else {
-                menu.dismiss();
+        for (String name : new String[]{FOLDER, TREE}) {
+            DriveHomePage home = new DriveHomePage(driver);
+            home.showFolders();
+            if (home.allItemNamesScrolled().stream().anyMatch(n -> n.equalsIgnoreCase(name))
+                    && home.openItemMenu(name)) {
+                DriveItemMenuPage menu = new DriveItemMenuPage(driver);
+                if (menu.isOpen() && menu.tapDelete()) {
+                    sleep(1200);
+                    home.confirmDeleteDialog(Duration.ofSeconds(8));
+                    sleep(3000);
+                } else {
+                    menu.dismiss();
+                }
             }
         }
 
@@ -393,6 +469,279 @@ class DriveUploadTest extends BaseTest {
      * is exactly why this case silently skipped on the first run instead of exercising
      * the retry path.
      */
+    // ==================== Pause / Resume (cdc957a23) ====================
+
+    /** Big enough to still be uploading when the progress sheet opens. */
+    private static final int BIG_BYTES = 16 * 1024 * 1024;
+    private static final String BIG_FIXTURE = "zl_drive_big.pdf";
+    private static final String BIG_UPLOAD = "QA_Big_" + (System.currentTimeMillis() % 100000) + ".pdf";
+    private static boolean bigUploaded;
+
+    /**
+     * Pushes a 16 MB file to /sdcard/Download through Appium (push_file needs no
+     * --relaxed-security). A PDF header keeps it on the picker's Document list.
+     */
+    private boolean pushBigFixture() {
+        try {
+            byte[] data = new byte[BIG_BYTES];
+            new java.util.Random(7).nextBytes(data);
+            byte[] head = "%PDF-1.4\n%zillit-automation pause/resume fixture\n".getBytes();
+            System.arraycopy(head, 0, data, 0, head.length);
+            driver.pushFile("/sdcard/Download/" + BIG_FIXTURE, data);
+            sleep(3000);
+            return true;
+        } catch (Exception e) {
+            System.out.println(">>> could not push the big fixture: " + e.getMessage().split("\n")[0]);
+            return false;
+        }
+    }
+
+    @Test
+    @Order(12)
+    @DisplayName("U-01 PAUSE a running upload ('Paused N%', Resume) and RESUME it to completion")
+    void pauseAndResumeUpload() {
+        assumeTrue(pushBigFixture(), "Could not put a 16 MB file on the device");
+        // A 16 MB upload finishes before the progress sheet is even open on the emulator's
+        // network ("Finishing…" — pause is hidden then). Throttle the EMULATOR's link so the row
+        // is still "Uploading N%" when we get there; restored in finally. No-op on a phone.
+        boolean throttled = setNetworkSpeed("edge");
+        try {
+            pauseAndResumeBody();
+        } finally {
+            if (throttled) setNetworkSpeed("full");
+        }
+    }
+
+    private boolean setNetworkSpeed(String speed) {
+        try {
+            driver.executeScript("mobile: networkSpeed", java.util.Map.of("speed", speed));
+            System.out.println(">>> emulator network speed = " + speed);
+            return true;
+        } catch (Exception e) {
+            System.out.println(">>> network speed not set (" + speed + "): " + e.getMessage().split("\n")[0]);
+            return false;
+        }
+    }
+
+    private void pauseAndResumeBody() {
+        DriveHomePage drive = new DriveHomePage(driver);
+        drive.showFiles();
+        assumeTrue(drive.openFab() && drive.tapUploadFile(), "Could not start Upload File");
+        DriveUploadPage up = new DriveUploadPage(driver);
+        assumeTrue(up.uploadFileAs("Document", BIG_FIXTURE, BIG_UPLOAD), "Could not stage " + BIG_UPLOAD);
+        bigUploaded = true;
+        assumeTrue(up.openProgressSheet(Duration.ofSeconds(10)), "The 'Uploading…' snackbar's View action never showed");
+        boolean has = up.hasPauseResume();
+        String status = up.progressStatus();
+        System.out.println(">>> U-01 sheet: pauseResume=" + has + " status='" + status + "'");
+        assumeTrue(has || status.startsWith("Finishing") || status.startsWith("Failed"),
+                "Upload rows have no btnPauseResume — this build predates Zillit-Android cdc957a23");
+        assumeTrue(has, "The upload was already '" + status + "' (pause is hidden then) — too fast to catch");
+        assertEquals("Pause", up.pauseResumeLabel(), "A running upload offers Pause");
+        assertTrue(up.tapPauseResume(), "Pause not tappable");
+        sleep(2500);
+        String paused = up.progressStatus();
+        String label = up.pauseResumeLabel();
+        System.out.println(">>> U-01 after Pause: status='" + paused + "' button='" + label + "'");
+        assumeTrue(!up.textShown("can't be paused", Duration.ofSeconds(1)),
+                "The app says this upload can't be paused right now (past S3 / Box)");
+        assertTrue(paused.matches("Paused \\d+%"), "Status should read 'Paused N%', was '" + paused + "'");
+        assertEquals("Resume", label, "A paused upload offers Resume");
+        sleep(4000);
+        assertEquals(paused, up.progressStatus(), "A paused upload must not progress");
+        assertTrue(up.tapPauseResume(), "Resume not tappable");
+        sleep(2500);
+        String resumed = up.progressStatus();
+        System.out.println(">>> U-01 after Resume: '" + resumed + "'");
+        assertFalse(resumed.startsWith("Paused") || resumed.startsWith("Failed"),
+                "Resume should continue the upload, status '" + resumed + "'");
+        setNetworkSpeed("full");
+        try { driver.navigate().back(); } catch (Exception ignored) { }
+        assertTrue(new com.zillit.automation.pages.drive.DriveFlows(driver).waitListed(BIG_UPLOAD, Duration.ofSeconds(180)),
+                "The resumed upload should finish and list " + BIG_UPLOAD);
+    }
+
+    @Test
+    @Order(13)
+    @DisplayName("U-01 CLEANUP: remove the big upload")
+    void pauseCleanup() {
+        // Shrink the 16 MB fixture to nothing — it is regenerated on the next run.
+        try { driver.pushFile("/sdcard/Download/" + BIG_FIXTURE, new byte[0]); } catch (Exception ignored) { }
+        assumeTrue(bigUploaded, "Nothing was uploaded");
+        assertTrue(new com.zillit.automation.pages.drive.DriveFlows(driver).purge(BIG_UPLOAD, false),
+                "Could not remove " + BIG_UPLOAD);
+    }
+
+    // =====================================================================================
+    // WEB GAP cases (web-e2e/gaps/drive.md M15 destination / staged name / duplicates,
+    // M17 upload keeps going after leaving Drive).
+    // =====================================================================================
+
+    private static final long GS = System.currentTimeMillis() % 100000;
+    private static final String G_UPF = "QA_UpG_" + GS;
+    private static final java.util.Set<String> G_FILES = new java.util.LinkedHashSet<>();
+    private static final java.util.Set<String> G_FOLDERS = new java.util.LinkedHashSet<>();
+
+    private com.zillit.automation.pages.drive.DriveFlows gf() { return new com.zillit.automation.pages.drive.DriveFlows(driver); }
+
+    private void gFolder(String name) {
+        DriveHomePage home = new DriveHomePage(driver);
+        home.showFolders();
+        if (!home.hasItem(name)) assumeTrue(gf().createFolder(name), "Could not create " + name);
+        G_FOLDERS.add(name);
+    }
+
+    /** From the open screen: + → Upload File → Document → pick → preview → staging (left open). */
+    private DriveUploadPage stage(String fixture, boolean insideFolder) {
+        boolean ok = insideFolder ? (new DriveFolderPage(driver).openFab() && new DriveFolderPage(driver).tapUploadFile())
+                : (new DriveHomePage(driver).openFab() && new DriveHomePage(driver).tapUploadFile());
+        assumeTrue(ok, "Upload File not offered");
+        DriveUploadPage up = new DriveUploadPage(driver);
+        assumeTrue(up.isSourceSheetOpen() && up.chooseSource("Document"), "Document source");
+        assumeTrue(up.isSystemPickerOpen(Duration.ofSeconds(20)) && up.pickFileNamed(fixture, Duration.ofSeconds(45)), "Pick " + fixture);
+        assumeTrue(up.isPreviewOpen(Duration.ofSeconds(20)) && up.sendFromPreview(), "Preview");
+        assumeTrue(up.isStagingOpen(Duration.ofSeconds(20)), "Staging sheet");
+        return up;
+    }
+
+    @Test
+    @Order(20)
+    @DisplayName("[WEB L334/L340] UPLOAD twice in a row from inside a folder: both land in the folder, none at the root")
+    void gTwoUploadsIntoFolder() {
+        gFolder(G_UPF);
+        assumeTrue(gf().openFolder(G_UPF), "Open " + G_UPF);
+        String a = "QA_UpA_" + GS + ".pdf", b = "QA_UpB_" + GS + ".jpg";
+        DriveUploadPage up = stage("zl_drive_doc.pdf", true);
+        assumeTrue(up.renameStaged("zl_drive_doc.pdf", a) && up.upload(), "Upload 1");
+        sleep(6000);
+        up = stage("zl_drive_pic.jpg", true);
+        assumeTrue(up.renameStaged("zl_drive_pic.jpg", b) && up.upload(), "Upload 2");
+        DriveFolderPage in = new DriveFolderPage(driver);
+        boolean both = in.waitForItem(a, Duration.ofSeconds(40)) && in.waitForItem(b, Duration.ofSeconds(40));
+        List<String> inside = in.allItemNamesScrolled();
+        gf().backToHome();
+        DriveHomePage home = new DriveHomePage(driver);
+        home.showFiles();
+        List<String> root = home.allItemNamesScrolled();
+        System.out.println(">>> folder=" + inside + " root has a=" + root.contains(a) + " b=" + root.contains(b));
+        assertTrue(both, "Both uploads should land in " + G_UPF + " (ZL-21873): " + inside);
+        assertFalse(root.contains(a) || root.contains(b), "Neither may land at the root");
+    }
+
+    @Test
+    @Order(21)
+    @DisplayName("[WEB L346] UPLOAD at the root to 'Existing folder': nothing picked is refused; a picked folder receives it")
+    void gUploadToExistingFolder() {
+        gFolder(G_UPF);
+        String name = "QA_UpE_" + GS + ".pdf";
+        DriveUploadPage up = stage("zl_drive_doc.pdf", false);
+        up.renameStaged("zl_drive_doc.pdf", name);
+        try { driver.findElement(byAppId("drive_pick_seg_existing")).click(); } catch (Exception e) { assumeTrue(false, "No 'Existing folder' option"); }
+        sleep(1500);
+        up.upload();
+        sleep(2500);
+        boolean stillStaging = up.isStagingOpen(Duration.ofSeconds(3));
+        assertTrue(stillStaging, "Upload with no destination picked must not go through");
+        boolean picked;
+        try {
+            driver.findElement(io.appium.java_client.AppiumBy.xpath("//*[@resource-id='" + driver.getCurrentPackage()
+                    + ":id/drive_pick_folder_name' and @text='" + G_UPF + "']")).click();
+            picked = true;
+        } catch (Exception e) { picked = false; }
+        assertTrue(picked, G_UPF + " should be offered as the destination");
+        sleep(1200);
+        assertTrue(up.upload(), "Upload");
+        sleep(8000);
+        assertTrue(gf().openFolder(G_UPF), "Open " + G_UPF);
+        DriveFolderPage in = new DriveFolderPage(driver);
+        boolean there = in.waitForItem(name, Duration.ofSeconds(40));
+        gf().backToHome();
+        assertTrue(there, name + " should be inside " + G_UPF);
+    }
+
+    @Test
+    @Order(22)
+    @DisplayName("[WEB L358] UPLOAD: a staged name without its extension keeps '.pdf'")
+    void gStagedNameKeepsExtension() {
+        String base = "QA_named.v2_" + GS;
+        DriveUploadPage up = stage("zl_drive_doc.pdf", false);
+        assumeTrue(up.renameStaged("zl_drive_doc.pdf", base), "Could not rename the staged row");
+        assertTrue(up.upload(), "Upload");
+        DriveHomePage home = new DriveHomePage(driver);
+        String stored = null;
+        for (int i = 0; i < 12 && stored == null; i++) {
+            sleep(4000);
+            home.showFiles();
+            stored = home.allItemNamesScrolled().stream().filter(n -> n.startsWith(base)).findFirst().orElse(null);
+        }
+        if (stored != null) G_FILES.add(stored);
+        System.out.println(">>> staged rename stored as " + stored);
+        assertEquals(base + ".pdf", stored, "The extension must be kept");
+    }
+
+    @Test
+    @Order(23)
+    @DisplayName("[WEB L1223] UPLOAD a name that already exists in the folder: 'Rename to upload' resolves it; both are kept")
+    void gDuplicateUploadResolve() {
+        gFolder(G_UPF);
+        assumeTrue(gf().openFolder(G_UPF), "Open " + G_UPF);
+        String a = "QA_UpA_" + GS + ".pdf";
+        DriveFolderPage in = new DriveFolderPage(driver);
+        assumeTrue(in.allItemNamesScrolled().contains(a), "The first upload case must put " + a + " here");
+        DriveUploadPage up = stage("zl_drive_doc.pdf", true);
+        up.renameStaged("zl_drive_doc.pdf", a);
+        assertTrue(up.upload(), "Upload");
+        boolean resolve = false;
+        for (int i = 0; i < 20 && !resolve; i++) {
+            sleep(1500);
+            resolve = up.textShown("Rename to upload", Duration.ofMillis(500)) || up.textShown("Resolve duplicates", Duration.ofMillis(300));
+        }
+        String renamed = "QA_UpA2_" + GS + ".pdf";
+        if (resolve) {
+            try {
+                var et = driver.findElement(byAppId("etNewName"));
+                et.clear(); et.sendKeys(renamed.replace(".pdf", ""));
+                driver.findElement(byAppId("btnSubmit")).click();
+                sleep(5000);
+            } catch (Exception e) { System.out.println(">>> resolve sheet: " + e.getMessage().split("\n")[0]); }
+            try { driver.navigate().back(); } catch (Exception ignored) { }
+        }
+        List<String> inside = in.allItemNamesScrolled();
+        gf().backToHome();
+        System.out.println(">>> duplicate upload resolveShown=" + resolve + " folder=" + inside);
+        assertTrue(resolve, "Uploading an existing name should open 'Rename to upload'");
+        assertTrue(inside.contains(a) && inside.stream().anyMatch(n -> n.startsWith("QA_UpA2_" + GS)),
+                "Both the original and the renamed copy should be in the folder: " + inside);
+    }
+
+    @Test
+    @Order(24)
+    @DisplayName("[WEB L814] UPLOAD keeps going after leaving Drive")
+    void gUploadAfterLeavingDrive() {
+        String name = "QA_UpBg_" + GS + ".pdf";
+        DriveUploadPage up = stage("zl_drive_doc.pdf", false);
+        assumeTrue(up.renameStaged("zl_drive_doc.pdf", name) && up.upload(), "Upload");
+        for (int i = 0; i < 3 && new DriveHomePage(driver).isDriveActivity(); i++) {
+            try { driver.navigate().back(); } catch (Exception ignored) { }
+            sleep(1000);
+        }
+        sleep(15000);
+        assertTrue(gf().openDrive(), "Reopen Drive");
+        boolean listed = gf().waitListed(name, Duration.ofSeconds(40));
+        if (listed) G_FILES.add(name);
+        assertTrue(listed, "An upload started before leaving Drive should still complete");
+    }
+
+    @Test
+    @Order(98)
+    @DisplayName("WEB GAP CLEANUP: remove the QA_ uploads and folder")
+    void gUploadCleanup() {
+        List<String> failed = new java.util.ArrayList<>();
+        for (String f : G_FILES) if (!gf().purge(f, false)) failed.add(f);
+        for (String f : G_FOLDERS) if (!gf().purge(f, true)) failed.add(f);
+        assertTrue(failed.isEmpty(), "Could not remove: " + failed);
+    }
+
     private boolean setAirplaneMode(boolean on) {
         try {
             driver.setConnection(new io.appium.java_client.android.connection.ConnectionStateBuilder()

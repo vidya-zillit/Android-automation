@@ -32,7 +32,20 @@ Common modules
   --sides             Sides: scripts, scene pickers, generate/publish, Autogenerate
   --continuity        Continuity: add via gallery, grid, edit, forward, delete per level
   --schedule-dist     Schedule Distribution ("Schedule Full & One Line"): upload/replace, pages, history
+  --call-sheet-creation  Call Sheet Creation tool: templates, editor, drafts, send, permission
+  --production-report    Production Report Creation tool: templates, call times, drafts, send
+  --schedule-dod         Schedule D.O.D.: upload, folders, file menus, counts, history
+  --crew-dood            Crew DOOD: grid, calendar, days off, filters, export
+  --e-signature          Z-E-Signature: upload, envelopes, signatures, templates
+  --chat-doc-editor      Documents opened from every chat open the editor read-only
+  --casting              Casting (Main + Background): filters, form, moves, report (~50 min)
+  --costume              Costume (Main + Background, the Wardrobe tools) (~70 min)
+  --location-full        Location tool: smoke + full create / move / delete suite
+  --notifications        Notifications list and where its rows lead
+  --two-device-all       Every two-device suite; needs ZILLIT_UDID and ZILLIT_RECEIVER_UDID
+  --two-device           Home chat only, across two devices
   --box               Production Diary / Box Schedule
+  --box-cleanup       Delete leftover Box fixtures (opt-in)
   --map               Map module (city panel, toolbar, carousel, View All)
   --map-pins          Map's Shortlisted/Final shoot-location overlay
   --location          Location tool (Select / Shortlist / Final tabs)
@@ -42,6 +55,8 @@ Common modules
                       renames, scene number, out-of-city choices, drag,
                       delete, then cleans up its own fixtures
   --map-cities        Second city, switching, per-city pin scoping
+  --map-location-flow Location tool → Map: a ZL_AUTO_ location moved Selects →
+                      Shortlist → Final, checked on the Map at each stage
   --map-cleanup       Delete ZL AUTO fixtures left on the project (opt-in)
   --map-all           Every Map suite — ONE Appium session per suite, one HTML
                       report at the end. This is the one to use for the Map module.
@@ -54,17 +69,15 @@ Common modules
   --doc-dist-all      Document Distribution (all content suites)
   --admin-settings    Settings -> Admin Settings
   --settings          Settings tab
+  --all               Create a project (you enter the OTP), select it, then EVERY module in it
   --all-in-project    EVERY module, already logged in, one combined report
   (no flag)           the complete suite, including the manual-OTP E2E
 
   --call-sheet-upload The ZL-21154 Continuation / New / Replace sheet
   --devices           list attached devices and the Zillit builds on each, then exit
 
-Choosing the build (flavour)
-  ZILLIT_FLAVOR=dev      com.zillit.zillitapp.dev
-  ZILLIT_FLAVOR=qa       com.zillit.zillitapp.qa     (config default)
-  ZILLIT_FLAVOR=stg      com.zillit.zillitapp.stg
-  ZILLIT_FLAVOR=prod     com.zillit.zillitapp        (also needs ZILLIT_ALLOW_PROD=1)
+The build
+  Always the DEV build, com.zillit.zillitapp.dev. Any other ZILLIT_FLAVOR is refused.
 
 Choosing the device
   ZILLIT_UDID=<serial>   run on a specific device — ./run-ui.sh --devices lists them
@@ -110,7 +123,7 @@ if [[ "${1:-}" == "--devices" ]]; then
       printf '      ZILLIT_FLAVOR=%s  %-34s %s\n' "$fl" "$pkg" "$ver"
     done
   done
-  printf '\nRun on one of them:\n  ZILLIT_UDID=<serial> ZILLIT_FLAVOR=<flavour> ./run-ui.sh --home\n\n'
+  printf '\nRun on one of them (always the dev build):\n  ZILLIT_UDID=<serial> ./run-ui.sh --home\n\n'
   exit 0
 fi
 

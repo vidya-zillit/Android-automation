@@ -291,7 +291,79 @@ public class HomeChatPage extends BasePage {
 
     /** The Retry control on the row carrying this text — the send failed. */
     public boolean messageFailed(String text) {
-        return rowHasVisible(text, "btnTryAgain");
+        // The btnTryAgain ConstraintLayout itself can be missing from the accessibility tree; its
+        // "Retry" label is not (seen on emulator-5560: three offline rows showing "Retry" while
+        // the id lookup reported "sent").
+        return rowHasVisible(text, "btnTryAgain") || rowHasRetryLabel(text);
+    }
+
+    private boolean rowHasRetryLabel(String text) {
+        String pkg = appPackage();
+        String xpath = "//*[@resource-id='" + pkg + ":id/materialCardView']"
+                + "[.//*[@text=" + xpathLiteral(text) + "]]//*[@text='Retry']";
+        try {
+            for (WebElement e : driver.findElements(AppiumBy.xpath(xpath))) if (e.isDisplayed()) return true;
+        } catch (WebDriverException ignored) { }
+        return retryBelowByGeometry(text);
+    }
+
+    /**
+     * Geometry fallback: a "Retry" label (or btnTryAgain) drawn in the band just below this
+     * message's text, inside the list. Needed because on emulator-5560 neither card-scoped XPath
+     * matched rows that plainly showed "Retry" on screen (2026-11-24).
+     */
+    private boolean retryBelowByGeometry(String text) {
+        try {
+            List<WebElement> msgs = driver.findElements(AppiumBy.androidUIAutomator(
+                    "new UiSelector().text(\"" + escape(text) + "\")"));
+            if (msgs.isEmpty()) return false;
+            org.openqa.selenium.Rectangle m = msgs.get(msgs.size() - 1).getRect();
+            List<WebElement> cands = new java.util.ArrayList<>(driver.findElements(AppiumBy.androidUIAutomator(
+                    "new UiSelector().text(\"Retry\")")));
+            cands.addAll(driver.findElements(byId("btnTryAgain")));
+            int top = m.getY() + m.getHeight() - 4, bottom = m.getY() + m.getHeight() + 160;
+            for (WebElement c : cands) {
+                org.openqa.selenium.Rectangle r = c.getRect();
+                int cy = r.getY() + r.getHeight() / 2;
+                if (r.getHeight() > 0 && cy >= top && cy <= bottom) return true;
+            }
+        } catch (WebDriverException ignored) { }
+        return false;
+    }
+
+    /** Taps "Retry" on the failed row carrying the text (accepting a resend confirmation). */
+    public boolean tapRetry(String text) {
+        String pkg = appPackage();
+        String base = "//*[@resource-id='" + pkg + ":id/materialCardView'][.//*[@text=" + xpathLiteral(text) + "]]";
+        for (String tail : new String[]{"//*[@text='Retry']", "//*[@resource-id='" + pkg + ":id/btnTryAgain']"}) {
+            try {
+                List<WebElement> l = driver.findElements(AppiumBy.xpath(base + tail));
+                if (!l.isEmpty()) {
+                    l.get(0).click();
+                    sleepQuiet(800);
+                    confirmPopup().acceptIfShown(Duration.ofSeconds(3));
+                    return true;
+                }
+            } catch (WebDriverException ignored) { }
+        }
+        // geometry fallback: the "Retry" label just below the message text
+        try {
+            List<WebElement> msgs = driver.findElements(AppiumBy.androidUIAutomator(
+                    "new UiSelector().text(\"" + escape(text) + "\")"));
+            if (msgs.isEmpty()) return false;
+            org.openqa.selenium.Rectangle m = msgs.get(msgs.size() - 1).getRect();
+            for (WebElement c : driver.findElements(AppiumBy.androidUIAutomator("new UiSelector().text(\"Retry\")"))) {
+                org.openqa.selenium.Rectangle r = c.getRect();
+                int cy = r.getY() + r.getHeight() / 2;
+                if (cy >= m.getY() + m.getHeight() - 4 && cy <= m.getY() + m.getHeight() + 160) {
+                    c.click();
+                    sleepQuiet(800);
+                    confirmPopup().acceptIfShown(Duration.ofSeconds(3));
+                    return true;
+                }
+            }
+        } catch (WebDriverException ignored) { }
+        return false;
     }
 
     /**
@@ -302,13 +374,46 @@ public class HomeChatPage extends BasePage {
      * screen".
      */
     public boolean waitMessageSent(String text, Duration timeout) {
-        if (!messageShown(text, timeout)) return false;
+        if (!messageShown(text, Duration.ofSeconds(Math.min(5, timeout.toSeconds())))) {
+            // On a phone the IME stays up after Send and covers the newest row; a covered
+            // view is absent from the accessibility tree (measured on the Pixel: the row's
+            // tvUserName was there, its tvMessage was not). Close the IME, jump to latest.
+            revealNewestRow();
+            if (!messageShown(text, timeout)) return false;
+        }
         long deadline = System.currentTimeMillis() + timeout.toMillis();
         while (System.currentTimeMillis() < deadline) {
             if (!messagePending(text) && !messageFailed(text)) return true;
             sleep(1000);
         }
         return false;
+    }
+
+    /**
+     * Closes the soft keyboard (only when it is STABLY up — a BACK while it is already
+     * closing would leave the chat) and taps the jump-to-latest arrow if it is showing.
+     */
+    public void revealNewestRow() {
+        try {
+            if (driver.isKeyboardShown()) {
+                sleepQuiet(400);
+                if (driver.isKeyboardShown()) { driver.navigate().back(); sleepQuiet(600); }
+            }
+        } catch (WebDriverException ignored) { }
+        try {
+            var arrow = driver.findElements(byId("arrowDownCard"));
+            if (!arrow.isEmpty() && arrow.get(0).isDisplayed()) { arrow.get(0).click(); sleepQuiet(800); }
+        } catch (WebDriverException ignored) { }
+        // The newest row can still be clipped by the composer: its timeLi (clock / Retry) then
+        // sits under layPostRights and is absent from the tree — measured on emulator-5560 with an
+        // offline row, where every Retry lookup failed. A short scroll toward newer rows lifts it.
+        try {
+            WebElement rv = driver.findElement(byId("rvChat"));
+            driver.executeScript("mobile: scrollGesture", java.util.Map.of(
+                    "elementId", ((org.openqa.selenium.remote.RemoteWebElement) rv).getId(),
+                    "direction", "down", "percent", 0.5));
+            sleepQuiet(400);
+        } catch (WebDriverException ignored) { }
     }
 
     /** Why a send is not complete — for a failure message that names the cause. */
@@ -467,6 +572,69 @@ public class HomeChatPage extends BasePage {
             nudgeChatUp();
         }
         return isMenuOpen(Duration.ofSeconds(1));
+    }
+
+    /**
+     * Long-presses near the LEFT edge of the first line of the bubble carrying the text. Use it for
+     * a message that contains a URL: the centre of an autolinked text is often the link, and a
+     * long-press there never opens the message menu.
+     */
+    public boolean longPressMessageLeft(String text) {
+        hideKeyboard();
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+                WebElement el = driver.findElement(AppiumBy.androidUIAutomator(
+                        "new UiSelector().textContains(\"" + escape(text) + "\")"));
+                org.openqa.selenium.Rectangle r = el.getRect();
+                w3cLongPress(r.getX() + Math.max(8, r.getWidth() / 12), r.getY() + Math.min(20, r.getHeight() / 2), 1200);
+                if (isMenuOpen(Duration.ofSeconds(3))) return true;
+            } catch (WebDriverException ignored) { }
+            nudgeChatUp();
+        }
+        return false;
+    }
+
+    /**
+     * Deletes the newest image/media bubble whose size label equals {@code sizeLabel}
+     * (e.g. "File Size : 1.44 KB" — the runner's zl_test_*.jpg fixture). Returns true when one went.
+     */
+    public boolean deleteNewestMediaWithSize(String sizeLabel) {
+        revealNewestRow();
+        try {
+            List<WebElement> sizes = driver.findElements(byId("tvFileSize"));
+            for (int i = sizes.size() - 1; i >= 0; i--) {
+                if (!sizeLabel.equals(sizes.get(i).getText())) continue;
+                org.openqa.selenium.Rectangle sr = sizes.get(i).getRect();
+                // the bubble sits right above its size label
+                w3cLongPress(sr.getX() + sr.getWidth() / 2, Math.max(0, sr.getY() - 120), 1200);
+                if (!isMenuOpen(Duration.ofSeconds(3))) return false;
+                if (!tapMenuOption("Delete")) { closeMenu(); return false; }
+                tapDeleteActionBar(Duration.ofSeconds(5));
+                confirmPopup().acceptIfShown(Duration.ofSeconds(5));
+                sleepQuiet(1500);
+                if (inSelectionMode(Duration.ofMillis(500))) exitSelectionMode();
+                return true;
+            }
+        } catch (WebDriverException ignored) { }
+        return false;
+    }
+
+    /** Long-presses the LAST (newest) bubble containing the text — e.g. a forwarded copy. */
+    public boolean longPressLastMessage(String text) {
+        hideKeyboard();
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+                List<WebElement> all = driver.findElements(AppiumBy.androidUIAutomator(
+                        "new UiSelector().textContains(\"" + escape(text) + "\")"));
+                if (!all.isEmpty()) {
+                    org.openqa.selenium.Rectangle r = all.get(all.size() - 1).getRect();
+                    w3cLongPress(r.getX() + r.getWidth() / 2, r.getY() + r.getHeight() / 2, 1200);
+                    if (isMenuOpen(Duration.ofSeconds(3))) return true;
+                }
+            } catch (WebDriverException ignored) { }
+            nudgeChatUp();
+        }
+        return false;
     }
 
     /** Scrolls a chat message containing the text into view (best-effort). */
@@ -871,17 +1039,142 @@ public class HomeChatPage extends BasePage {
         }
     }
 
-    /** Opens the newest document bubble (file viewer / download). */
+    /**
+     * Opens the newest document bubble and reports whether ANYTHING opened.
+     *
+     * <p>Office files (docx/xlsx/pptx…) open the app's own editor read-only
+     * ({@code OnlyOfficeEditorActivity}); PDF/txt and every fallback open in another app.
+     * Either way something comes to the front, and that is what this waits for (25 s: the
+     * chat asks Drive for the editor config before any screen appears). Use
+     * {@code ChatDocumentEditorPage.waitForOutcome} after {@link #tapNewestDocBubble()} to
+     * tell WHICH of the two happened.
+     *
+     * @return false when there is no document bubble, the tap failed, or nothing opened.
+     */
     public boolean openNewestDoc() {
-        var docs = driver.findElements(byId("fileNameTv"));
-        if (docs.isEmpty()) docs = driver.findElements(byId("attachmentType"));
-        if (docs.isEmpty()) return false;
+        String before = safeActivity();
+        if (!tapNewestDocBubble()) return false;
+        String app = appPackage();
+        long deadline = System.currentTimeMillis() + 25000;
+        while (System.currentTimeMillis() < deadline) {
+            String pkg = safeCurrentPackage();
+            if (pkg != null && !pkg.isEmpty() && !pkg.equals(app)) return true;   // another app
+            String act = safeActivity();
+            if (!act.isEmpty() && !act.equals(before)) return true;               // our editor
+            if (!driver.findElements(AppiumBy.androidUIAutomator(
+                    "new UiSelector().textContains(\"proper application for viewing\")")).isEmpty()) {
+                return false;                                                     // "no app" toast
+            }
+            sleep(500);
+        }
+        return false;
+    }
+
+    /**
+     * Taps the newest document bubble on its REAL click target.
+     *
+     * <p>{@code AttachmentVH} (chat_attachment_view.xml) attaches the click listener only to
+     * {@code landScapeView} / {@code portraitView} / {@code centerView} / {@code ivPlay}, all
+     * inside {@code imageParent}. {@code fileNameTv} (Call Sheet / Production Report units only)
+     * and the {@code attachmentType} overlay have NO listener, so the old target only worked by
+     * accident. Measured on device (2026-11-23): a docx renders in {@code landScapeView}, filling
+     * {@code imageParent}, with {@code attachmentType} drawn in its bottom-left corner — so the
+     * target is the bottom-most {@code imageParent} that carries an {@code attachmentType} overlay
+     * (a document, not a photo), tapped in its centre.
+     *
+     * @return true once a tap was sent to a document bubble.
+     */
+    public boolean tapNewestDocBubble() {
+        WebElement target = null;
+        long deadline = System.currentTimeMillis() + 10000;
+        while (target == null && System.currentTimeMillis() < deadline) {
+            target = newestDocBubble();
+            if (target != null) break;
+            // The list can sit scrolled up (keyboard just closed, a new row inserted below the
+            // fold): the "jump to latest" arrow brings the newest message back on screen.
+            try {
+                var arrow = driver.findElements(byId("arrowDownCard"));
+                if (!arrow.isEmpty() && arrow.get(0).isDisplayed()) arrow.get(0).click();
+            } catch (WebDriverException ignored) { }
+            sleep(800);
+        }
+        if (target == null) return false;
         try {
-            docs.get(docs.size() - 1).click();
-            sleep(1200);
+            org.openqa.selenium.Rectangle r = target.getRect();
+            tapAt(r.getX() + r.getWidth() / 2, r.getY() + r.getHeight() / 2);
             return true;
         } catch (WebDriverException e) {
             return false;
+        }
+    }
+
+    /**
+     * Long-presses the newest DOCUMENT bubble (not just the newest media, which may be someone
+     * else's photo) and reports whether the options menu opened.
+     */
+    public boolean longPressNewestDocBubble() {
+        WebElement target = newestDocBubble();
+        if (target == null) return false;
+        try {
+            org.openqa.selenium.Rectangle r = target.getRect();
+            w3cLongPress(r.getX() + r.getWidth() / 2, r.getY() + r.getHeight() / 2, 1200);
+            return isMenuOpen(Duration.ofSeconds(4));
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    /** Document bubbles on screen: {@code imageParent}s carrying an {@code attachmentType} badge. */
+    public int docBubbleCountByBadge() {
+        return countOf("attachmentType");
+    }
+
+    /** The bottom-most {@code imageParent} that has an {@code attachmentType} overlay inside it. */
+    private WebElement newestDocBubble() {
+        List<org.openqa.selenium.Rectangle> overlays = new java.util.ArrayList<>();
+        try {
+            for (WebElement t : driver.findElements(byId("attachmentType"))) {
+                if (t.isDisplayed()) overlays.add(t.getRect());
+            }
+        } catch (WebDriverException ignored) { }
+        WebElement best = null;
+        int bestBottom = -1;
+        try {
+            for (WebElement p : driver.findElements(byId("imageParent"))) {
+                org.openqa.selenium.Rectangle r = p.getRect();
+                if (r.getHeight() <= 0) continue;
+                // The badge's centre lies inside the bubble (it sits in the bottom-left corner).
+                boolean isDoc = overlays.stream().anyMatch(o -> {
+                    int cx = o.getX() + o.getWidth() / 2, cy = o.getY() + o.getHeight() / 2;
+                    return cx >= r.getX() && cx <= r.getX() + r.getWidth()
+                            && cy >= r.getY() && cy <= r.getY() + r.getHeight();
+                });
+                int bottom = r.getY() + r.getHeight();
+                if (isDoc && bottom > bestBottom) { best = p; bestBottom = bottom; }
+            }
+        } catch (WebDriverException ignored) { }
+        return best;
+    }
+
+    private void tapAt(int x, int y) {
+        var finger = new org.openqa.selenium.interactions.PointerInput(
+                org.openqa.selenium.interactions.PointerInput.Kind.TOUCH, "finger");
+        var seq = new org.openqa.selenium.interactions.Sequence(finger, 1);
+        seq.addAction(finger.createPointerMove(Duration.ZERO,
+                org.openqa.selenium.interactions.PointerInput.Origin.viewport(), x, y));
+        seq.addAction(finger.createPointerDown(0));
+        seq.addAction(finger.createPointerMove(Duration.ofMillis(80),
+                org.openqa.selenium.interactions.PointerInput.Origin.viewport(), x, y));
+        seq.addAction(finger.createPointerUp(0));
+        driver.perform(java.util.Collections.singletonList(seq));
+    }
+
+    private String safeActivity() {
+        try {
+            String a = driver.currentActivity();
+            return a == null ? "" : a;
+        } catch (WebDriverException e) {
+            return "";
         }
     }
 
@@ -1205,6 +1498,512 @@ public class HomeChatPage extends BasePage {
                 try { driver.navigate().back(); } catch (WebDriverException ignored) {}
             }
         }
+    }
+
+    // =====================================================================
+    // Web-gap helpers (2026-11-23). Ids/strings are from the app source:
+    // fragment_home.xml, emoji_keyboard_layout.xml, chat_text_layout.xml,
+    // CommonKeyboardFragment.kt, Home.kt.
+    // =====================================================================
+
+    /**
+     * A 7-letter, digit-free stamp for message markers.
+     *
+     * <p>Why no digits: {@code tvMessage} is {@code autoLink="all"} (chat_text_layout.xml:113), so a
+     * run of 7+ digits ("…-1453025") is linkified as a PHONE NUMBER, and the linkified row no longer
+     * matches a {@code textContains} lookup of the marker — measured on the Pixel 2026-11-23: the
+     * message was on screen and every lookup reported "not in the list at all".
+     */
+    public static String letterStamp() {
+        long v = System.currentTimeMillis() % 8_031_810_176L; // 26^7
+        char[] c = new char[7];
+        for (int i = 6; i >= 0; i--) { c[i] = (char) ('a' + (v % 26)); v /= 26; }
+        return new String(c);
+    }
+
+    /** The composer's hint ("Type a message..."); UiAutomator2 reports it as the text of an empty field. */
+    public static final String COMPOSER_HINT = "Type a message...";
+
+    /** The composer's current text, "" when it only shows its hint. */
+    public String composerText() {
+        try {
+            WebElement f = driver.findElement(byId("etMessage"));
+            String t = f.getText();
+            if (t == null) return "";
+            String hint = null;
+            try { hint = f.getAttribute("hint"); } catch (WebDriverException ignored) { }
+            if (t.equals(COMPOSER_HINT) || (hint != null && !hint.isEmpty() && t.equals(hint))) return "";
+            return t;
+        } catch (WebDriverException e) {
+            return "";
+        }
+    }
+
+    /** Types into the composer WITHOUT clearing first (appends at the cursor). */
+    public void appendToComposer(String text) {
+        WebElement field = waitVisible("etMessage");
+        field.click();
+        field.sendKeys(text);
+    }
+
+    /** True when the reply bar is up — a short wait, for "must be gone" checks. */
+    public boolean replyBarShown(Duration timeout) {
+        return isVisible("llReply", timeout);
+    }
+
+    /** The sender name shown in the reply bar (llReply → tvUserName), "" when absent. */
+    public String replyBarUserName() {
+        try {
+            return driver.findElement(byId("llReply")).findElement(byId("tvUserName")).getText();
+        } catch (WebDriverException e) {
+            return "";
+        }
+    }
+
+    /** The quoted text shown in the reply bar (llReply → tvMessage), "" when absent. */
+    public String replyBarQuote() {
+        try {
+            return driver.findElement(byId("llReply")).findElement(byId("tvMessage")).getText();
+        } catch (WebDriverException e) {
+            return "";
+        }
+    }
+
+    /** The unit chip that is currently selected, or "" (menuText carries selected=true). */
+    public String selectedUnitName() {
+        for (WebElement u : unitChipElements()) {
+            try {
+                if ("true".equals(u.getAttribute("selected"))) return u.getText();
+            } catch (WebDriverException ignored) { }
+        }
+        return "";
+    }
+
+    /** The raw chip labels, blanks included (visibleUnitNames() drops blanks). */
+    public List<String> rawUnitLabels() {
+        java.util.ArrayList<String> out = new java.util.ArrayList<>();
+        for (WebElement u : unitChipElements()) {
+            try { out.add(u.getText() == null ? "" : u.getText()); } catch (WebDriverException ignored) { }
+        }
+        return out;
+    }
+
+    /** The first unit chip whose label contains the needle, or null. */
+    public String unitNameContaining(String needle) {
+        for (String n : visibleUnitNames()) {
+            if (n.toLowerCase().contains(needle.toLowerCase())) return n;
+        }
+        return null;
+    }
+
+    /**
+     * The first chat unit that is neither Calendar nor Call Sheet — the "Bulletin" role.
+     * Returns its name, or null.
+     */
+    public String bulletinLikeUnit() {
+        String b = unitNameContaining("bulletin");
+        if (b != null) return b;
+        for (String n : visibleUnitNames()) {
+            String l = n.toLowerCase();
+            if (!l.contains("calendar") && !l.contains("call")) return n;
+        }
+        return null;
+    }
+
+    /** Text of the badge on a unit chip (custom_tabbar_item.xml → badge), "" when hidden. */
+    public String unitBadge(String unitName) {
+        String pkg = appPackage();
+        String xp = "//*[@resource-id='" + pkg + ":id/recTab']/*"
+                + "[.//*[@resource-id='" + pkg + ":id/menuText' and @text=" + xpathLiteral(unitName) + "]]"
+                + "//*[@resource-id='" + pkg + ":id/badge']";
+        try {
+            for (WebElement b : driver.findElements(AppiumBy.xpath(xp))) {
+                if (b.isDisplayed()) return b.getText() == null ? "" : b.getText();
+            }
+        } catch (WebDriverException ignored) { }
+        return "";
+    }
+
+    /** Number of rendered views whose text contains the marker (rows, not the composer). */
+    public int rowsContaining(String marker) {
+        String pkg = appPackage();
+        try {
+            return driver.findElements(AppiumBy.xpath("//*[@resource-id='" + pkg + ":id/rvChat']"
+                    + "//*[contains(@text," + xpathLiteral(marker) + ")]")).size();
+        } catch (WebDriverException e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Text of the view {@code id} inside the message card whose text CONTAINS {@code marker}
+     * (top-level row only — not the nested comment cards). "" when not found.
+     */
+    public String rowText(String marker, String id) {
+        String pkg = appPackage();
+        String xp = "//*[@resource-id='" + pkg + ":id/materialCardView']"
+                + "[./*[@resource-id='" + pkg + ":id/mainLi']/*[contains(@text," + xpathLiteral(marker) + ")]]"
+                + "//*[@resource-id='" + pkg + ":id/" + id + "']";
+        try {
+            List<WebElement> els = driver.findElements(AppiumBy.xpath(xp));
+            if (!els.isEmpty()) return els.get(0).getText() == null ? "" : els.get(0).getText();
+        } catch (WebDriverException ignored) { }
+        return "";
+    }
+
+    /** The timestamp line of the row (tvMsgTime): "Edited …" once edited. */
+    public String rowTime(String marker) {
+        return rowText(marker, "tvMsgTime");
+    }
+
+    /** The full tvMessage text of the row carrying the marker (may end in " Read more"). */
+    public String rowMessage(String marker) {
+        String pkg = appPackage();
+        try {
+            List<WebElement> els = driver.findElements(AppiumBy.xpath("//*[@resource-id='" + pkg
+                    + ":id/rvChat']//*[@resource-id='" + pkg
+                    + ":id/tvMessage' and contains(@text," + xpathLiteral(marker) + ")]"));
+            for (WebElement e : els) {
+                // skip the reply-bar quote in the composer
+                if (e.getText() != null) return e.getText();
+            }
+        } catch (WebDriverException ignored) { }
+        return "";
+    }
+
+    /** True when a reply (comment) with this text sits inside a parent's rvMessageReply. */
+    public boolean replyNestedUnderParent(String reply) {
+        String pkg = appPackage();
+        try {
+            return !driver.findElements(AppiumBy.xpath("//*[@resource-id='" + pkg + ":id/rvMessageReply']"
+                    + "//*[contains(@text," + xpathLiteral(reply) + ")]")).isEmpty();
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    /** True when the parent row (marker) shows the reply text inside its own rvMessageReply. */
+    public boolean replyUnderRow(String parentMarker, String reply) {
+        String pkg = appPackage();
+        String xp = "//*[@resource-id='" + pkg + ":id/materialCardView']"
+                + "[./*[@resource-id='" + pkg + ":id/mainLi']/*[contains(@text," + xpathLiteral(parentMarker) + ")]]"
+                + "//*[@resource-id='" + pkg + ":id/rvMessageReply']//*[contains(@text," + xpathLiteral(reply) + ")]";
+        try {
+            return !driver.findElements(AppiumBy.xpath(xp)).isEmpty();
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    /** Taps the comment's menu arrow (deleteIv) on the reply carrying this text. */
+    public boolean openCommentMenu(String reply) {
+        String pkg = appPackage();
+        String xp = "//*[@resource-id='" + pkg + ":id/rvMessageReply']/*"
+                + "[.//*[contains(@text," + xpathLiteral(reply) + ")]]//*[@resource-id='" + pkg + ":id/deleteIv']";
+        for (int i = 0; i < 3; i++) {
+            try {
+                List<WebElement> els = driver.findElements(AppiumBy.xpath(xp));
+                if (!els.isEmpty()) {
+                    els.get(0).click();
+                    if (isMenuOpen(Duration.ofSeconds(3))) return true;
+                }
+            } catch (WebDriverException ignored) { }
+            nudgeChatUp();
+        }
+        return false;
+    }
+
+    /** Tap (not long-press) the row carrying the text — toggles it in selection mode. */
+    public boolean tapRow(String text) {
+        try {
+            WebElement el = driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiSelector().textContains(\"" + escape(text) + "\")"));
+            org.openqa.selenium.Rectangle r = el.getRect();
+            tapAt(r.getX() + r.getWidth() / 2, r.getY() + r.getHeight() / 2);
+            sleepQuiet(600);
+            return true;
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    // ---------- selection mode (Delete / Share) ----------
+
+    /** The selection action bar is up (layAction with btnBack / tvAction). */
+    public boolean inSelectionMode(Duration timeout) {
+        return isVisible("layAction", timeout);
+    }
+
+    /** The selection counter (tvCount), "" when hidden. */
+    public String selectionCount() {
+        try {
+            WebElement c = driver.findElement(byId("tvCount"));
+            return c.isDisplayed() ? c.getText() : "";
+        } catch (WebDriverException e) {
+            return "";
+        }
+    }
+
+    /** Leaves selection / search mode via its back arrow. */
+    public void exitSelectionMode() {
+        for (String id : new String[]{"btnBack", "btnBack2"}) {
+            try {
+                WebElement b = driver.findElement(byId(id));
+                if (b.isDisplayed()) { b.click(); sleepQuiet(600); return; }
+            } catch (WebDriverException ignored) { }
+        }
+    }
+
+    /**
+     * Deletes one of OUR OWN messages: long-press → Delete → action-bar Delete → Yes.
+     * Best-effort cleanup; returns true once the text is gone.
+     */
+    public boolean deleteOwnMessage(String text) {
+        try {
+            revealNewestRow();
+            if (!messageShown(text, Duration.ofSeconds(3)) && !messageShownScrolled(text, 2)) return true;
+            // A local-only row left by an offline case shows Retry: send it first, then delete it,
+            // so nothing stays behind in this device's local chat.
+            if (messageFailed(text) && tapRetry(text)) waitMessageSent(text, Duration.ofSeconds(30));
+            if (!longPressMessage(text) && !longPressMessageLeft(text)) return false;
+            if (!tapMenuOption("Delete")) { closeMenu(); return false; }
+            tapDeleteActionBar(Duration.ofSeconds(5));
+            confirmPopup().accept(Duration.ofSeconds(6));
+            sleepQuiet(1500);
+            return !messageShown(text, Duration.ofSeconds(3));
+        } catch (WebDriverException e) {
+            return false;
+        } finally {
+            if (inSelectionMode(Duration.ofMillis(500))) exitSelectionMode();
+        }
+    }
+
+    /**
+     * Deletes up to {@code max} of OUR OWN leftover rows whose text starts with the prefix
+     * (an earlier run that died before its cleanup). Returns how many went.
+     */
+    public int sweepOwnRows(String prefix, int max) {
+        int n = 0;
+        revealNewestRow();
+        java.util.Set<String> tried = new java.util.HashSet<>();
+        for (int i = 0; i < max; i++) {
+            String t = null;
+            try {
+                for (WebElement e : driver.findElements(AppiumBy.xpath("//*[@resource-id='" + appPackage()
+                        + ":id/rvChat']//*[@resource-id='" + appPackage() + ":id/tvMessage' and starts-with(@text,"
+                        + xpathLiteral(prefix) + ")]"))) {
+                    String x = e.getText();
+                    if (x != null && !tried.contains(x)) { t = x; break; }
+                }
+            } catch (WebDriverException ignored) { }
+            if (t == null) break;
+            tried.add(t);
+            if (deleteOwnMessage(t.length() > 60 ? t.substring(0, 60) : t)) n++;
+        }
+        return n;
+    }
+
+    /**
+     * The newest text plus the number of media bubbles on screen — for "nothing was posted"
+     * checks. Not the timestamp: the newest row's tvMsgTime can sit under the keyboard and drop
+     * out of the tree, which made an unchanged feed read as changed (HomeChatTest, 2026-11-24).
+     */
+    public String newestRowSignature() {
+        revealNewestRow();
+        String msg = "";
+        int media = 0;
+        try {
+            List<WebElement> m = driver.findElement(byId("rvChat")).findElements(byId("tvMessage"));
+            if (!m.isEmpty()) msg = m.get(m.size() - 1).getText();
+            media = driver.findElement(byId("rvChat")).findElements(byId("imageParent")).size();
+        } catch (WebDriverException ignored) { }
+        return msg + " | media=" + media;
+    }
+
+    /** The current activity name (short), "" when unknown. */
+    public String activityName() {
+        return safeActivity();
+    }
+
+    // ---------- search (ivSearch → laySearch) ----------
+
+    public boolean openSearch() {
+        try {
+            waitVisible("ivSearch").click();
+            return isVisible("edittext_search", Duration.ofSeconds(5));
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    /** Types the query; when {@code imeSearch} presses the IME Search action. */
+    public void searchFor(String query, boolean imeSearch) {
+        WebElement f = waitVisible("edittext_search");
+        f.click();
+        f.clear();
+        f.sendKeys(query);
+        if (imeSearch) {
+            try {
+                driver.executeScript("mobile: performEditorAction", java.util.Map.of("action", "search"));
+            } catch (WebDriverException ignored) { }
+            sleepQuiet(1200);
+            // On the emulator the editor action did not always reach the field (count stayed
+            // blank). The up arrow runs the same search when none is active (Home.kt topButton:
+            // !isEnableSearch → handleSearch), so use it as the fallback for a non-blank query.
+            if (!query.trim().isEmpty() && searchCount().isBlank()) {
+                tapSearchArrow(true);
+            }
+        }
+    }
+
+    /** Search result count (tvCount) — "" while nothing has been searched. */
+    public String searchCount() {
+        return selectionCount();
+    }
+
+    public void tapSearchArrow(boolean up) {
+        try {
+            driver.findElement(byId(up ? "top_button" : "bottom_button")).click();
+            sleepQuiet(1000);
+        } catch (WebDriverException ignored) { }
+    }
+
+    public boolean isSearchOpen(Duration timeout) {
+        return isVisible("laySearch", timeout);
+    }
+
+    public void closeSearch() {
+        try {
+            driver.findElement(byId("btnBack2")).click();
+            sleepQuiet(700);
+        } catch (WebDriverException ignored) { }
+    }
+
+    // ---------- scroll-to-bottom arrow ----------
+
+    public boolean arrowDownShown(Duration timeout) {
+        return isVisible("arrowDownCard", timeout);
+    }
+
+    public void tapArrowDown() {
+        try { driver.findElement(byId("arrowDownCard")).click(); sleepQuiet(1200); }
+        catch (WebDriverException ignored) { }
+    }
+
+    /** Swipes the chat to reveal OLDER rows n times. */
+    public void scrollToOlder(int n) {
+        for (int i = 0; i < n; i++) swipeChat(true);
+    }
+
+    /** True when the row carrying the text is fully inside the visible chat list. */
+    public boolean rowFullyVisible(String text) {
+        try {
+            WebElement rv = driver.findElement(byId("rvChat"));
+            org.openqa.selenium.Rectangle list = rv.getRect();
+            for (WebElement e : driver.findElements(AppiumBy.androidUIAutomator(
+                    "new UiSelector().textContains(\"" + escape(text) + "\")"))) {
+                org.openqa.selenium.Rectangle r = e.getRect();
+                if (r.getHeight() > 0 && r.getY() >= list.getY()
+                        && r.getY() + r.getHeight() <= list.getY() + list.getHeight()) return true;
+            }
+        } catch (WebDriverException ignored) { }
+        return false;
+    }
+
+    // ---------- double tap ----------
+
+    /** Two taps on Send within ~100 ms (one W3C sequence). */
+    public void doubleTapSend() {
+        WebElement s = waitVisible("ivSendMessage");
+        org.openqa.selenium.Rectangle r = s.getRect();
+        int x = r.getX() + r.getWidth() / 2, y = r.getY() + r.getHeight() / 2;
+        var finger = new org.openqa.selenium.interactions.PointerInput(
+                org.openqa.selenium.interactions.PointerInput.Kind.TOUCH, "finger");
+        var seq = new org.openqa.selenium.interactions.Sequence(finger, 1);
+        var origin = org.openqa.selenium.interactions.PointerInput.Origin.viewport();
+        seq.addAction(finger.createPointerMove(Duration.ZERO, origin, x, y));
+        seq.addAction(finger.createPointerDown(0));
+        seq.addAction(finger.createPointerMove(Duration.ofMillis(30), origin, x, y));
+        seq.addAction(finger.createPointerUp(0));
+        seq.addAction(new org.openqa.selenium.interactions.Pause(finger, Duration.ofMillis(40)));
+        seq.addAction(finger.createPointerDown(0));
+        seq.addAction(finger.createPointerMove(Duration.ofMillis(30), origin, x, y));
+        seq.addAction(finger.createPointerUp(0));
+        driver.perform(java.util.Collections.singletonList(seq));
+    }
+
+    /** The voice recording bar (audioVw) is up. */
+    public boolean recordingBarShown(Duration timeout) {
+        return isVisible("audioVw", timeout);
+    }
+
+    // ---------- emoji picker ----------
+
+    public boolean openEmojiPicker() {
+        try {
+            waitVisible("ivEmoji").click();
+            return isVisible("emojiPicker", Duration.ofSeconds(5));
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    public boolean emojiPickerShown(Duration timeout) {
+        return isVisible("emojiPicker", timeout);
+    }
+
+    /**
+     * Taps the first emoji cell in the picker and returns its text (content-desc
+     * fallback), or null when no cell was found.
+     */
+    public String pickFirstEmoji() {
+        try {
+            WebElement picker = driver.findElement(byId("emojiPicker"));
+            for (WebElement c : picker.findElements(By.xpath(".//*[@clickable='true']"))) {
+                String t = c.getText();
+                if (t == null || t.isBlank()) t = c.getAttribute("content-desc");
+                if (t == null || t.isBlank()) continue;
+                // the category tabs are clickable ImageViews without text; emojis carry text
+                if (t.codePoints().anyMatch(cp -> cp > 0x2000)) {
+                    c.click();
+                    sleepQuiet(500);
+                    return t;
+                }
+            }
+        } catch (WebDriverException ignored) { }
+        return null;
+    }
+
+    /** Taps the composer (closes the emoji picker per CommonKeyboardFragment). */
+    public void tapComposer() {
+        try { waitVisible("etMessage").click(); sleepQuiet(500); } catch (WebDriverException ignored) { }
+    }
+
+    // ---------- edit dialog ----------
+
+    /** Current text in the open edit dialog, "" when it cannot be read. */
+    public String editDialogText() {
+        try {
+            return driver.findElement(byId("editTextInput")).getText();
+        } catch (WebDriverException e) {
+            try {
+                return driver.findElement(byId("message")).findElement(By.className("android.widget.EditText")).getText();
+            } catch (WebDriverException e2) {
+                return "";
+            }
+        }
+    }
+
+    /** Sets the edit dialog text WITHOUT hiding the keyboard (no stray BACK in a dialog). */
+    public void setEditDialogTextNoBack(String newText) {
+        WebElement field;
+        try {
+            field = driver.findElement(byId("editTextInput"));
+        } catch (WebDriverException notInner) {
+            field = driver.findElement(byId("message")).findElement(By.className("android.widget.EditText"));
+        }
+        field.clear();
+        if (!newText.isEmpty()) field.sendKeys(newText);
     }
 
     // ---------- helpers ----------

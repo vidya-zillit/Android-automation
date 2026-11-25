@@ -24,10 +24,14 @@ public class CcLandingPage extends BasePage {
         super(driver);
     }
 
+    /**
+     * The chat list itself. NOT mainRvView alone: group info (activity_profile_showing_page)
+     * also has a mainRvView, so it used to pass for the landing and recovery stopped there.
+     */
     public boolean isLoaded(Duration timeout) {
-        return isVisible("mainRvView", timeout)
-                || isVisible("createGroupBtn", Duration.ofSeconds(3))
-                || isVisible("tavViewRv", Duration.ofSeconds(3));
+        return isVisible("tavViewRv", timeout)
+                || isVisible("createGroupBtn", Duration.ofSeconds(2))
+                || (isVisible("searchVw", Duration.ofSeconds(2)) && isVisible("mainRvView", Duration.ofSeconds(1)));
     }
 
     // ---------------- top tabs (Chat / Call / Contacts) ----------------
@@ -119,6 +123,16 @@ public class CcLandingPage extends BasePage {
         return rowCount() == 0;
     }
 
+    /** Names of the visible list rows (mainRvView → name), e.g. under the Favourites chip. */
+    public List<String> rowNames() {
+        try {
+            return driver.findElement(byId("mainRvView")).findElements(byId("name")).stream()
+                    .map(WebElement::getText).filter(t -> t != null && !t.isBlank()).toList();
+        } catch (WebDriverException e) {
+            return List.of();   // mainRvView is hidden when the Favourites chip is empty
+        }
+    }
+
     public boolean openRow(String nameContains, Duration timeout) {
         long deadline = System.currentTimeMillis() + timeout.toMillis();
         By loc = AppiumBy.androidUIAutomator(
@@ -164,6 +178,174 @@ public class CcLandingPage extends BasePage {
         } catch (WebDriverException e) {
             return false;
         }
+    }
+
+    // ---------------- row details / list geometry (web-gap cases) ----------------
+
+    /** One visible mainRvView row: its name, its designationVw text ("" when hidden), and
+     *  whether the favourite star (isFevouritesIv — user rows only) is shown. */
+    public record Row(String name, String designation, boolean star) {}
+
+    /** The rows currently on screen. Paired by geometry (one band per `name` anchor):
+     *  element-relative XPath into mainRvView does not return the row containers. */
+    public List<Row> rows() {
+        java.util.ArrayList<Row> out = new java.util.ArrayList<>();
+        try {
+            List<WebElement> anchors = elementsById("name");
+            List<Band> bands = bandsOf("name");
+            for (int i = 0; i < anchors.size() && i < bands.size(); i++) {
+                String name = anchors.get(i).getText();
+                if (name == null || name.isBlank()) continue;
+                String des = textIn(bands.get(i), "designationVw");
+                boolean star = elementIn(bands.get(i), "isFevouritesIv") != null;
+                out.add(new Row(name.trim(), des == null ? "" : des, star));
+            }
+        } catch (WebDriverException ignored) {
+        }
+        return out;
+    }
+
+    private String firstText(WebElement parent, String id) {
+        try {
+            var els = parent.findElements(byId(id));
+            if (els.isEmpty()) return "";
+            String t = els.get(0).getText();
+            return t == null ? "" : t.trim();
+        } catch (WebDriverException e) {
+            return "";
+        }
+    }
+
+    /** The landing search card (searchVw) is on screen. */
+    public boolean isSearchCardShown() {
+        return isVisible("searchVw", Duration.ofSeconds(3));
+    }
+
+    /** layHideSearch — the overlay that turns the search box into a "new chat" launcher
+     *  (shown on the All and Members chips, ChatFragment.kt:120). */
+    public boolean isNewChatOverlayShown() {
+        return isVisible("layHideSearch", Duration.ofSeconds(2));
+    }
+
+    /** Types into the landing search box itself (works where the overlay is hidden). */
+    public void typeInlineSearch(String text) {
+        try {
+            WebElement f = waitVisible("searchEditTextVw");
+            f.click();
+            f.clear();
+            f.sendKeys(text);
+            sleep(1500);
+        } catch (WebDriverException ignored) {
+        }
+    }
+
+    /** Clears the landing search field (crossIcon is never made visible by ChatFragment). */
+    public void clearInlineSearch() {
+        try {
+            driver.findElement(byId("searchEditTextVw")).clear();
+            sleep(1200);
+        } catch (WebDriverException ignored) {
+        }
+    }
+
+    public String inlineSearchText() {
+        try {
+            String t = driver.findElement(byId("searchEditTextVw")).getText();
+            return t == null ? "" : t;
+        } catch (WebDriverException e) {
+            return "";
+        }
+    }
+
+    /** Bounds of the chat list (mainRvView), or null when it is hidden. */
+    public org.openqa.selenium.Rectangle listRect() {
+        try {
+            return driver.findElement(byId("mainRvView")).getRect();
+        } catch (WebDriverException e) {
+            return null;
+        }
+    }
+
+    private static final String[] ROW_PARTS = {"name", "designationVw", "lastEntryTxtVw", "lastMessage",
+            "profileIv", "lastMessageTime", "disconnedtedTxtView"};
+
+    /** Bottom edge of the lowest visible row (lowest bottom of any row part), or -1. */
+    public int lastRowBottom() {
+        int max = -1;
+        for (String id : ROW_PARTS) {
+            for (WebElement e : elementsById(id)) {
+                try { var r = e.getRect(); max = Math.max(max, r.getY() + r.getHeight()); }
+                catch (WebDriverException ignored) { }
+            }
+        }
+        return max;
+    }
+
+    /** Row pitch (distance between two consecutive row names), else one row's own height; -1 when empty. */
+    public int rowHeight() {
+        List<WebElement> names = elementsById("name");
+        try {
+            if (names.size() >= 2) return names.get(1).getRect().getY() - names.get(0).getRect().getY();
+            if (names.size() == 1) {
+                int top = names.get(0).getRect().getY();
+                int bottom = lastRowBottom();
+                return bottom > top ? bottom - top : -1;
+            }
+        } catch (WebDriverException ignored) {
+        }
+        return -1;
+    }
+
+    /** The list's empty view (emptyView → textTv), "" when not shown. */
+    public String emptyViewText() {
+        try {
+            var els = driver.findElements(byId("textTv"));
+            for (WebElement e : els) {
+                if (e.isDisplayed() && e.getText() != null && !e.getText().isBlank()) return e.getText();
+            }
+        } catch (WebDriverException ignored) {
+        }
+        return "";
+    }
+
+    public boolean isEmptyViewShown() {
+        return isVisible("emptyMainLi", Duration.ofSeconds(2));
+    }
+
+    /** Any progress/loader view on the landing (ProgressBar, shimmer). */
+    public boolean isLoaderShown() {
+        try {
+            return !driver.findElements(By.className("android.widget.ProgressBar")).isEmpty();
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    /** Long-press a group row → "Delete" → "Yes". For cleaning up groups this run created. */
+    public boolean deleteGroupViaLongPress(String exactName) {
+        try {
+            WebElement row = driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiSelector().resourceIdMatches(\".*:id/name\").text(\"" + exactName + "\")"));
+            var r = row.getRect();
+            w3cLongPress(r.getX() + r.getWidth() / 2, r.getY() + r.getHeight() / 2, 1000);
+            sleep(900);
+            driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiSelector().textMatches(\"(?i)delete\")")).click();
+            sleep(800);
+            driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiSelector().textMatches(\"(?i)yes\")")).click();
+            sleep(2000);
+            return true;
+        } catch (WebDriverException e) {
+            try { driver.navigate().back(); } catch (WebDriverException ignored) {}
+            return false;
+        }
+    }
+
+    /** Exact-name row present in the current list. */
+    public boolean hasRowNamed(String exactName) {
+        return rows().stream().anyMatch(r -> r.name().equals(exactName))
+                || rowNames().contains(exactName);
     }
 
     // ---------------- SearchUsersPage (new 1-1 chat) ----------------

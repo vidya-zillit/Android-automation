@@ -88,6 +88,8 @@ class ExternalUserTest extends BaseTest {
     @Override protected boolean relaunchBetweenTests() { return false; }
 
     private String createdName;
+    /** The email EU-30 saved, kept for the EXT-01b lower-case check on the detail screen. */
+    private String createdEmail;
 
     private static String fixtureName(String what) {
         return FIXTURE_PREFIX + " " + what + " " + (System.currentTimeMillis() % 100000);
@@ -464,8 +466,9 @@ class ExternalUserTest extends BaseTest {
         // Vendor could not be chosen — EU-31 went looking for a user that was never saved
         // and reported the app as losing it.
         String candidate = fixtureName("Vendor");
+        String candidateEmail = fixtureEmail();
         assumeTrue(f.setFullName(candidate), "The name could not be typed");
-        assumeTrue(f.setEmail(fixtureEmail()), "The email could not be typed");
+        assumeTrue(f.setEmail(candidateEmail), "The email could not be typed");
         assumeTrue(f.chooseUserType(ExternalUserFormPage.TYPE_VENDOR),
                 "Vendor could not be chosen");
         assumeTrue(String.valueOf(f.gender()).trim().equalsIgnoreCase("Gender")
@@ -492,6 +495,7 @@ class ExternalUserTest extends BaseTest {
                         + " thing missing — but its validation is commented out, so it"
                         + " should not be required. The form says: " + f.visibility());
         createdName = candidate;        // only now is there a user to look for
+        createdEmail = candidateEmail;
     }
 
     @Test
@@ -581,6 +585,18 @@ class ExternalUserTest extends BaseTest {
                 "The detail screen offers a save button, so it is not read-only");
         assertEquals(createdName, String.valueOf(f.fullName()).trim(),
                 "The detail screen shows the name as \"" + f.fullName() + "\"");
+        // [WEB EXT-01b] The email comes back exactly as typed, all lower case. Appium types
+        // with setText, so this proves storage only; whether Gboard capitalises the first
+        // letter while a person types is a manual check (the field has no CAP flag:
+        // AddUpdateExternalUserPage.kt:195-198).
+        if (createdEmail != null) {
+            String shown = String.valueOf(f.email()).trim();
+            assertEquals(createdEmail, shown,
+                    "EXT-01b: the email was saved as \"" + createdEmail + "\" and the detail"
+                            + " screen shows \"" + shown + "\"");
+            assertEquals(shown.toLowerCase(java.util.Locale.ROOT), shown,
+                    "EXT-01b: the stored email is not lower case: \"" + shown + "\"");
+        }
         closeForm();
     }
 
@@ -782,6 +798,202 @@ class ExternalUserTest extends BaseTest {
         assertFalse(label.toLowerCase().contains("unit"),
                 "The add button on the External Users list is named \"" + label + "\","
                         + " but it opens the Add External User form.");
+    }
+
+    // ─────────────────────── web gap cases (sheet bugs EXT-01 / EXT-02) ───────────────────────
+
+    /** Titles the web refuses in "Add More Information": they repeat the form's own fields. */
+    private static final List<String> RESERVED_TITLES =
+            List.of("Full Name", "full name", "FULL NAME", "e-mail", "Email");
+
+    @Test
+    @Order(43)
+    @DisplayName("EU-43 One tap on the toolbar back chevron leaves the add, detail and update screens [WEB EXT-02]")
+    void backChevronOneTap() {
+        // [WEB EXT-02] The web needs two taps. Android wires backBtn once
+        // (BaseActivity.kt:524 → onBackPressedDispatcher), so one tap must be enough.
+        // Self-contained, so it runs alone (--only 'ExternalUserTest.backChevronOneTap'): it
+        // saves its own ZL AUTO user for the detail and update screens and deletes it after.
+        ExternalUserFormPage add = openAddForm();
+        assumeTrue(add.onAddScreen(), "The add form's header reads \"" + add.header() + "\"");
+        assertLeavesInOneTap(add, "ADD EXTERNAL USER");
+
+        String name = fixtureName("Back");
+        String email = fixtureEmail();
+        ExternalUserFormPage f = openAddForm();
+        assumeTrue(f.setFullName(name) && f.setEmail(email)
+                        && f.chooseUserType(ExternalUserFormPage.TYPE_VENDOR) && f.save(),
+                "Could not save a fixture user for the detail and update screens");
+        sleep(4000);
+        assumeTrue(!f.stillOpen(), "The fixture user was refused: " + f.visibility());
+        try {
+            ExternalUserListPage list = new ExternalUserListPage(driver);
+            assumeTrue(list.isLoaded(Duration.ofSeconds(20)) && list.search(FIXTURE_PREFIX),
+                    "The listing did not come back");
+            assumeTrue(list.viewDetails(name), "View More was not available on \"" + name + "\"");
+            ExternalUserFormPage detail = new ExternalUserFormPage(driver);
+            boolean detailOpen = detail.isLoaded(Duration.ofSeconds(15)) && detail.onDetailScreen();
+            if (!detailOpen) backToModule();
+            assumeTrue(detailOpen, "The detail screen did not open; header \"" + detail.header() + "\"");
+            // [WEB EXT-01b] also checked here, so it has a standalone run: the stored email is
+            // exactly what was typed, all lower case.
+            String shown = String.valueOf(detail.email()).trim();
+            assertEquals(email, shown, "EXT-01b: saved \"" + email + "\", detail shows \"" + shown + "\"");
+            assertLeavesInOneTap(detail, "USER DETAILS");
+
+            ExternalUserListPage again = new ExternalUserListPage(driver);
+            assumeTrue(again.isLoaded(Duration.ofSeconds(20)) && again.search(FIXTURE_PREFIX),
+                    "The listing did not come back");
+            assumeTrue(again.edit(name), "Edit not offered on \"" + name + "\"");
+            ExternalUserFormPage update = new ExternalUserFormPage(driver);
+            // Identified by its "Update" button, not its header: the edit form's header reads
+            // "ADD EXTERNAL USER", because initView() sets the title before handleIntentData()
+            // sets isEdit (AddUpdateExternalUserPage.kt:177-180, :190-192) — a separate app bug.
+            boolean updateOpen = update.isLoaded(Duration.ofSeconds(15))
+                    && "Update".equalsIgnoreCase(String.valueOf(update.saveLabel()).trim());
+            if (!updateOpen) backToModule();
+            assumeTrue(updateOpen, "The update form did not open; header \"" + update.header()
+                    + "\", button \"" + update.saveLabel() + "\"");
+            System.out.println(">>> EU-43 note: the update form's header reads \"" + update.header() + "\"");
+            assertLeavesInOneTap(update, "UPDATE EXTERNAL USER");
+        } finally {
+            deleteFixture(name);
+        }
+    }
+
+    /** Deletes one fixture user by name; never throws (finally blocks). */
+    private void deleteFixture(String name) {
+        try {
+            backToModule();
+            ExternalUserListPage l = new ExternalUserListPage(driver);
+            if (l.isLoaded(Duration.ofSeconds(15)) && l.search(FIXTURE_PREFIX) && l.delete(name)
+                    && l.deleteConfirmShown(Duration.ofSeconds(6))) {
+                l.confirmDelete();
+                System.out.println(">>> fixture \"" + name + "\" deleted");
+            } else {
+                System.out.println("!!! fixture \"" + name + "\" not deleted — EU-38 sweeps ZL AUTO users");
+            }
+            l.clearSearch();
+        } catch (Throwable t) {
+            System.out.println("!!! fixture cleanup failed: " + t);
+        }
+    }
+
+    private void assertLeavesInOneTap(ExternalUserFormPage form, String screen) {
+        // How many AddUpdateExternalUserPage instances are on the back stack. Two would mean
+        // the screen was opened twice (a test artefact), not that the chevron needs two taps.
+        int stacked = stackedFormScreens();
+        String tag = screen.toLowerCase().replaceAll("[^a-z]+", "-");
+        boolean kb = keyboardShown();
+        screenshot("eu43-" + tag + "-before");
+        assertTrue(form.tapToolbarBack(), "The toolbar back chevron could not be tapped on " + screen);
+        sleep(2000);
+        screenshot("eu43-" + tag + "-after-tap1");
+        System.out.println(">>> EU-43 " + screen + ": keyboardBefore=" + kb + " activityAfter=" + resumedActivity());
+        boolean listing = new ExternalUserListPage(driver).isLoaded(Duration.ofSeconds(5));
+        String header = String.valueOf(new ExternalUserFormPage(driver).header()).trim();
+        boolean stillThere = new ExternalUserFormPage(driver).isLoaded(Duration.ofSeconds(1));
+        String second = "";
+        if (!listing) {
+            // Diagnose before recovering: does a SECOND tap leave (the EXT-02 symptom), or is
+            // the screen stuck?
+            boolean tapped2 = new ExternalUserFormPage(driver).tapToolbarBack();
+            sleep(2000);
+            screenshot("eu43-" + tag + "-after-tap2");
+            boolean listing2 = new ExternalUserListPage(driver).isLoaded(Duration.ofSeconds(5));
+            second = " A second tap " + (tapped2 ? (listing2 ? "DID leave" : "did not leave either") : "was not possible") + ".";
+            if (!listing2) backToModule();     // never leave the next step stranded
+        }
+        System.out.println(">>> EU-43 " + screen + ": stacked=" + stacked + " oneTapLeft=" + (listing && !stillThere) + second);
+        assumeTrue(stacked <= 1, screen + " was on the back stack " + stacked
+                + " times before the tap, so one tap could only uncover the other copy — a test artefact, not EXT-02");
+        assertTrue(listing && !stillThere,
+                "EXT-02: one tap on the back chevron did not leave " + screen
+                        + " (listing shown=" + listing + ", header now \"" + header + "\")."
+                        + second + " Back-stack copies of the screen before the tap: "
+                        + (stacked < 0 ? "unknown" : String.valueOf(stacked)) + ".");
+    }
+
+    private boolean keyboardShown() {
+        try { return driver.isKeyboardShown(); } catch (Exception e) { return false; }
+    }
+
+    /** Count of AddUpdateExternalUserPage records in the activity stack, via adb; -1 if unknown. */
+    private int stackedFormScreens() {
+        try {
+            String udid = System.getenv().getOrDefault("ZILLIT_UDID", "");
+            String sdk = System.getenv().getOrDefault("ANDROID_HOME",
+                    System.getProperty("user.home") + "/Library/Android/sdk");
+            java.util.List<String> cmd = new java.util.ArrayList<>(List.of(sdk + "/platform-tools/adb"));
+            if (!udid.isBlank()) { cmd.add("-s"); cmd.add(udid); }
+            cmd.addAll(List.of("shell", "dumpsys", "activity", "activities"));
+            ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);
+            pb.environment().put("ADB_MDNS", "0");
+            Process pr = pb.start();
+            String out = new String(pr.getInputStream().readAllBytes());
+            pr.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+            int n = 0;
+            for (String line : out.split("\n")) {
+                if (line.contains("Hist") && line.contains("AddUpdateExternalUserPage")) n++;
+            }
+            return n;
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    @Test
+    @Order(44)
+    @DisplayName("EU-42 \"Add More Information\" refuses titles that repeat the form's own fields [WEB EXT-01a]")
+    void reservedInfoTitlesRefused() {
+        // [WEB EXT-01a] The dialog (UIExtentions.showDialogWithMultipleEditBox) checks only
+        // that title and description are non-empty, so every reserved title is expected to
+        // be accepted today — this case then FAILS, naming EXT-01. Nothing is ever saved:
+        // the form is left with back.
+        ExternalUserFormPage f = openAddForm();
+        java.util.List<String> accepted = new java.util.ArrayList<>();
+        try {
+            for (String title : RESERVED_TITLES) {
+                int before = f.moreInfoTitles().size();
+                assumeTrue(f.addMoreInfo(), "\"Add More Information\" could not be tapped");
+                assumeTrue(f.moreInfoDialogShown(), "The Add More Information dialog did not open");
+                boolean closed = f.submitMoreInfo(title, "x");
+                if (!closed) {
+                    // Refused: the dialog stayed. Cancel it (never BACK twice into the list).
+                    try {
+                        for (var b : driver.findElements(byAppId("leftButton"))) {
+                            if (b.isDisplayed()) { b.click(); break; }
+                        }
+                    } catch (Exception ignored) { }
+                    sleep(800);
+                }
+                List<String> rows = f.moreInfoTitles();
+                System.out.println(">>> EU-42 '" + title + "' dialogClosed=" + closed + " rows=" + rows);
+                // The dialog closing on Add IS the acceptance: a refusal keeps it open with an
+                // error on the field (as it does for an empty title). The row count is only
+                // logged — recMoreField sits near the bottom and later rows can be off screen.
+                if (closed) accepted.add(title);
+            }
+        } finally {
+            closeFormDiscarding();
+        }
+        assertTrue(accepted.isEmpty(),
+                "EXT-01: \"Add More Information\" accepted titles that repeat the form's own"
+                        + " fields: " + accepted + ". The dialog only checks for an empty title"
+                        + " (UIExtentions.kt showDialogWithMultipleEditBox), so a user can carry"
+                        + " a second \"Full Name\" or \"Email\" with different content.");
+    }
+
+    /** Backs out of the add form (and any dialog over it) to the listing, saving nothing. */
+    private void closeFormDiscarding() {
+        for (int i = 0; i < 4; i++) {
+            if (new ExternalUserListPage(driver).isLoaded(Duration.ofSeconds(2))) return;
+            if (!new ExternalUserFormPage(driver).isLoaded(Duration.ofSeconds(1))
+                    && !new ExternalUserFormPage(driver).moreInfoDialogShown()) break;
+            try { driver.navigate().back(); } catch (Exception ignored) { }
+            sleep(1200);
+        }
+        backToModule();
     }
 
     @Test

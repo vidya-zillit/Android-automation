@@ -313,6 +313,20 @@ public class MapTypeManagerPage extends BasePage {
         }
     }
 
+    /**
+     * Scrolls the add-type sheet's content up by about a third of the screen, so the
+     * subtype row (built after the emoji grid) comes on screen on a short display.
+     */
+    public void scrollSheetContentUp() {
+        try {
+            hideKeyboard();
+            org.openqa.selenium.Dimension size = driver.manage().window().getSize();
+            int x = size.getWidth() / 2;
+            swipe(x, (int) (size.getHeight() * 0.75), x, (int) (size.getHeight() * 0.42));
+            pause(800);
+        } catch (Exception ignored) { }
+    }
+
     /** What is left sitting in the subtype input. Empty after an accepted add. */
     public String subtypeFieldText() {
         try {

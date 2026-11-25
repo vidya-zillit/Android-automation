@@ -38,11 +38,27 @@ public class DriveItemMenuPage extends BasePage {
     public String favoriteLabel() { return text("tvFavorite"); }
 
     public boolean tapFavorite() { return click("menuFavorite"); }
+
+    /** Folder Details sheet (bottom_sheet_folder_details.xml) fields. */
+    public String detailsOwner()        { return text("tvOwner"); }
+    public String detailsAccessHeader() { return text("tvAccessHeader"); }
+    public boolean detailsFavoritePill() { return isVisible("favoritePill", Duration.ofSeconds(2)); }
+    public String detailsFavoriteText()  { return text("favoritePill"); }
+    public boolean detailsTagsShown() {
+        return isVisible("tvNoTags", Duration.ofSeconds(2)) || isVisible("tagChipGroup", Duration.ofSeconds(1));
+    }
+    public boolean detailsActivityShown() {
+        return isVisible("rvActivity", Duration.ofSeconds(2)) || isVisible("tvNoActivity", Duration.ofSeconds(1));
+    }
     public boolean tapShare()    { return click("menuShare"); }
     public boolean tapMove()     { return click("menuMove"); }
     public boolean tapEditInfo() { return click("menuRename"); }
     public boolean tapDetails()  { return click("menuDetails"); }
     public boolean tapDelete()   { return click("menuDelete"); }
+
+    /** Folder-only "Download as ZIP" (f9a3bf916): own folders, or a folder with can_download. */
+    public boolean hasDownloadZip() { return isVisible("menuDownloadZip", Duration.ofSeconds(2)); }
+    public boolean tapDownloadZip() { return click("menuDownloadZip"); }
 
     public boolean dismiss() {
         try { driver.navigate().back(); Thread.sleep(900); return true; }

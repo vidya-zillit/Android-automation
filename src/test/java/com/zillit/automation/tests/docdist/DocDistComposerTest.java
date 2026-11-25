@@ -1,6 +1,8 @@
 package com.zillit.automation.tests.docdist;
 
+import com.zillit.automation.core.TestEmails;
 import com.zillit.automation.core.TestOrder;
+import com.zillit.automation.pages.common.ConfirmPopupPage;
 import com.zillit.automation.pages.docdist.DocDistComposerPage;
 import com.zillit.automation.pages.docdist.DocDistLibraryPage;
 import com.zillit.automation.pages.docdist.DocDistPickerPage;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.Duration;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -47,8 +50,8 @@ class DocDistComposerTest extends DocDistBaseTest {
 
     private static final String DOC = "zl_dd_doc.pdf";
     private static final String FOLDER = "QA_DDC_" + (System.currentTimeMillis() % 100000);
-    private static final String TO_1 = "qa.dd.one@example.com";
-    private static final String TO_2 = "qa.dd.two@example.com";
+    private static final String TO_1 = TestEmails.recipient();
+    private static final String TO_2 = TestEmails.self();
     private static final String BAD = "not-an-email";
     private static final String SUBJECT = "QA DD composer " + (System.currentTimeMillis() % 100000);
 
@@ -95,6 +98,9 @@ class DocDistComposerTest extends DocDistBaseTest {
     private void leaveComposer(DocDistComposerPage composer) {
         try { composer.tapCancel(); } catch (Exception ignored) { }
         sleep(1200);
+        // A dirty composer now asks "Keep this email as a draft?" — answer Discard so no
+        // QA draft is left in Drafts (Keep draft would save one).
+        composer.discardDraftIfAsked(Duration.ofSeconds(2));
         new DocDistLibraryPage(driver).returnToRoot();
     }
 
@@ -344,35 +350,47 @@ class DocDistComposerTest extends DocDistBaseTest {
 
     // ==================== F-26 · cancel ====================
 
-    @Test
-    @Order(9)
-    @DisplayName("F-26: Cancel leaves the composer (current build: straight popBackStack, no confirm)")
-    void cancelCloses() {
-        DocDistComposerPage composer = openComposer();
-        assumeTrue(composer.addTo(TO_1), "Could not dirty the draft");
-
-        // Assert the OUTCOME (we left the composer), not the tap's return value. The
-        // previous version failed on `assertTrue(tapCancel())` while the screen dump
-        // showed the library — i.e. Cancel had plainly worked and only the click helper
-        // reported false. A test that can fail when the user-visible behaviour is correct
-        // is worse than no test.
+    /**
+     * Taps Cancel and, if the tap left the composer standing with no prompt, falls back to
+     * system Back (same goBack() path). Returns whether a confirmation popup appeared.
+     */
+    private boolean cancelAndDetectPrompt(DocDistComposerPage composer) {
         boolean tapped = composer.tapCancel();
         System.out.println(">>> cancel tap reported " + tapped);
-        if (!composer.isOpen(Duration.ofSeconds(2))) {
-            System.out.println(">>> composer already closed");
-        } else {
-            try { driver.navigate().back(); } catch (Exception ignored) { }
-        }
         sleep(1500);
+        ConfirmPopupPage confirm = new DocDistLibraryPage(driver).confirmPopup();
+        if (confirm.isShown(Duration.ofSeconds(2))) return true;
+        if (composer.isOpen(Duration.ofSeconds(2))) {
+            try { driver.navigate().back(); } catch (Exception ignored) { }
+            sleep(1500);
+        }
+        return confirm.isShown(Duration.ofSeconds(2));
+    }
 
-        // Source truth: goBack() → popBackStack, no discard dialog. If a confirm ever
-        // appears here, ConfirmPopupPage in clearBlockingPopup (next @BeforeEach)
-        // declines it — but record it, because it would mean the behaviour CHANGED.
-        boolean confirmShown = new DocDistLibraryPage(driver).confirmPopup()
-                .isShown(Duration.ofSeconds(2));
-        System.out.println(">>> discard confirm shown=" + confirmShown
-                + " (source has none as of Aug 2026)");
-        if (confirmShown) {
+    /** Leaves a composer for good, confirming a discard prompt if the build shows one. */
+    private void leaveComposerDiscarding(DocDistComposerPage composer) {
+        try { composer.tapCancel(); } catch (Exception ignored) { }
+        sleep(1200);
+        // Discard (neutral button) when the build asks "Keep this email as a draft?";
+        // accepting would KEEP a QA draft. Older builds with a two-button confirm fall back.
+        if (!composer.discardDraftIfAsked(Duration.ofSeconds(2))) {
+            new DocDistLibraryPage(driver).confirmPopup().acceptIfShown(Duration.ofSeconds(2));
+        }
+        new DocDistLibraryPage(driver).returnToRoot();
+    }
+
+    @Test
+    @Order(9)
+    @DisplayName("F-26a: Cancel on an untouched composer leaves at once")
+    void cancelEmptyCloses() {
+        DocDistComposerPage composer = openComposer();
+
+        // Assert the OUTCOME (we left the composer), not the tap's return value: the click
+        // helper has reported false while the screen dump showed the library.
+        boolean prompt = cancelAndDetectPrompt(composer);
+        System.out.println(">>> confirm shown on an untouched composer = " + prompt);
+        if (prompt) {
+            // Nothing was typed; a build that still asks is over-cautious, not wrong.
             new DocDistLibraryPage(driver).confirmPopup().accept(Duration.ofSeconds(2));
         }
         DocDistComposerPage after = new DocDistComposerPage(driver);
@@ -383,10 +401,212 @@ class DocDistComposerTest extends DocDistBaseTest {
         screenshot("ddc-cancelled");
     }
 
-    // ==================== cleanup ====================
-
+    /**
+     * Known bug DD-24 (sheet: Android "In progress"): goBack() → leave() →
+     * popBackStack() with no dirty check (Zillit-Android
+     * {@code docdistribution/ui/composer/EmailComposerFragment.kt:1140-1152}; Cancel at
+     * :605, system Back at :167), so typed content is lost with no prompt and no draft.
+     * Correct behaviour: either a discard prompt, or Compose reopens with the draft.
+     * This case FAILS until DD-24 is fixed.
+     */
     @Test
     @Order(10)
+    @DisplayName("F-26 [QA DD-24]: Cancel with typed content asks first or keeps the draft")
+    void cancelWithContentPromptsOrKeepsDraft() {
+        String draftSubject = "QA DD-24 draft " + (System.currentTimeMillis() % 100000);
+        DocDistComposerPage composer = openComposer();
+        assumeTrue(composer.setSubject(draftSubject), "Could not type a subject");
+        assumeTrue(composer.addTo(TO_1), "Could not add a To recipient");
+        assumeTrue(composer.subject().contains(draftSubject), "The subject did not take the typed text");
+
+        boolean prompt = cancelAndDetectPrompt(composer);
+        System.out.println(">>> discard prompt shown = " + prompt);
+        screenshot("ddc-dd24-after-cancel");
+
+        if (prompt) {
+            // Fixed build, prompt flavour: declining must keep the user in the composer
+            // with what they typed.
+            ConfirmPopupPage confirm = new DocDistLibraryPage(driver).confirmPopup();
+            System.out.println(">>> prompt text='" + confirm.text() + "'");
+            confirm.cancel(Duration.ofSeconds(3));
+            DocDistComposerPage still = new DocDistComposerPage(driver);
+            boolean open = still.isOpen(Duration.ofSeconds(5));
+            String kept = open ? still.subject() : "";
+            if (open) leaveComposerDiscarding(still);
+            assertTrue(open && kept != null && kept.contains(draftSubject),
+                    "[QA DD-24] Declining the discard prompt should keep the composer open with the typed "
+                            + "subject. open=" + open + " subject='" + kept + "'");
+            return;
+        }
+
+        // No prompt: the composer must have closed AND kept the draft for next time.
+        assumeTrue(!new DocDistComposerPage(driver).isOpen(Duration.ofSeconds(3)),
+                "Neither Cancel nor Back closed the composer — cannot judge the draft");
+        assumeTrue(new DocDistLibraryPage(driver).returnToRoot(), "Could not return to the library root");
+        DocDistComposerPage reopened = openComposer();
+        String subjectAfter = reopened.subject();
+        List<String> toAfter = reopened.chipTexts("dd_to_chips");
+        System.out.println(">>> reopened subject='" + subjectAfter + "' to=" + toAfter);
+        screenshot("ddc-dd24-reopened");
+        leaveComposerDiscarding(reopened);
+
+        assertTrue(subjectAfter != null && subjectAfter.contains(draftSubject),
+                "[QA DD-24] Cancel with a typed subject closed the composer with no prompt, and "
+                        + "Compose reopened without the draft (subject='" + subjectAfter + "', to="
+                        + toAfter + "). EmailComposerFragment.kt:1140-1152 goBack() -> leave() -> "
+                        + "popBackStack() has no dirty check.");
+    }
+
+    // ==================== cleanup ====================
+
+    // ==================== WEB gap cases (2026-11-23) ====================
+
+    /**
+     * [WEB L173] Preview's To line lists an invalid address. Sheet DD-26: Preview joined
+     * every chip, valid or not, while send() emails only the valid ones.
+     */
+    @Test
+    @Order(11)
+    @DisplayName("F-27 [WEB DD-26]: Preview's To lists only the valid addresses")
+    void previewToExcludesInvalid() {
+        DocDistComposerPage composer = openComposer();
+        try {
+            assumeTrue(composer.addTo(TO_1), "Could not add the valid recipient");
+            assumeTrue(composer.addTo(BAD), "Could not add the invalid address");
+            assumeTrue(composer.chipCount("dd_to_chips") >= 2, "Both chips should be in To");
+            assumeTrue(composer.setSubject(SUBJECT), "Could not set the subject");
+            assumeTrue(composer.isPreviewEnabled(), "Preview should be enabled with one valid recipient");
+            assumeTrue(composer.tapPreview(), "Could not tap Preview");
+            assumeTrue(composer.isPreviewStage(Duration.ofSeconds(10)), "Preview stage did not show");
+            String to = composer.previewTo();
+            System.out.println(">>> F-27 preview To='" + to + "'");
+            screenshot("ddc-f27-preview");
+            assertTrue(to != null && to.contains(TO_1), "Preview To should list the valid recipient, got '" + to + "'");
+            assertFalse(to.contains(BAD), "[DD-26] Preview To must not list the invalid address '" + BAD
+                    + "' (it is never emailed), got '" + to + "'");
+        } finally {
+            composer.leaveDiscarding();
+            new DocDistLibraryPage(driver).returnToRoot();
+        }
+    }
+
+    /**
+     * [WEB L178, F10 L270] Sheet DD-28: "Distribute folder" is the heading for a whole
+     * folder (the folder row's Send), and only for that.
+     */
+    @Test
+    @Order(12)
+    @DisplayName("F-28 [WEB DD-28]: a folder row's Send opens 'Distribute folder' with its files attached")
+    void folderRowSendIsDistributeFolder() {
+        assumeTrue(seeded, "The seed case must have created the folder with a document");
+        DocDistLibraryPage lib = new DocDistLibraryPage(driver);
+        DocDistComposerPage composer = new DocDistComposerPage(driver);
+        try {
+            assumeTrue(lib.search(FOLDER), "Could not search for the seed folder");
+            sleep(1500);
+            assumeTrue(lib.tapRowSend(FOLDER), "Could not tap the folder row's Send");
+            assumeTrue(composer.isOpen(Duration.ofSeconds(20)), "The composer did not open");
+            sleep(1500);
+            String title = composer.headerTitle();
+            int attachments = composer.attachmentCount();
+            System.out.println(">>> F-28 title='" + title + "' attachments=" + composer.attachmentNames());
+            screenshot("ddc-f28");
+            assertTrue("Distribute folder".equalsIgnoreCase(title.trim()),
+                    "A folder's Send should open 'Distribute folder', got '" + title + "'");
+            assertTrue(attachments >= 1, "The folder's files should be attached, got " + composer.attachmentNames());
+        } finally {
+            if (composer.isOpen(Duration.ofSeconds(1))) composer.leaveDiscarding();
+            lib.returnToRoot();
+            lib.clearSearch();
+        }
+    }
+
+    /**
+     * Sheet DD-28, the other half: Compose and Share documents INSIDE a folder used to
+     * inherit "Distribute folder" because the open folder's name was always passed on.
+     */
+    @Test
+    @Order(13)
+    @DisplayName("F-29 [WEB DD-28]: Compose and Share documents inside a folder are titled 'Compose email'")
+    void composeInsideFolderIsComposeEmail() {
+        assumeTrue(seeded, "The seed case must have created the folder with a document");
+        DocDistLibraryPage lib = new DocDistLibraryPage(driver);
+        DocDistComposerPage composer = new DocDistComposerPage(driver);
+        String composeTitle = "";
+        String shareTitle = "";
+        List<String> shareAttachments = List.of();
+        try {
+            assumeTrue(lib.waitForItem(FOLDER, Duration.ofSeconds(20)), "Seed folder missing");
+            assumeTrue(lib.openItem(FOLDER), "Could not open the seed folder");
+            sleep(2000);
+            assumeTrue(lib.isInFolder(), "Should be inside the seed folder");
+
+            boolean opened = lib.openCompose() && composer.isOpen(Duration.ofSeconds(15));
+            assumeTrue(opened, "Compose is not reachable inside the folder on this build");
+            composeTitle = composer.headerTitle();
+            composer.leaveDiscarding();
+            sleep(1200);
+            assumeTrue(lib.isInFolder(), "Should be back in the seed folder after Compose");
+            assumeTrue(lib.waitForItem(DOC, Duration.ofSeconds(20)), "Seed document missing");
+            assumeTrue(lib.selectRow(DOC), "Could not tick the document");
+            assumeTrue(lib.openSelectionActions(), "Could not open the selection menu");
+            sleep(1000);
+            assumeTrue(lib.tapMenuItem("Share documents"), "No 'Share documents' in the selection menu");
+            assumeTrue(composer.isOpen(Duration.ofSeconds(15)), "Share documents did not open the composer");
+            sleep(1000);
+            shareTitle = composer.headerTitle();
+            shareAttachments = composer.attachmentNames();
+            System.out.println(">>> F-29 compose title='" + composeTitle + "' share title='" + shareTitle
+                    + "' attachments=" + shareAttachments);
+            screenshot("ddc-f29");
+            // The toolbar renders its heading in capitals ("COMPOSE EMAIL"), so compare
+            // case-insensitively; the bug was the WORDS ("Distribute folder").
+            assertTrue("Compose email".equalsIgnoreCase(composeTitle.trim()),
+                    "[DD-28] Compose inside a folder should be titled 'Compose email', got '" + composeTitle + "'");
+            assertTrue("Compose email".equalsIgnoreCase(shareTitle.trim()),
+                    "[DD-28] Share documents inside a folder should be titled 'Compose email', got '" + shareTitle + "'");
+            assertTrue(shareAttachments.stream().anyMatch(n -> n.contains("zl_dd_doc")),
+                    "Share documents should attach the ticked file, got " + shareAttachments);
+        } finally {
+            if (composer.isOpen(Duration.ofSeconds(1))) composer.leaveDiscarding();
+            if (lib.isSelectionMode()) lib.clearSelection();
+            lib.returnToRoot();
+        }
+    }
+
+    /**
+     * [WEB L125] Sheet DD-30, the Attach half: picker rows showed name, size and date with
+     * no folder, so same-named files from different folders could not be told apart.
+     */
+    @Test
+    @Order(14)
+    @DisplayName("F-30 [WEB DD-30]: Attach from library names each file's folder")
+    void pickerRowsNameTheirFolder() {
+        assumeTrue(seeded, "Needs the seeded library");
+        DocDistComposerPage composer = openComposer();
+        DocDistPickerPage picker = new DocDistPickerPage(driver);
+        try {
+            assumeTrue(composer.openAttachFromLibrary(), "Could not tap attach-from-library");
+            assumeTrue(picker.isOpen(Duration.ofSeconds(15)), "The document picker did not open");
+            picker.search(DOC);
+            sleep(1500);
+            List<String> metas = picker.metasOf(DOC);
+            System.out.println(">>> F-30 metas of " + DOC + " = " + metas);
+            screenshot("ddc-f30");
+            assumeTrue(!metas.isEmpty(), "The seeded document is not listed in the picker");
+            assertTrue(metas.stream().anyMatch(m -> m.startsWith(FOLDER)),
+                    "[DD-30] The picker row should lead with its folder '" + FOLDER + "', got " + metas);
+        } finally {
+            try { driver.navigate().back(); } catch (Exception ignored) { }
+            sleep(1000);
+            DocDistComposerPage back = new DocDistComposerPage(driver);
+            if (back.isOpen(Duration.ofSeconds(3))) back.leaveDiscarding();
+            new DocDistLibraryPage(driver).returnToRoot();
+        }
+    }
+
+    @Test
+    @Order(20)
     @DisplayName("CLEANUP: the seeded folder (and its file) delete")
     void cleanup() {
         DocDistLibraryPage lib = new DocDistLibraryPage(driver);

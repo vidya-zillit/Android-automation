@@ -1,5 +1,6 @@
 package com.zillit.automation.tests.docdist;
 
+import com.zillit.automation.core.TestEmails;
 import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.common.ConfirmPopupPage;
 import com.zillit.automation.pages.docdist.DocDistComposerPage;
@@ -36,7 +37,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class DocDistSendTest extends DocDistBaseTest {
 
     /** RFC 2606 reserved domain — deliverable nowhere, safe to send to. */
-    private static final String TO = "qa.dd.send@example.com";
+    private static final String TO = TestEmails.recipient();
     /** Unique per run, so History can be searched for exactly this distribution. */
     private static final String SUBJECT = "QA_DD_SEND_" + (System.currentTimeMillis() % 1000000);
 

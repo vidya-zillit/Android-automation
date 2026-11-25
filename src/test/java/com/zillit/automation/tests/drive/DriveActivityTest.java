@@ -2,6 +2,7 @@ package com.zillit.automation.tests.drive;
 
 import com.zillit.automation.core.BaseTest;
 import com.zillit.automation.core.TestOrder;
+import com.zillit.automation.core.ReasonLogger;
 import com.zillit.automation.pages.common.BottomNavPage;
 import com.zillit.automation.pages.drive.CreateFolderSheet;
 import com.zillit.automation.pages.drive.DriveActivityPage;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.Duration;
@@ -32,6 +34,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * {@link DriveActivityPage#isOpen} insists on a rendered {@code tvAction} row or the
  * "No recent activity" text — the only markers unique to this screen.
  */
+@ExtendWith(ReasonLogger.class)
 @Order(TestOrder.DRIVE_ACTIVITY)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class DriveActivityTest extends BaseTest {
@@ -80,7 +83,7 @@ class DriveActivityTest extends BaseTest {
             if (!tools.isLoaded(Duration.ofSeconds(15))) { sleep(2000); continue; }
             tools.searchTools("Drive");
             sleep(2000);
-            if (tools.isModuleListed("Drive", Duration.ofSeconds(6)) && tools.openModule("Drive")) {
+            if (tools.isModuleListed("Drive", Duration.ofSeconds(6)) && tools.openModuleContaining("Drive")) {
                 // 40s, not 20s: on a loaded emulator Drive's first open takes longer than
                 // that, and the retry then pressed Tools again — cancelling a launch that
                 // was about to succeed, over and over.
@@ -261,6 +264,26 @@ class DriveActivityTest extends BaseTest {
         end.showFolders();
         assertTrue(end.isListReadable(), "Drive should be readable after cleanup");
         System.out.println(">>> folders after cleanup = " + end.allItemNamesScrolled());
+    }
+
+    // WEB GAP (web-e2e/gaps/drive.md M33, L475): an upload is recorded in the log.
+    private static final String G_UP = "QA_ActUp_" + (System.currentTimeMillis() % 100000) + ".pdf";
+
+    @Test
+    @Order(5)
+    @DisplayName("[WEB L475] M-4: uploading a file is recorded in the Activity log")
+    void gUploadRecorded() {
+        var f = new com.zillit.automation.pages.drive.DriveFlows(driver);
+        assumeTrue(f.uploadAs("zl_drive_doc.pdf", G_UP), "Could not upload " + G_UP);
+        try {
+            DriveActivityPage log = openActivityLog();
+            boolean seen = log.waitForEntryContaining(G_UP, Duration.ofSeconds(30));
+            System.out.println(">>> activity has upload=" + seen);
+            log.back();
+            assertTrue(seen, "The Activity log should list the upload of " + G_UP);
+        } finally {
+            f.purge(G_UP, false);
+        }
     }
 
     private void sleep(long ms) {

@@ -97,6 +97,48 @@ public class CreateFolderSheet extends BasePage {
         }
     }
 
+    /** Specific Users: search a member and tick their checkbox (role spinner defaults to Viewer). */
+    public boolean tickMember(String name) {
+        try {
+            var search = driver.findElement(byId("etSearchMembers"));
+            search.click(); search.clear(); search.sendKeys(name);
+            hideKeyboardIfShown();
+            Thread.sleep(2500);
+            var boxes = driver.findElements(io.appium.java_client.AppiumBy.xpath(
+                    "//*[@resource-id='" + appPackage() + ":id/rvMembers']//android.widget.TextView[@text='" + name
+                            + "']/ancestor::*[.//android.widget.CheckBox][1]//android.widget.CheckBox"));
+            if (boxes.isEmpty()) boxes = driver.findElements(io.appium.java_client.AppiumBy.xpath(
+                    "//*[@resource-id='" + appPackage() + ":id/rvMembers']//android.widget.CheckBox"));
+            if (boxes.isEmpty()) return false;
+            boxes.get(0).click();
+            Thread.sleep(1500);
+            // The row re-renders after the tick (a role spinner is added), so read the sheet's
+            // own counter instead of the now-stale checkbox.
+            String count = text("tvSelectedCount");
+            return count.startsWith("1 ");
+        } catch (Exception e) { return false; }
+    }
+
+    public String selectedCountText() { return text("tvSelectedCount"); }
+
+    /** The default mode is Project Users; true when Specific Users is pre-selected. */
+    public boolean specificModeChecked() {
+        try {
+            var els = driver.findElements(byId("rbModeSpecific"));
+            return !els.isEmpty() && "true".equals(els.get(0).getAttribute("checked"));
+        } catch (Exception e) { return false; }
+    }
+
+    public boolean anyModeChecked() {
+        try {
+            for (String id : new String[]{"rbModeProject", "rbModeSpecific"}) {
+                var els = driver.findElements(byId(id));
+                if (!els.isEmpty() && "true".equals(els.get(0).getAttribute("checked"))) return true;
+            }
+        } catch (Exception ignored) { }
+        return false;
+    }
+
     public boolean memberSearchShown() {
         return isVisible("etSearchMembers", Duration.ofSeconds(4))
                 || isVisible("rvMembers", Duration.ofSeconds(2));
@@ -104,9 +146,38 @@ public class CreateFolderSheet extends BasePage {
 
     // ---------------- actions ----------------
 
-    public boolean create() { return click("btnCreate"); }
+    /**
+     * Taps Create. The sheet is one ScrollView, so with Specific Users (member list shown)
+     * the button sits below the fold — hide the keyboard and scroll it into view first.
+     */
+    public boolean create() {
+        hideKeyboardIfShown();
+        if (click("btnCreate")) return true;
+        try {
+            driver.findElement(io.appium.java_client.AppiumBy.androidUIAutomator(
+                    "new UiScrollable(new UiSelector().className(\"android.widget.ScrollView\"))"
+                            + ".scrollIntoView(new UiSelector().resourceIdMatches(\".*:id/btnCreate\"))"));
+        } catch (WebDriverException ignored) { }
+        return click("btnCreate");
+    }
     public boolean cancel() { return click("btnCancel"); }
-    public boolean close()  { return click("btnClose"); }
+    /** Closes the sheet (keyboard first; Back as the fallback) and reports whether it went. */
+    public boolean close() {
+        hideKeyboardIfShown();
+        if (!click("btnClose")) {
+            try {
+                driver.findElement(io.appium.java_client.AppiumBy.androidUIAutomator(
+                        "new UiScrollable(new UiSelector().className(\"android.widget.ScrollView\"))"
+                                + ".scrollIntoView(new UiSelector().resourceIdMatches(\".*:id/btnClose\"))"));
+            } catch (WebDriverException ignored) { }
+            if (!click("btnClose")) try { driver.navigate().back(); } catch (WebDriverException ignored) { }
+        }
+        for (int i = 0; i < 10; i++) {
+            if (!isVisible("etFolderName", Duration.ofMillis(300))) return true;
+            try { Thread.sleep(300); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }
+        return false;
+    }
 
     /** Fills a name and submits; returns true when the sheet actually closed. */
     public boolean createNamed(String name) {

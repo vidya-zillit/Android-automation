@@ -98,6 +98,13 @@ class MapZoneCrudTest extends MapBaseTest {
     @DisplayName("Z-05 Saving a zone with no name is rejected")
     void zoneNoNameRejected() {
         MapZonePage zones = openZoneForm();
+        // [WEB map.md:549, map.md:1194] The form PRE-FILLS "<city> Zone"
+        // (StudioZoneFormFragment:131-132). Without clearing it this case never had an
+        // empty name — it only stayed open because no centre was set (Z-06's guard).
+        assumeTrue(zones.clearZoneName(), "Could not clear the pre-filled zone name");
+        assumeTrue(String.valueOf(zones.zoneNameValue()).isBlank()
+                        || String.valueOf(zones.zoneNameValue()).startsWith("e.g.,"),
+                "The zone name did not clear: \"" + zones.zoneNameValue() + "\"");
         assumeTrue(zones.save(), "Save not available");
         sleep(1500);
         assertTrue(zones.formStillOpen(),
@@ -127,6 +134,16 @@ class MapZoneCrudTest extends MapBaseTest {
     @DisplayName("Z-08 A zero radius is rejected")
     void zoneZeroRadiusRejected() {
         MapZonePage zones = openZoneForm();
+        // [WEB map.md:843] The no-centre guard runs BEFORE the radius check
+        // (StudioZoneFormFragment.saveZone), so without a centre this case only ever
+        // proved Z-06 again. Resolve a centre through intersection mode first.
+        assumeTrue(zones.chooseIntersectionMode() && zones.intersectionFieldsShown(),
+                "Intersection mode not offered");
+        assumeTrue(zones.setStreet1(System.getProperty("zillit.zoneStreet1", "Castro Street"))
+                && zones.setStreet2(System.getProperty("zillit.zoneStreet2", "El Camino Real")),
+                "Could not set the street names");
+        assumeTrue(zones.findIntersection() && firstNumber(zones.centerLat()) != null,
+                "No centre resolved — Z-07b explains why");
         assumeTrue(zones.setZoneName(fixtureName("Zone")), "Could not type a zone name");
         assumeTrue(zones.setCustomRadius("0"), "Custom radius field not available");
         assumeTrue(zones.save(), "Save not available");

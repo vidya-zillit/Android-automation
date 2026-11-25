@@ -249,6 +249,98 @@ public class ComposeEmailPage extends BasePage {
             driver.findElement(byId(btnId)).click();
             return true;
         } catch (WebDriverException e) {
+            // The toolbar is a HorizontalScrollView (format_toolbar, activity_compose.xml:520)
+            // of 12 x 36dp buttons plus dividers — wider than a phone screen, so the last
+            // ones (btn_bg_color, btn_font_family, btn_clear_format) start OFF-screen and are
+            // not in the accessibility tree until the strip is scrolled.
+            try {
+                driver.findElement(AppiumBy.androidUIAutomator(
+                        "new UiScrollable(new UiSelector().resourceIdMatches(\".*:id/format_toolbar\"))"
+                                + ".setAsHorizontalList().scrollIntoView(new UiSelector().resourceIdMatches(\".*:id/"
+                                + btnId + "\"))"));
+                driver.findElement(byId(btnId)).click();
+                return true;
+            } catch (WebDriverException e2) {
+                return false;
+            }
+        }
+    }
+
+    /** Compose is up even when the To row is collapsed to chips (reopened draft): et_subject + btn_send. */
+    public boolean isOpenWithSubject(Duration timeout) {
+        return isVisible("et_subject", timeout) && isVisible("btn_send", Duration.ofSeconds(3));
+    }
+
+    /** The From row address (tv_from_email); "" when the row is hidden. */
+    public String fromEmail() {
+        try {
+            return driver.findElement(byId("tv_from_email")).getText().trim();
+        } catch (WebDriverException e) {
+            return "";
+        }
+    }
+
+    /** Toolbar title ("New Mail" / "Draft" / "Reply" / "Forward"). */
+    public String toolbarTitle() {
+        try {
+            for (WebElement t : driver.findElement(byId("toolbar")).findElements(By.className("android.widget.TextView"))) {
+                String s = t.getText();
+                if (s != null && !s.isBlank()) return s;
+            }
+        } catch (WebDriverException ignored) {
+        }
+        return "";
+    }
+
+    /**
+     * Closes Compose with the toolbar X (navigation button) — ComposeActivity.handleClose()
+     * saves a draft when To, Subject or Body is filled (ComposeActivity.kt:162-171).
+     */
+    public void closeWithToolbarX() {
+        try {
+            WebElement bar = driver.findElement(byId("toolbar"));
+            List<WebElement> buttons = bar.findElements(By.className("android.widget.ImageButton"));
+            if (!buttons.isEmpty()) {
+                buttons.get(0).click();
+                sleep(1500);
+                return;
+            }
+        } catch (WebDriverException ignored) {
+        }
+        close();
+    }
+
+    /** True while the toolbar and Send are on screen (displayed). */
+    public boolean isHeaderDisplayed() {
+        try {
+            return driver.findElement(byId("toolbar")).isDisplayed()
+                    && driver.findElement(byId("btn_send")).isDisplayed();
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    /** Taps the body editor and types {@code lines} lines with real ENTER key presses. */
+    public void typeBodyLines(int lines) {
+        try {
+            WebElement body = driver.findElement(byId("web_view_body"));
+            body.click();
+            sleep(600);
+            for (int i = 0; i < lines; i++) {
+                driver.pressKey(new io.appium.java_client.android.nativekey.KeyEvent(
+                        io.appium.java_client.android.nativekey.AndroidKey.L));
+                driver.pressKey(new io.appium.java_client.android.nativekey.KeyEvent(
+                        io.appium.java_client.android.nativekey.AndroidKey.ENTER));
+            }
+            sleep(500);
+        } catch (WebDriverException ignored) {
+        }
+    }
+
+    public boolean isKeyboardShown() {
+        try {
+            return driver.isKeyboardShown();
+        } catch (WebDriverException e) {
             return false;
         }
     }
@@ -384,8 +476,44 @@ public class ComposeEmailPage extends BasePage {
         }
     }
 
+    /**
+     * Taps Send and makes sure the tap reached the button.
+     *
+     * <p>btn_send sits in the top toolbar (y≈110-215 px on a 1080x2400 screen) — exactly where
+     * Android draws a heads-up notification. The shared test project gets chat messages from
+     * the other suites ("New message received … Vidya Pixel says …"), and on 2026-11-23 the
+     * EmailTest send cases failed because the tap landed on such a banner
+     * (FAILED__EmailTest__emptySubjectConfirm.png): no "No subject" dialog, compose never closed,
+     * nothing in Sent. A tap that worked always changes the screen at once — the No-subject /
+     * large-send dialog opens, or btn_send hides behind progress_send (ComposeActivity.kt:1153-1155),
+     * or Compose closes — so when none of that happened the tap was swallowed and it is safe
+     * to wait for the banner to time out and tap again (no risk of a double send).
+     */
     public void tapSend() {
-        waitVisible("btn_send").click();
+        for (int attempt = 0; attempt < 4; attempt++) {
+            waitVisible("btn_send").click();
+            long end = System.currentTimeMillis() + 3000;
+            while (System.currentTimeMillis() < end) {
+                if (sendReacted()) return;
+                sleep(300);
+            }
+            System.out.println(">>> Send tap had no effect (heads-up notification over the toolbar?) — retrying");
+            sleep(4000);
+        }
+    }
+
+    private boolean sendReacted() {
+        try {
+            if (!driver.findElements(AppiumBy.androidUIAutomator(
+                    "new UiSelector().resourceIdMatches(\"android:id/(message|alertTitle)\")")).isEmpty()) return true;
+            if (!driver.findElements(byId("alertTitle")).isEmpty()) return true;
+            if (textShown("without subject", Duration.ofMillis(200))) return true;
+            if (isVisible("progress_send", Duration.ofMillis(200))) return true;
+            List<WebElement> send = driver.findElements(byId("btn_send"));
+            return send.isEmpty() || !send.get(0).isDisplayed();
+        } catch (WebDriverException e) {
+            return false;
+        }
     }
 
     /** After Send, an empty subject raises a "No subject" confirm dialog. */

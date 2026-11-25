@@ -571,3 +571,97 @@ creation and roughly thirty cases behind them.
 `MapViewModel.getSearchResults()` filters `_locations` only, with a comment saying the web
 client also searches the overlay and that the difference was raised separately. Worth
 knowing before reading F-02 as full coverage of "search finds my shoot locations".
+
+---
+
+## Web gap cases (2026-11-23/24)
+
+Source: `web-e2e/gaps/map.md` (220 web cases vs the Android suites). Every MISSING / partial /
+conflict row ends below as **implemented** (with its last run result) or **not automatable**
+(with the reason). App: Zillit_32539-dev (`Zillit-Android-devbuild`). Fixtures in the new
+suites are named `ZL_AUTO …`, recorded when made, and deleted by exact name (plus a sweep of
+this suite's own name shapes, so a crashed run is cleaned up by the next one). Real cities,
+locations and zones are read, never edited or deleted.
+
+New suites: `MapWebGapTest` (`TestOrder.MAP_WEB_GAP` = 220) and `MapZoneGuardTest`
+(`TestOrder.MAP_ZONE_GUARDS` = 221). Fixed in place: `MapZoneCrudTest` Z-05 and Z-08,
+`MapLocationFlowTest` L-13b (adds L-17).
+
+Two-user cases run on their own with both devices:
+`ZILLIT_UDID=<emulator> ZILLIT_RECEIVER_UDID=34281FDH2005XC ./run-and-report.sh --only 'MapWebGapTest.rt*'`.
+
+### Bugs these cases reproduce
+
+| Case | Web id | What happens on Android |
+|---|---|---|
+| **T-12** (intermittent) | map.md:1357 (M1) | Once, deleting a location type **also deleted the location using it** (confirmed by the later sweep); once it kept it. Same `deleteHeader` endpoint as web, where the bug is consistent. Needs more runs. |
+| **H-06** | map.md:1163 | A description can never be **cleared**: the form trims it to "", `UpdateLocationRequest.description` defaults to "" and the Json uses `encodeDefaults = false`, so the field is left out of the PUT and the server keeps the old text. Same for scene and type. |
+| **Z-08b** | map.md:543 (M7) | "Custom" radius left **empty** saves a zone ("Studio zone created") — `toIntOrNull() ?: 30`. |
+| **Z-11c** | map.md:865 (M7) | A double tap on **Create Zone creates two zones** — `btnSave` is never disabled while saving. |
+| **Z-08d** | map.md:843 (M7) | A **201-mile** zone saves (card "201 mi radius") — `saveZone` refuses only `<= 0`; no upper bound. |
+| RT-07 | map.md:1245 | (pending run) a stale edit form is a full-record PUT. |
+
+### Case list
+
+| Group | Case | Web | Suite | Last result |
+|---|---|---|---|---|
+| M1 | T-12 Deleting a type keeps its locations, untyped | 1357 | MapWebGapTest | **Intermittent**: FAIL 23:59 run (location gone; the later sweep also no longer found it), PASS 06:21 run (location kept). Needs more runs before filing |
+| M10 | F-16 Filter rows count each type incl. "Unknown", equal to List View chips | 413 | MapWebGapTest | PASS (devbuild uses `getTypeCount`; the gap's "always 0" defect is fixed) |
+| M10 | F-16b Apply one type → "Filter (1)", header "1 locations"; Reset restores | 413 | MapWebGapTest | PASS |
+| M10 | V-06 Header count = List View "N total" | 113, 395 | MapWebGapTest | PASS |
+| M10 | M-10 Type filter cleared after leaving and re-entering the Map | 1109 | MapWebGapTest | PASS (23:19 run); 06:21 run failed on the test side (Filter chip unreachable, label null) — retry added, not yet rerun |
+| M10 | C-22c Switching city clears the filter | 307 | MapWebGapTest | **not automatable here**: the project has one city (Mountain View); a second city cannot be ZL_AUTO-named |
+| M10 | T-10b Subtype search lists its parent type | 389 | MapWebGapTest | PASS |
+| M10 | F-02c >8 matches → exactly 8 results | 877 | MapWebGapTest | skip: fewer than 9 own locations match (the "+N more" line is web-only) |
+| M5 | H-07 Padded type name saved trimmed | 1182 | MapWebGapTest | PASS |
+| M5 | H-01 Padded name and scene saved trimmed | 1139, 1169 | MapWebGapTest | skip — etScene not reachable on the edit form (test-side) |
+| M5 | H-02 Spaces-only name refused, form stays open | 828 | MapWebGapTest | PASS |
+| M5 | H-03 Unicode / emoji / RTL name saves; lower-case search finds it | 1145, 883 | MapWebGapTest | PASS |
+| M5 | H-04 HTML-looking name and description shown literally | 1151, 895 | MapWebGapTest | PASS |
+| M5 | H-08 Regex / special-character search never crashes | 883 | MapWebGapTest | PASS (23:19 run) |
+| M5 | H-06 Multi-line description keeps lines; spaces-only saves empty | 1163 | MapWebGapTest | **FAIL — bug (cannot clear)** |
+| M5 | H-05 1,000-character name: outcome recorded, card stays on screen | 1157 | MapWebGapTest | FAIL: the save was refused and no toast was read. Unconfirmed — toasts are not always readable, so this may be test-side |
+| M5 | H-09 Duplicate location names: list and search agree with the outcome | 1176 | MapWebGapTest | duplicate ACCEPTED; FAIL is a test bug (the whole-list reader merges rows by name, so two equal names count as one) |
+| M5 | Z-19b Duplicate zone names: list agrees with the outcome | 1200 | MapZoneGuardTest | PASS (duplicate accepted, two rows) |
+| M11 | N-07 Type pick drives the subtype checkboxes | 357 | MapWebGapTest | skip — the dropdown item could not be tapped (test-side) |
+| M11 | N-11b Double tap on Update Location: one save, one row | 859 | MapWebGapTest | PASS |
+| M14 | N-15b Untyped detail sheet: "Unknown", no Description / Photos | 1032 | MapWebGapTest | FAIL, not yet diagnosed — the 'Unknown' badge matcher found nothing; probably test-side |
+| M14 | V-07 Deleting the last location of the selected chip: no blank list | 1231 | MapWebGapTest | PASS (Android falls back to "All"; web keeps the chip + empty state) |
+| M12 | N-11c List View edits show on the map's bottom panel | 732 | MapWebGapTest | skip (depends on H-01/H-04 renames) |
+| M12 | N-19 Marker tap opens its card | 611 | MapWebGapTest | FAIL, not yet diagnosed: marker found and tapped, but the panel carousel was read empty; probably test-side |
+| M12 | P-14/P-17 Drag a saved marker: Move Location, Cancel keeps, Move moves | 623, 744 | MapWebGapTest | FAIL, not yet diagnosed: no dialog after the long-press drag; probably the gesture, not the app |
+| M9 | C-16b "Cities (N)" equals the panel rows | 56 | MapWebGapTest | PASS |
+| C3 | T-07 After the Update confirm, a subtype added in the edit form saves | 383 | MapWebGapTest | PASS |
+| M7 | Z-07 Intersection with one street blank: no centre, cannot save | 838 | MapZoneGuardTest | PASS |
+| M7 | Z-05b Blank zone name refused even with a centre | 549 | MapZoneGuardTest | PASS |
+| M7 | Z-05 (fixed: clears the pre-filled name first) | 549, 1194 | MapZoneCrudTest | PASS |
+| M7 | Z-08 (fixed: sets a centre first, so the radius guard is what fires) | 843 | MapZoneCrudTest | PASS |
+| M7 | Z-08b Custom with empty radius refused | 543 | MapZoneGuardTest | **FAIL — bug** |
+| M7 | Z-08c Small Custom radius saves, card shows it | 555, 848 | MapZoneGuardTest | PASS (4 mi — 1 mi cannot contain the city centre, 2.5 mi away, which Android requires) |
+| M7 | Z-08d 201-mile radius refused | 843 | MapZoneGuardTest | **FAIL — bug (saved as 201 mi)** |
+| M7 | Z-11c Double tap on Create Zone creates one zone | 865 | MapZoneGuardTest | **FAIL — bug (two zones)** |
+| M8 | Z-15 View → "Studio Zone Details" with radius + coordinates; OK closes | 579 | MapZoneGuardTest | PASS |
+| M8 | Z-13b City with zones opens with a zone named on the zone button | 537 | MapZoneGuardTest | PASS |
+| M8 | Z-18 Deleting the active zone moves the map off it | 779, 1121 | MapZoneGuardTest | PASS (the label can take a few seconds; the case waits up to 20 s) |
+| M3 | RT-02 B's pin updates A's count live; B's delete takes it back | 806, 1239 | MapWebGapTest (rt*) | pending (two devices) |
+| M3 | RT-03 B's new / deleted type shows in A's open type list | 818, 1272 | MapWebGapTest (rt*) | pending |
+| M3 | RT-06 B's zone becomes A's active zone; B's delete moves A off it | 812, 1259 | MapWebGapTest (rt*) | pending |
+| M3 | RT-07 A stale edit form does not wipe B's newer description | 1245 | MapWebGapTest (rt*) | pending |
+| C2 | L-15/L-16/L-17 overlay cards read-only but keep View/Directions | 124, 129 | MapLocationFlowTest L-13b | covered there with its own Shortlisted fixture; `MapLocationPinsTest` skips when the project has no overlay pin |
+| C-18 | City rows offer no Edit | — | MapCityCrudTest | PASS |
+
+### Not automatable (with the reason)
+
+| Group | Web rows | Reason |
+|---|---|---|
+| M2 failed/slow/offline reads and writes (E-01…E-05, slow loaders) | 186–223, 792, 930–1008, 1206–1225 | Needs a network fault (airplane mode / Wi-Fi off / proxy) on a shared device that three other agents are using at the same time. Not done. The source behaviour is recorded in the gap file. |
+| M3 RT-01 city added by B, RT-04 B deletes A's open city, RT-05 badge in another city | 800, 1278, 1284, 1291 | A city cannot carry the `ZL_AUTO` prefix: its name comes only from Places / reverse geocoding (C-04, finding 2). So these would create and delete real-named cities, which the data rule forbids. |
+| M4 view-only / demoted accounts (R-01…R-10) | 173, 467, 591, 1308–1333 | Would change Map rights for the project's real users (Vidya Pixel / Vidya Testing are its only two members), with no safe restore if a run dies midway. |
+| M6 poles / antimeridian / lng 0 pins | 901, 907 | Needs pins seeded by API at exact coordinates. Android can only pin where the camera is, and has no seeding route here. |
+| M8 Z-16b zone edit keeps address/description; stubbed zone | 785, 1026 | Android cannot give a zone an address (`createStudioZone` sends none), so the address needs a web/API-seeded zone. A stub needs a proxy. |
+| M9 C-25 reorder, C-21b delete the open city, C-24c fallback, C-31 duplicate city | 325, 331, 343, 661, 1115 | Reorder changes the real cities' order. The others need a test city, which cannot be `ZL_AUTO`-named (see M3). C-31 is also blocked because the current-city card hides once the city exists. |
+| M11 N-09 media add / remove / cap 10; P-19 address outside the city | 108, 479, 485, 673 | N-09 goes through the system photo picker and uploads real media to the project's storage. P-19 needs Google Places to pick an address. |
+| M13 D-06 directions without location permission; F-06/F-07 Places result pin / directions | 147, 637, 691 | D-06 revokes an app permission on a shared device mid-run. F-06/F-07 need Places. |
+| M15 dark mode on every surface | 1074, 1082 | Needs `cmd uimode night` (system setting) on a shared device. |
+| C1 F-03 search result opens the card | 235, 407 | Not a test gap: Android only centres the map (`MapFragment:1049-1055`). Parity issue to raise with product; F-03 asserts Android's behaviour. |
+| C5 wording of the form messages | 103 | Wording only; the Android tests already match the Android strings. |

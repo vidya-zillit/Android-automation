@@ -4,7 +4,6 @@ import com.zillit.automation.core.ReasonLogger;
 import com.zillit.automation.core.BaseTest;
 import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.common.BottomNavPage;
-import com.zillit.automation.pages.map.MapLocationListPage;
 import com.zillit.automation.pages.map.MapPage;
 import com.zillit.automation.pages.common.ProjectListPage;
 import com.zillit.automation.pages.common.ToolsPage;
@@ -293,57 +292,75 @@ class MapLocationPinsTest extends BaseTest {
 
     // ---------------- read-only enforcement ----------------
 
-    @Test
-    @Order(9)
-    @DisplayName("L-15/L-16 Overlay rows in View All offer no Edit and no Delete")
-    void overlayRowsAreReadOnly() {
-        MapPage m = mapWithOverlay();
+    /*
+     * Where overlay pins can be inspected. LocationListViewModel (View All) loads only the
+     * city's own getLocations(cityId), so overlay pins are NEVER in View All — the old
+     * versions of L-15/16/17 looked there and could only skip or pass vacuously. Overlay
+     * pins are listed in the bottom panel (MapViewModel.getFilteredLocations() =
+     * visiblePins(), overlay included), whose cards come from CarouselCardAdapter:
+     * btnEdit/btnDelete are GONE when isFromLocationTool, View and Directions stay.
+     */
+
+    /** Opens the panel list and returns every card; skips with the precise missing precondition. */
+    private List<MapPage.PanelCard> panelCardsWithOverlay(MapPage m) {
         restoreOverlayOn(m);
         sleep(2000);
-        assumeTrue(m.overlayPinCount() > 0, "No overlay pins to check");
-        assumeTrue(m.openViewAll(), "View All not available");
+        int advertised = m.overlayPinCount();
+        assumeTrue(advertised > 0,
+                "The Shoot Locations overlay is on but advertises no pins (toggle reads '"
+                        + m.overlayToggleLabel() + "') — the Location tool has no Shortlisted or "
+                        + "Final location, so there is no overlay card to inspect");
+        assumeTrue(m.openPanelList(),
+                "The bottom location panel did not reach list mode (rvLocationList) via btnLocationPill");
+        List<MapPage.PanelCard> cards = m.panelListCards();
+        System.out.println(">>> panel cards (" + cards.size() + "): " + cards);
+        long overlay = cards.stream().filter(MapPage.PanelCard::isOverlay).count();
+        if (overlay == 0) m.closeBottomPanel();
+        assertTrue(overlay > 0,
+                "The toggle advertises " + advertised + " overlay pin(s), but no card in the bottom "
+                        + "panel list carries '" + MapPage.LABEL_SHORTLISTED + "' or '"
+                        + MapPage.LABEL_FINAL + "'. The panel lists visiblePins(), overlay included "
+                        + "(unless a type filter hides them). Cards: " + cards);
+        return cards;
+    }
 
-        MapLocationListPage list = new MapLocationListPage(driver);
-        assumeTrue(list.isLoaded(Duration.ofSeconds(15)), "Location list did not open");
+    @Test
+    @Order(9)
+    @DisplayName("L-15/L-16 Overlay cards in the bottom panel offer no Edit and no Delete")
+    void overlayRowsAreReadOnly() {
+        MapPage m = mapWithOverlay();
+        List<MapPage.PanelCard> cards = panelCardsWithOverlay(m);
+        m.closeBottomPanel();
 
-        List<String> badges = list.typeBadges();
-        long overlayRows = badges.stream().filter(b -> b.contains("Shoot Location")).count();
-        assumeTrue(overlayRows > 0, "No overlay rows visible in the list; saw badges " + badges);
+        // Edit/Delete are hidden for EVERY card when the user lacks posting rights, which
+        // would make "no Edit on the overlay card" prove nothing. Require evidence of rights:
+        // a Map-owned card that shows Edit, or the Pin button in the toolbar.
+        boolean canPost = cards.stream().anyMatch(c -> !c.isOverlay() && c.edit)
+                || m.toolbarHasButton("btnPin");
+        assumeTrue(canPost,
+                "No posting rights on the Map (no Map-owned card shows Edit and there is no Pin "
+                        + "button), so hidden Edit/Delete would not show the overlay is read-only");
 
-        int rows = list.rowCount();
-        int edits = list.editButtonCount();
-        int deletes = list.deleteButtonCount();
-
-        // Every row gets a View button; only mutable (Map-owned) rows get Edit/Delete.
-        // So each overlay row on screen must reduce the Edit count below the row count.
-        assertTrue(edits <= rows - overlayRows,
-                "Found " + edits + " Edit buttons across " + rows + " rows with "
-                        + overlayRows + " read-only overlay rows — overlay pins must not be editable");
-        assertTrue(deletes <= rows - overlayRows,
-                "Found " + deletes + " Delete buttons across " + rows + " rows with "
-                        + overlayRows + " read-only overlay rows — overlay pins must not be deletable");
-
-        list.backToMap();
+        for (MapPage.PanelCard c : cards) {
+            if (!c.isOverlay()) continue;
+            assertFalse(c.edit, "Overlay card offers Edit — Location-tool pins are read-only on the Map: " + c);
+            assertFalse(c.delete, "Overlay card offers Delete — Location-tool pins are read-only on the Map: " + c);
+        }
         backToMap();
     }
 
     @Test
     @Order(10)
-    @DisplayName("L-17 Overlay rows keep View")
+    @DisplayName("L-17 Overlay cards in the bottom panel keep View and Directions")
     void overlayRowsKeepView() {
         MapPage m = mapWithOverlay();
-        restoreOverlayOn(m);
-        sleep(2000);
-        assumeTrue(m.overlayPinCount() > 0, "No overlay pins to check");
-        assumeTrue(m.openViewAll(), "View All not available");
-
-        MapLocationListPage list = new MapLocationListPage(driver);
-        assumeTrue(list.isLoaded(Duration.ofSeconds(15)), "Location list did not open");
-        assumeTrue(list.rowCount() > 0, "List is empty");
-        assertEquals(list.rowCount(), list.viewButtonCount(),
-                "Every row, overlay included, should offer View");
-
-        list.backToMap();
+        List<MapPage.PanelCard> cards = panelCardsWithOverlay(m);
+        m.closeBottomPanel();
+        for (MapPage.PanelCard c : cards) {
+            if (!c.isOverlay()) continue;
+            assertTrue(c.view, "Overlay card lost View: " + c);
+            assertTrue(c.directions, "Overlay card lost Directions: " + c);
+        }
         backToMap();
     }
 

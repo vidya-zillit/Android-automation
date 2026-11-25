@@ -613,6 +613,258 @@ public class DocDistLibraryPage extends BasePage {
         return new ConfirmPopupPage(driver);
     }
 
+    // ---------------- web-gap helpers (WEB DD-xx cases, 2026-11-23) ----------------
+
+    /** The {@code dd_meta} line of the rendered row whose name is exactly this; "" if none. */
+    public String rowMeta(String name) {
+        List<String> metas = metasOfRowsNamed(name);
+        return metas.isEmpty() ? "" : metas.get(0);
+    }
+
+    /**
+     * The meta line of EVERY rendered row with this exact name. A library-wide search
+     * (DD-18) can list the same file name from several folders; the folder path leads
+     * each meta line, so this is how a case finds "its" copy.
+     */
+    public List<String> metasOfRowsNamed(String name) {
+        List<String> out = new ArrayList<>();
+        try {
+            for (WebElement card : driver.findElements(AppiumBy.xpath(
+                    "//*[@resource-id='" + appPackage() + ":id/dd_card']"
+                            + "[.//*[@resource-id='" + appPackage() + ":id/dd_name' and @text="
+                            + xpathLiteral(name) + "]]"))) {
+                try {
+                    out.add(card.findElement(byId("dd_meta")).getText());
+                } catch (WebDriverException e) { out.add(""); }
+            }
+        } catch (WebDriverException ignored) { }
+        return out;
+    }
+
+    /** content-desc of the row's selection checkbox ({@code dd_check}). */
+    public String rowCheckDescription(String name) {
+        try {
+            return driver.findElement(AppiumBy.xpath(
+                    "//*[@resource-id='" + appPackage() + ":id/dd_card']"
+                            + "[.//*[@text=" + xpathLiteral(name) + "]]"
+                            + "//*[@resource-id='" + appPackage() + ":id/dd_check']"))
+                    .getAttribute("content-desc");
+        } catch (WebDriverException e) { return ""; }
+    }
+
+    /** content-desc of the first element with this id; "" when absent. */
+    public String contentDescriptionOf(String id) {
+        try {
+            String d = driver.findElement(byId(id)).getAttribute("content-desc");
+            return d == null ? "" : d;
+        } catch (WebDriverException e) { return ""; }
+    }
+
+    /** Polls for a Material snackbar and returns its text; "" if none appeared in time. */
+    public String waitSnackbarText(Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                List<WebElement> s = driver.findElements(byId("snackbar_text"));
+                if (!s.isEmpty()) {
+                    String t = s.get(0).getText();
+                    if (t != null && !t.isBlank()) return t;
+                }
+            } catch (WebDriverException ignored) { }
+            sleep(200);
+        }
+        return "";
+    }
+
+    /** Swipes the library list back to its top (a sort or search can leave it scrolled). */
+    public void scrollListToTop() {
+        for (int i = 0; i < 4; i++) swipe(0.35, 0.75);
+    }
+
+    /** Waits until the Move list has loaded more than just its Root row. */
+    public boolean waitMoveRowsLoaded(Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            if (moveRowNames().size() > 1) return true;
+            sleep(400);
+        }
+        return moveRowNames().size() > 1;
+    }
+
+    /** True while the help card's body is on screen (no waiting). */
+    public boolean helpBodyShownNow() { return anyDisplayed("dd_help_body"); }
+
+    /**
+     * Whether a PopupMenu row with exactly this label is enabled. {@code null} when the
+     * row is not on screen at all, so "disabled" and "missing" are never confused.
+     */
+    public Boolean menuItemEnabled(String label) {
+        try {
+            List<WebElement> rows = driver.findElements(AppiumBy.androidUIAutomator(
+                    "new UiSelector().text(\"" + label + "\")"));
+            if (rows.isEmpty()) return null;
+            WebElement title = rows.get(0);
+            // A disabled MenuItem disables its row container and its title alike;
+            // read both so a theme that only greys the parent still counts.
+            // ListMenuItemView disables ITSELF (two levels up), not the title TextView.
+            boolean enabled = "true".equalsIgnoreCase(title.getAttribute("enabled"));
+            WebElement node = title;
+            for (int i = 0; i < 3; i++) {
+                try {
+                    node = node.findElement(AppiumBy.xpath(".."));
+                    enabled = enabled && "true".equalsIgnoreCase(node.getAttribute("enabled"));
+                } catch (WebDriverException ignored) { break; }
+            }
+            return enabled;
+        } catch (WebDriverException e) { return null; }
+    }
+
+    // ---- Move sheet (bottomsheet_dd_move.xml) ----
+
+    private String moveRowNameXpath() {
+        return "//*[@resource-id='" + appPackage() + ":id/dd_row']"
+                + "//*[@resource-id='" + appPackage() + ":id/dd_name']";
+    }
+
+    private String moveRecyclerXpath() {
+        return "//*[@resource-id='" + appPackage() + ":id/dd_recycler']"
+                + "[.//*[@resource-id='" + appPackage() + ":id/dd_row']]";
+    }
+
+    /** True once the Move sheet is up: its "Move here" button and at least one row. */
+    public boolean moveSheetOpen(Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                if (!driver.findElements(byId("dd_move")).isEmpty()
+                        || !driver.findElements(AppiumBy.xpath(moveRowNameXpath())).isEmpty()) {
+                    return true;
+                }
+            } catch (WebDriverException ignored) { }
+            sleep(300);
+        }
+        return false;
+    }
+
+    /** Destination rows rendered right now (Root first, then folder PATHS — DD-30). */
+    public List<String> moveRowNames() {
+        try {
+            return driver.findElements(AppiumBy.xpath(moveRowNameXpath())).stream()
+                    .map(WebElement::getText).filter(t -> t != null && !t.isBlank()).toList();
+        } catch (WebDriverException e) { return List.of(); }
+    }
+
+    /** RecyclerView's own "can scroll" flag for the Move list. */
+    public boolean moveListScrollable() {
+        try {
+            return "true".equalsIgnoreCase(driver.findElement(AppiumBy.xpath(moveRecyclerXpath()))
+                    .getAttribute("scrollable"));
+        } catch (WebDriverException e) { return false; }
+    }
+
+    /** One upward swipe inside the Move list. False when the list is not on screen. */
+    private boolean swipeMoveList(boolean towardsEnd) {
+        try {
+            var r = driver.findElement(AppiumBy.xpath(moveRecyclerXpath())).getRect();
+            if (r.getHeight() < 60) return false;
+            driver.executeScript("mobile: swipeGesture", java.util.Map.of(
+                    "left", r.getX() + r.getWidth() / 4,
+                    "top", r.getY() + 10,
+                    "width", r.getWidth() / 2,
+                    "height", r.getHeight() - 20,
+                    "direction", towardsEnd ? "up" : "down",
+                    "percent", 0.7));
+            sleep(300);
+            return true;
+        } catch (Exception e) { return false; }
+    }
+
+    /**
+     * Scrolls the Move list to its last row and returns every row name seen on the way.
+     * Stops when two swipes in a row reveal nothing new.
+     */
+    public List<String> moveScrollToEnd() {
+        Set<String> seen = new LinkedHashSet<>(moveRowNames());
+        if (!moveListScrollable()) return new ArrayList<>(seen);
+        int stable = 0;
+        for (int i = 0; i < 40 && stable < 2; i++) {
+            int before = seen.size();
+            List<String> lastBefore = moveRowNames();
+            if (!swipeMoveList(true)) break;
+            seen.addAll(moveRowNames());
+            stable = (seen.size() == before && moveRowNames().equals(lastBefore)) ? stable + 1 : 0;
+        }
+        return new ArrayList<>(seen);
+    }
+
+    /**
+     * Back to the top of the Move list. Does nothing when the list cannot scroll: a
+     * downward drag on a non-scrolling list drags the BOTTOM SHEET instead and dismisses it.
+     */
+    public void moveScrollToTop() {
+        if (!moveListScrollable()) return;
+        for (int i = 0; i < 40; i++) {
+            List<String> before = moveRowNames();
+            if (!swipeMoveList(false)) return;
+            if (moveRowNames().equals(before)) return;
+        }
+    }
+
+    /**
+     * Taps the destination row whose text is exactly {@code rowText} (a root folder's
+     * name, or "Parent / Child" for a nested one), scrolling the list to find it.
+     */
+    public boolean moveChooseDestination(String rowText) {
+        if (tapMoveRow(rowText)) return true;
+        if (!moveListScrollable()) return false;
+        moveScrollToTop();
+        for (int i = 0; i < 40; i++) {
+            if (tapMoveRow(rowText)) return true;
+            List<String> before = moveRowNames();
+            if (!swipeMoveList(true) || moveRowNames().equals(before)) break;
+        }
+        return tapMoveRow(rowText);
+    }
+
+    private boolean tapMoveRow(String rowText) {
+        try {
+            for (WebElement e : driver.findElements(AppiumBy.xpath(moveRowNameXpath()))) {
+                if (rowText.equals(e.getText())) { e.click(); sleep(500); return true; }
+            }
+        } catch (WebDriverException ignored) { }
+        return false;
+    }
+
+    /**
+     * "Move here" is displayed AND lies wholly inside the window — the DD-23 question.
+     * A button laid out below the sheet can still be in the tree, so position matters.
+     */
+    public boolean moveButtonOnScreen() {
+        try {
+            WebElement b = driver.findElement(byId("dd_move"));
+            if (!b.isDisplayed()) return false;
+            var r = b.getRect();
+            var size = driver.manage().window().getSize();
+            return r.getHeight() > 10 && r.getY() >= 0 && r.getY() + r.getHeight() <= size.height;
+        } catch (WebDriverException e) { return false; }
+    }
+
+    /** The button's rect for the failure message ("absent" when not in the tree). */
+    public String moveButtonRect() {
+        try {
+            var r = driver.findElement(byId("dd_move")).getRect();
+            return "x=" + r.getX() + " y=" + r.getY() + " h=" + r.getHeight()
+                    + " window.h=" + driver.manage().window().getSize().height;
+        } catch (WebDriverException e) { return "absent"; }
+    }
+
+    public boolean moveButtonEnabled() {
+        try { return driver.findElement(byId("dd_move")).isEnabled(); }
+        catch (WebDriverException e) { return false; }
+    }
+
+    public boolean tapMoveHere() { return click("dd_move"); }
+
     // ---------------- helpers ----------------
 
     /**

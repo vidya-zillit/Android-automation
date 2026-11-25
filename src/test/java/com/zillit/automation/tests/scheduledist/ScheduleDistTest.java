@@ -50,10 +50,9 @@ class ScheduleDistTest extends ScheduleDistBaseTest {
 
     static final String SENTINEL_EPISODE = "9900";
     static final String SCENE_MARK = "ZLAUTO";
+    /** SD-25b's opt-in undated One Line row (web gap SCH-01). */
+    static final String UNDATED_EPISODE = "9901";
     private static final String RUN = String.format("%04d", System.currentTimeMillis() % 10000);
-    /** Full file name, not a prefix: the picker matches on "contains" (see SidesTest.SCRIPT_PDF). */
-    private static final String PDF = "zl_test_doc.pdf";
-    private static final Duration UPLOAD_WAIT = Duration.ofSeconds(120);
 
     private final String scene = "99" + SCENE_MARK + RUN;
     /** SD-46's own scene: one page type only, so finding 4 cannot hide any of its pages. */
@@ -313,6 +312,57 @@ class ScheduleDistTest extends ScheduleDistBaseTest {
         assertEquals(1, mine.size(), "After Replace the One Line sentinel shows " + mine.size() + " times: " + mine);
     }
 
+    // ── web gap SCH-01: an undated One Line does not inherit an earlier upload's date ──
+
+    @Test
+    @Order(225)
+    @DisplayName("SD-25 [WEB SCH-01] A new One Line upload starts with no date, after a dated upload and Replace")
+    void undatedOneLineFormStartsEmpty() {
+        // [WEB SCH-01] SD-13/SD-16/SD-22 have just uploaded and replaced dated rows in this
+        // session. A FRESH upload must not start with any of those dates: on Android the date
+        // is an instance field of UploadDocumentActivity, seeded only on Replace.
+        ScheduleUploadPage up = openForm(ScheduleDistPage.TAB_ONE_LINE);
+        String date;
+        try {
+            date = up.dateText();
+        } finally {
+            up.leaveForm();
+            backToTabs();
+        }
+        assertTrue(date == null || !date.matches(".*\\d.*"),
+                "[SCH-01] A fresh One Line upload form already carries a date (\"" + date + "\") — it"
+                        + " inherited an earlier upload's date; it should start empty (\"Set Date (Optional)\")");
+    }
+
+    @Test
+    @Order(226)
+    @DisplayName("SD-25b [WEB SCH-01] An undated One Line row shows its date label with no date (opt-in)")
+    void undatedOneLineRowHasNoDate() {
+        // Full / One Line rows can never be deleted, so this upload is opt-in for a throw-away
+        // project: -Dzillit.schedule.undated=true. Episode 9901 marks the row (TV projects only).
+        assumeTrue(Boolean.getBoolean("zillit.schedule.undated"),
+                "Opt-in: run with -Dzillit.schedule.undated=true — it leaves an undeletable One Line row");
+        ScheduleUploadPage up = openForm(ScheduleDistPage.TAB_ONE_LINE);
+        boolean closed;
+        try {
+            assumeTrue(up.fieldShown(ScheduleUploadPage.EPISODE), "Not a TV project: the undated row could not be"
+                    + " told apart from a real schedule");
+            up.setField(ScheduleUploadPage.EPISODE, UNDATED_EPISODE);
+            up.submit();
+            closed = up.waitFormClosed(UPLOAD_WAIT);
+        } finally {
+            if (up.formShown()) up.leaveForm();
+            backToTabs();
+        }
+        assumeTrue(closed, "The undated upload did not finish");
+        Predicate<Row> undated = r -> ("Episode: " + UNDATED_EPISODE).equals(r.episode);
+        List<Row> rows = waitForRows(tab(ScheduleDistPage.TAB_ONE_LINE), undated, 1);
+        assumeTrue(!rows.isEmpty(), "The undated row never appeared");
+        Row newest = rows.get(0);
+        assertTrue(newest.name != null && newest.name.matches("^One Line date :\\s*$"),
+                "[SCH-01] An undated One Line upload shows \"" + newest.name + "\" — expected the label with no date");
+    }
+
     @Test
     @Order(230)
     @DisplayName("SD-23 Pull to refresh clears its spinner and keeps the list (finding 6)")
@@ -442,6 +492,45 @@ class ScheduleDistTest extends ScheduleDistBaseTest {
     }
 
     @Test
+    @Order(365)
+    @DisplayName("SD-36b [WEB SCH-02] Scene search ignores case and survives fast typing")
+    void pageSearchCaseAndSpeed() {
+        // [WEB SCH-02] The search is server-side behind .debounce(700).onEach{} — onEach does not
+        // cancel an earlier request, so an older response can land last.
+        assumeTrue(pageMade, "SD-35 made no page");
+        ScheduleDistPage page = tab(ScheduleDistPage.TAB_PAGES);
+        String want = "Scene No. " + scene;
+        List<Folder> lower;
+        List<String> raced = new java.util.ArrayList<>();
+        try {
+            page.searchPages(scene.toLowerCase());
+            lower = page.settledFolders();
+            for (int i = 1; i <= 3; i++) {
+                page.searchPages("");
+                page.settledFolders();
+                boolean typed = page.typePagesSearchSlowly(scene, 80);
+                sleep(3000);
+                page.waitLoaded(Duration.ofSeconds(15));
+                List<Folder> now = page.visibleFolders();
+                boolean empty = page.emptyShown();
+                if (empty || now.stream().noneMatch(f -> want.equals(f.title))) {
+                    raced.add("try " + i + " (typed=" + typed + "): empty state=" + empty + ", folders=" + now);
+                }
+            }
+        } finally {
+            page.searchPages("");
+        }
+        List<Folder> lowerFinal = lower;
+        org.junit.jupiter.api.Assertions.assertAll(
+                () -> assertTrue(lowerFinal.stream().anyMatch(f -> want.equals(f.title)),
+                        "[SCH-02] Searching the scene in lower case (\"" + scene.toLowerCase() + "\") did not find \""
+                                + want + "\" — scene search is case-sensitive. Found: " + lowerFinal),
+                () -> assertTrue(raced.isEmpty(),
+                        "[SCH-02] Typing the scene quickly ended on the wrong result (an older response landed"
+                                + " last): " + raced));
+    }
+
+    @Test
     @Order(370)
     @DisplayName("SD-37 Search by colour finds the folder, and another colour does not")
     void pageSearchColour() {
@@ -565,6 +654,58 @@ class ScheduleDistTest extends ScheduleDistBaseTest {
         }
         assertTrue(gone, "Page " + page1 + " is still listed after Delete (message: " + snack + ")");
         assertTrue(snack == null || !snack.matches("[a-z0-9_.]+"), "The delete message is an internal key: " + snack);
+    }
+
+    @Test
+    @Order(450)
+    @DisplayName("SD-45b [WEB SCH-04] Deleting a scene's last page takes its folder off the Pages tab")
+    void lastPageDeleteRemovesFolder() {
+        // [WEB SCH-04] Its own one-page scene. The Pages tab refreshes on resume only when a
+        // socket event set isScheduleDistHasChange, so the folder may linger.
+        String lone = "97" + SCENE_MARK + RUN;
+        String title = "Scene No. " + lone;
+        String pageNo = "ZL_AUTO_" + RUN + "_L";
+        assumeTrue(uploadPage(lone, pageNo, "BLUE", ScheduleUploadPage.TYPE_FULL_PAGES), "The lone page did not upload");
+        assumeTrue(waitForFolder(lone, title, Duration.ofSeconds(90)) != null, "No folder \"" + title + "\" after the upload");
+
+        ScheduleDistPage inside = openFolder(lone);
+        assumeTrue(inside.openRowMenu(r -> ("Page No. " + pageNo).equals(r.name)) != null
+                && inside.tapMenuItem("Delete") && inside.dialogShown(), "Delete could not be reached");
+        inside.tapDialogRight();
+        String snack = inside.snackbarText(Duration.ofSeconds(10));
+        boolean pageGone = false;
+        for (int i = 0; i < 8 && !pageGone; i++) {
+            sleep(2500);
+            pageGone = new ScheduleDistPage(driver).visibleRows().stream().noneMatch(r -> ("Page No. " + pageNo).equals(r.name));
+        }
+        assumeTrue(pageGone, "The page itself did not leave its folder (message: " + snack + ") — SD-44's ground");
+
+        // Back to Pages inside the tool, WITHOUT searching again: a new search refetches and
+        // would hide the bug.
+        stepBackToTabs();
+        ScheduleDistPage pages = new ScheduleDistPage(driver);
+        List<Folder> seen = List.of();
+        boolean listed = true;
+        for (int i = 0; i < 6 && listed; i++) {
+            pages.waitLoaded(Duration.ofSeconds(10));
+            seen = pages.visibleFolders();
+            listed = seen.stream().anyMatch(f -> title.equals(f.title));
+            if (listed) sleep(2500);
+        }
+        List<Row> stale = List.of();
+        if (listed && pages.openFolder(title)) {
+            ScheduleDistPage again = new ScheduleDistPage(driver);
+            again.waitLoaded(Duration.ofSeconds(20));
+            sleep(2000);
+            stale = again.visibleRows();
+            backToTabs();
+        }
+        tab(ScheduleDistPage.TAB_PAGES).searchPages("");
+        List<Row> staleFinal = stale;
+        assertTrue(staleFinal.stream().noneMatch(r -> ("Page No. " + pageNo).equals(r.name)),
+                "[SCH-04] The deleted page is still listed when its lingering folder is reopened: " + staleFinal);
+        assertFalse(listed, "[SCH-04] \"" + title + "\" is still on the Pages tab 15 s after its last page was deleted"
+                + " (an empty scene row; opening it listed " + staleFinal + "). Folders shown: " + seen);
     }
 
     @Test
@@ -782,37 +923,6 @@ class ScheduleDistTest extends ScheduleDistBaseTest {
 
     // ═══════════════════════════ helpers ═══════════════════════════
 
-    private ScheduleDistPage tab(String name) {
-        openSchedule();
-        ScheduleDistPage page = new ScheduleDistPage(driver);
-        if (!page.isSelected(name)) assumeTrue(page.openTab(name), "Tab " + name + " could not be tapped");
-        page.waitLoaded(Duration.ofSeconds(30));
-        return page;
-    }
-
-    /** The upload button → the picker. */
-    private ScheduleUploadPage startUpload(String tabName) {
-        ScheduleDistPage page = tab(tabName);
-        assumeTrue(page.uploadShown(), "No upload button on " + tabName + ": this user cannot upload");
-        assumeTrue(page.tapUpload(), "The upload button could not be tapped");
-        if (page.messageShown("You do not have Posting Rights", Duration.ofSeconds(3))) {
-            assumeTrue(false, "Upload is shown but refused: admin without the posting flag (finding 3)");
-        }
-        ScheduleUploadPage up = new ScheduleUploadPage(driver);
-        assumeTrue(up.pickerShown(Duration.ofSeconds(10)), "The picker did not open");
-        return up;
-    }
-
-    /** The upload button → picker → the PDF fixture → the form. */
-    private ScheduleUploadPage openForm(String tabName) {
-        ScheduleUploadPage up = startUpload(tabName);
-        boolean ok = up.pickPdf(PDF, () -> waitAndDismissPermissions(Duration.ofSeconds(4)));
-        if (!ok) backToTabs();
-        assumeTrue(ok, "Could not pick " + PDF + " in the system picker. The runner pushes it to"
-                + " /sdcard/Documents; on screen: " + whereAreWe());
-        return up;
-    }
-
     private void assertRefused(Consumer<ScheduleUploadPage> fill, String why) {
         ScheduleUploadPage up = openForm(ScheduleDistPage.TAB_PAGES);
         try {
@@ -830,26 +940,6 @@ class ScheduleDistTest extends ScheduleDistBaseTest {
     /** Fills and submits a page upload; returns whether the form finished. */
     private boolean uploadPage(String pageNo, String colour, String type) {
         return uploadPage(scene, pageNo, colour, type);
-    }
-
-    private boolean uploadPage(String sceneNo, String pageNo, String colour, String type) {
-        ScheduleUploadPage up = openForm(ScheduleDistPage.TAB_PAGES);
-        up.setField(ScheduleUploadPage.SCENE, sceneNo);
-        boolean colourSet = up.chooseDropdown(ScheduleUploadPage.COLOUR, colour);
-        boolean typeSet = up.chooseDropdown(ScheduleUploadPage.TYPE, type);
-        if (!colourSet || !typeSet) {
-            up.leaveForm();
-            backToTabs();
-            assumeTrue(false, "The " + (colourSet ? "type" : "colour") + " dropdown could not be set to \""
-                    + (colourSet ? type : colour) + "\" — not uploading a page that would be missing it");
-        }
-        up.setField(ScheduleUploadPage.PAGE_NO, pageNo);
-        if (up.fieldShown(ScheduleUploadPage.EPISODE)) up.setField(ScheduleUploadPage.EPISODE, "1");
-        up.submit();
-        boolean closed = up.waitFormClosed(UPLOAD_WAIT);
-        if (!closed) { up.leaveForm(); }
-        backToTabs();
-        return closed;
     }
 
     /** Uploads the sentinel the first time; afterwards it is already there. */
@@ -919,10 +1009,14 @@ class ScheduleDistTest extends ScheduleDistBaseTest {
     }
 
     private Folder waitForFolder(String title, Duration timeout) {
+        return waitForFolder(scene, title, timeout);
+    }
+
+    private Folder waitForFolder(String sceneNo, String title, Duration timeout) {
         long deadline = System.currentTimeMillis() + timeout.toMillis();
         while (System.currentTimeMillis() < deadline) {
             ScheduleDistPage page = tab(ScheduleDistPage.TAB_PAGES);
-            page.searchPages(scene);
+            page.searchPages(sceneNo);
             for (Folder f : page.settledFolders()) if (title.equals(f.title)) { page.searchPages(""); return f; }
             page.searchPages("");
             sleep(5000);
@@ -932,17 +1026,6 @@ class ScheduleDistTest extends ScheduleDistBaseTest {
 
     private ScheduleDistPage openFolder() {
         return openFolder(scene);
-    }
-
-    private ScheduleDistPage openFolder(String sceneNo) {
-        ScheduleDistPage page = tab(ScheduleDistPage.TAB_PAGES);
-        page.searchPages(sceneNo);
-        boolean opened = page.openFolder("Scene No. " + sceneNo);
-        if (!opened) page.searchPages("");
-        assumeTrue(opened, "The folder for scene " + sceneNo + " is not on the Pages tab");
-        ScheduleDistPage inside = new ScheduleDistPage(driver);
-        inside.waitLoaded(Duration.ofSeconds(30));
-        return inside;
     }
 
     private String waitForForeignApp(Duration timeout) {

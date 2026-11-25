@@ -2,6 +2,7 @@ package com.zillit.automation.tests.drive;
 
 import com.zillit.automation.core.BaseTest;
 import com.zillit.automation.core.TestOrder;
+import com.zillit.automation.core.ReasonLogger;
 import com.zillit.automation.pages.common.BottomNavPage;
 import com.zillit.automation.pages.drive.DriveHomePage;
 import com.zillit.automation.pages.drive.DriveItemMenuPage;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.Duration;
@@ -42,6 +44,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * live during mapping, where the owner's row menu had 6 entries and the recipient's had
  * exactly 2 (Add to favorites, Details).
  */
+@ExtendWith(ReasonLogger.class)
 @Order(TestOrder.DRIVE_SHARED_WITH_ME)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class DriveSharedWithMeTest extends BaseTest {
@@ -58,7 +61,9 @@ class DriveSharedWithMeTest extends BaseTest {
      * the file was re-shared with edit access — the app was right and the test was stale.
      * Verified both ways on a real second device: with view+download the recipient's row
      * menu held exactly two entries (Add to favorites, Details) against the owner's six;
-     * with edit it gained Share, Move and Edit Info — and never Delete.
+     * with edit it gains Share and Edit Info — never Delete, and never Move: Move is hidden
+     * for everyone under Shared with me, whatever their rights (Zillit-Android
+     * {@code drive/presentation/home/HomeFragment.kt:1459-1469}, web ZL-21869).
      */
     private static final String GRANTED_RIGHTS =
             System.getenv().getOrDefault("ZILLIT_SHARED_RIGHTS", "edit");
@@ -100,7 +105,7 @@ class DriveSharedWithMeTest extends BaseTest {
         tools.searchTools("Drive");
         sleep(1500);
         return tools.isModuleListed("Drive", Duration.ofSeconds(6))
-                && tools.openModule("Drive")
+                && tools.openModuleContaining("Drive")
                 && drive.isLoaded(Duration.ofSeconds(20));
     }
 
@@ -227,9 +232,13 @@ class DriveSharedWithMeTest extends BaseTest {
         assertFalse(delete, "A non-owner must NEVER be offered Delete, whatever their rights");
 
         if ("edit".equalsIgnoreCase(GRANTED_RIGHTS)) {
-            // An EDITOR may reshape the item…
+            // An EDITOR may edit the item's info…
             assertTrue(edit, "An editor should be offered Edit Info");
-            assertTrue(move, "An editor should be offered Move to…");
+            // …but Move is NEVER offered under Shared with me, even to an Editor. The rule
+            // is the section, not the permission: HomeFragment.kt:1459-1469 shows menuMove
+            // only when `canEditItem && hasPostingAccess && !viewModel.isUnderSharedWithMe`
+            // (web ZL-21869; the bulk bar hides it there too, HomeFragment.kt:958-959).
+            assertFalse(move, "Move is never offered under Shared with me, even to an Editor (ZL-21869)");
         } else {
             // …a VIEWER may not. Verified live: with View+Download the menu held exactly
             // two entries (Add to favorites, Details) against the owner's six.

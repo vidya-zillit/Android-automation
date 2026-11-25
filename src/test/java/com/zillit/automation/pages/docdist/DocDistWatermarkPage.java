@@ -487,6 +487,21 @@ public class DocDistWatermarkPage extends BasePage {
     /** Closes the download sheet without saving anything. */
     public boolean tapSheetCancel() { return click("dd_cancel"); }
 
+    /**
+     * The project-settings note under the appearance controls ({@code dd_wm_project_note}),
+     * scrolled into view first. Hidden until the project's settings load; "" then.
+     */
+    public String projectNote(Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            revealId("dd_wm_project_note");
+            String t = textOf("dd_wm_project_note");
+            if (t != null && !t.isBlank()) return t;
+            sleep(500);
+        }
+        return "";
+    }
+
     // ==================== wizard sheet ====================
 
     /** The wizard's big preview card — wizard-unique, safe as an identity anchor. */

@@ -7,6 +7,7 @@ import com.zillit.automation.pages.docdist.DocDistComposerPage;
 import com.zillit.automation.pages.docdist.DocDistDistributionDetailPage;
 import com.zillit.automation.pages.docdist.DocDistHistoryPage;
 import com.zillit.automation.pages.docdist.DocDistLibraryPage;
+import com.zillit.automation.pages.docdist.DocDistPresetsPage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
@@ -260,8 +261,8 @@ class DocDistHistoryTest extends DocDistBaseTest {
 
     @Test
     @Order(3)
-    @DisplayName("J-3: the empty state shows — naturally when there is no history, and on a "
-            + "no-match search when there is")
+    @DisplayName("J-3 [WEB DD-27]: the empty state shows — naturally when there is no history, and on a "
+            + "no-match search when there is (saying 'No matching emails.')")
     void emptyStateShows() {
         DocDistHistoryPage history = openHistoryOrSkip();
         try {
@@ -286,7 +287,40 @@ class DocDistHistoryTest extends DocDistBaseTest {
                         "A no-match search should report zero results. Got: '"
                                 + history.resultCountText() + "'");
             }
-            if (!naturallyEmpty) history.clearSearch();
+            if (naturallyEmpty) {
+                // DD-27 is checkable on an empty history too: the search state alone decides
+                // the wording, so search, read it, and clear back to the plain empty text.
+                String plain = history.emptyText();
+                assumeTrue(history.search(NO_MATCH_QUERY), "Could not type in the history search box");
+                sleep(1500);
+                String searching = history.emptyText();
+                history.clearSearch();
+                sleep(1500);
+                String cleared = history.emptyText();
+                System.out.println(">>> J-3 empty history: plain='" + plain + "' searching='" + searching
+                        + "' cleared='" + cleared + "'");
+                assertTrue(searching != null && searching.contains("No matching emails"),
+                        "[DD-27] A search with no match should say 'No matching emails.', got '" + searching + "'");
+                assertTrue(cleared != null && cleared.contains("No emails sent yet"),
+                        "Clearing the search should restore 'No emails sent yet.', got '" + cleared + "'");
+            }
+            if (!naturallyEmpty) {
+                // [WEB L410, DD-27] With a search active the empty state must say there is
+                // no MATCH — "No emails sent yet." read as an empty history.
+                String text = history.emptyText();
+                assertFalse(text != null && text.contains("No emails sent yet"),
+                        "[DD-27] A no-match search must not say 'No emails sent yet.', got '" + text + "'");
+                assertTrue(text != null && text.contains("No matching emails"),
+                        "[DD-27] A no-match search should say 'No matching emails.', got '" + text + "'");
+                history.clearSearch();
+                // Clearing the search brings the rows back.
+                boolean back = false;
+                for (int i = 0; i < 16 && !back; i++) {
+                    back = history.visibleRowCount() > 0;
+                    if (!back) sleep(500);
+                }
+                assertTrue(back, "Clearing the search should bring the history rows back");
+            }
         } finally {
             backToLibrary();
         }
@@ -1290,6 +1324,64 @@ class DocDistHistoryTest extends DocDistBaseTest {
                             + "engagement.delivered instead — worth confirming against the API "
                             + "before treating it as a UI bug.");
         } finally {
+            backToLibrary();
+        }
+    }
+
+    // ==================== K-8b · WEB H08 (L557) ====================
+
+    /**
+     * [WEB H08, L557 — partial] Save recipients as a list really creates it. K-8 stops at
+     * the prompt; this one names the list {@code QA_FROMREC_<ts>}, confirms, finds it under
+     * Lists with a member count, and deletes it again (the {@code QA_*} sweeper in
+     * DocDistCleanupTest is the backstop).
+     */
+    @Test
+    @Order(29)
+    @DisplayName("K-8b [WEB H08]: Save as list creates the list under Lists (then deleted)")
+    void saveAsListCreatesList() {
+        String name = "QA_FROMREC_" + (System.currentTimeMillis() % 100000);
+        boolean created = false;
+        DocDistHistoryPage history = openHistoryOrSkip();
+        try {
+            DocDistDistributionDetailPage detail = openFirstDistributionOrSkip(history);
+            assumeTrue(detail.isSaveAsListEnabled(), "Save as list is disabled for this record");
+            assumeTrue(detail.tapSaveAsList(), "Could not tap Save as list");
+            if (detail.rightsDialogShown()) {
+                detail.confirmPopup().clearIfBlocking();
+                assumeTrue(false, "Save as list hit the posting-rights gate on this account");
+            }
+            assumeTrue(detail.saveListPromptShown(), "The name prompt did not appear");
+            assertTrue(detail.setSaveListName(name), "Could not type the list name");
+            assertTrue(detail.confirmSaveListPrompt(), "Could not confirm the prompt");
+            created = true;
+            sleep(2500);
+        } finally {
+            backToLibrary();
+        }
+
+        DocDistLibraryPage lib = new DocDistLibraryPage(driver);
+        assumeTrue(lib.openLists(), "The Lists shortcut is not reachable");
+        DocDistPresetsPage presets = new DocDistPresetsPage(driver);
+        try {
+            assumeTrue(presets.isOverview(Duration.ofSeconds(20)), "The list overview did not open");
+            boolean listed = presets.waitForList(name, Duration.ofSeconds(45));
+            String count = listed ? presets.countTextFor(name) : "";
+            System.out.println(">>> K-8b list '" + name + "' listed=" + listed + " count='" + count + "'");
+            screenshot("dd-k8b-list");
+            assertTrue(listed, "Save as list should create '" + name + "' under Lists");
+            assertTrue(count.matches("^[1-9]\\d* (person|people|recipient|recipients)\\b.*"),
+                    "The new list should carry the record's recipients, count line '" + count + "'");
+        } finally {
+            if (created && presets.waitForList(name, Duration.ofSeconds(5)) && presets.tapDelete(name)) {
+                ConfirmPopupPage confirm = presets.confirmPopup();
+                if (confirm.isShown(Duration.ofSeconds(8)) && confirm.isFrameworkDialog()) {
+                    confirm.accept(Duration.ofSeconds(5));
+                    presets.waitForListGone(name, Duration.ofSeconds(30));
+                } else {
+                    confirm.clearIfBlocking();
+                }
+            }
             backToLibrary();
         }
     }

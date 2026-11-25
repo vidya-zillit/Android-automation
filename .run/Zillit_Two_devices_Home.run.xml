@@ -1,0 +1,21 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Zillit ▸ Two devices · Home chat" type="ShConfigurationType">
+    <option name="SCRIPT_TEXT" value="" />
+    <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
+    <option name="SCRIPT_PATH" value="$PROJECT_DIR$/run-ui.sh" />
+    <option name="SCRIPT_OPTIONS" value="--two-device" />
+    <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="true" />
+    <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <option name="INDEPENDENT_INTERPRETER_PATH" value="true" />
+    <option name="INTERPRETER_PATH" value="/bin/bash" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="EXECUTE_IN_TERMINAL" value="false" />
+    <option name="EXECUTE_SCRIPT_FILE" value="true" />
+    <envs>
+      <env name="ZILLIT_UDID" value="emulator-5554" />
+      <env name="ZILLIT_SENDER_UDID" value="emulator-5554" />
+      <env name="ZILLIT_RECEIVER_UDID" value="34281FDH2005XC" />
+    </envs>
+    <method v="2" />
+  </configuration>
+</component>

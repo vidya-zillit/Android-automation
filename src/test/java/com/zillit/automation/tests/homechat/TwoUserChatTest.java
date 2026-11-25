@@ -53,6 +53,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@org.junit.jupiter.api.extension.ExtendWith(com.zillit.automation.core.ReasonLogger.class)
 class TwoUserChatTest {
 
     /** Cross-device propagation budget for TEXT (sockets are fast). */
@@ -81,9 +82,13 @@ class TwoUserChatTest {
         String aUdid = firstNonBlank(Config.get("zillit.sender.udid"), System.getenv("ZILLIT_SENDER_UDID"),
                 Config.get("zillit.udid"), "emulator-5554");
 
-        A = new Dev(DriverFactory.create(aUdid, 8200), "A");
-        B = new Dev(DriverFactory.create(bUdid, 8210), "B");
-        pkg = A.driver.getCurrentPackage();
+        // 8260/8270, not 8200/8210: other suites run single-device sessions on the same Appium
+        // server at the same time, and Appium hands those the lowest free port from 8200 up.
+        A = new Dev(DriverFactory.create(aUdid, 8260), "A");
+        B = new Dev(DriverFactory.create(bUdid, 8270), "B");
+        // From config, not from the screen: A may be showing another app (a picker) at session start.
+        pkg = Config.configuredAppPackage();
+        if (pkg == null || pkg.isEmpty()) pkg = A.driver.getCurrentPackage();
 
         String unit = Config.get("zillit.unit");
         boolean a = enterUnit(A, unit);
@@ -259,7 +264,7 @@ class TwoUserChatTest {
         HomeChatPage s = from.chat(), r = to.chat();
         assumeTrue(s.isInputBarVisible(), from.name + " has no posting rights — skipping");
         // Distinct markers with NO containment (else "orig gone" is a false negative).
-        long id = stamp();
+        String id = stamp();
         String orig = "xedit-" + from.name + "-o" + id;
         String edited = "xedit-" + from.name + "-e" + id;
 
@@ -369,18 +374,350 @@ class TwoUserChatTest {
                 "A's reply to B's message should post");
         assertTrue(waitText(bChat, reply, DELIVER), "B should receive A's reply");
 
-        // --- DELETE on the other user's message must be BLOCKED ---
+        // --- DELETE on the other user's message ---
+        // A non-admin is refused ("you cannot delete other user message"); an ADMIN may delete
+        // anyone's message (Home.kt setDeleteAction accepts isAdmin, :1422; handleMultiSelection
+        // :1308). Account A (Vidya Testing) is a project admin, so the old "must be blocked"
+        // assertion depended on the role. Branch on what the app does, and never confirm.
         assumeTrue(aChat.longPressMessage(marker), "A long-press (2nd) on B's message failed");
         assumeTrue(aChat.isMenuOpen(Duration.ofSeconds(6)), "Menu did not reopen on B's message");
         if (aChat.tapMenuOption("Delete")) {
-            // For another user's message the app blocks delete (snackbar
-            // "you cannot delete other user message") — no confirm, message stays.
-            aChat.tapDeleteActionBar(Duration.ofSeconds(3));
-            confirmYes(A.driver, Duration.ofSeconds(3));
+            boolean adminSelection = aChat.inSelectionMode(Duration.ofSeconds(3));
+            boolean refused = aChat.textShown("delete other", Duration.ofSeconds(2));
+            System.out.println(">>> delete on other-user message: selectionMode(admin)=" + adminSelection + " refused=" + refused);
+            if (adminSelection) aChat.exitSelectionMode();     // admin path: leave without deleting
+            assertTrue(adminSelection || refused,
+                    "Delete on another member's message should either refuse (non-admin) or enter selection mode (admin)");
         }
         assertTrue(aChat.messageShown(marker, Duration.ofSeconds(6)),
-                "B's message must STILL be present — you cannot delete another user's message");
-        System.out.println(">>> delete-blocked on other-user message: verified (message still present)");
+                "B's message must still be present — nothing was confirmed");
+    }
+
+    // ===================================================== WEB GAP (2026-11-23)
+
+    /**
+     * [WEB M5 #109] (sheet BUL-16). B (the Pixel, "Vidya Pixel") posts; A (the emulator) opens
+     * the menu on B's message. Edit must not be offered on another member's message.
+     * Home.kt builds the menu with {@code showEdit = !homeChatInfo.message.isNullOrEmpty()} and no
+     * owner check — the owner check only runs after the tap ("You can't edit other users
+     * message"), so this FAILS while BUL-16 is open.
+     */
+    @Test
+    @Order(8)
+    @DisplayName("[WEB M5] Another member's message offers no Edit (BUL-16)")
+    void otherMembersMessageOffersNoEdit() {
+        assumeTrue(ready, "Both devices not in the same unit — skipping");
+        settle(A); settle(B);
+        HomeChatPage bChat = B.chat(), aChat = A.chat();
+        assumeTrue(bChat.isInputBarVisible(), "B has no posting rights — skipping");
+        String marker = "ZL_AUTO-m5-" + stamp();
+        try {
+            bChat.sendMessage(marker);
+            assumeTrue(waitText(aChat, marker, DELIVER), "A never received B's message — skipping");
+            assumeTrue(aChat.longPressMessage(marker), "A long-press on B's message failed");
+            List<String> opts = aChat.menuOptions();
+            System.out.println(">>> M5 A's menu on B's message: " + opts);
+            boolean editOffered = opts.stream().anyMatch(o -> o.equalsIgnoreCase("Edit"));
+            String afterTap = "";
+            if (editOffered) {
+                aChat.tapMenuOption("Edit");
+                if (aChat.textShown("edit other", Duration.ofSeconds(4))) afterTap = "snackbar \"You can't edit other users message\"";
+                else if (aChat.isEditDialogOpen(Duration.ofSeconds(2))) { afterTap = "EDIT DIALOG OPENED"; aChat.cancelEditDialog(); }
+                else afterTap = "nothing visible";
+                System.out.println(">>> M5 tapping Edit on B's message gave: " + afterTap);
+            } else {
+                aChat.closeMenu();
+            }
+            assertTrue(!editOffered,
+                    "BUL-16: Edit is offered on another member's message (Home.kt showEdit has no owner check); tapping it gave: " + afterTap);
+        } finally {
+            bChat.deleteOwnMessage(marker);
+        }
+    }
+
+    /**
+     * [WEB M9 #122 #160]. A sits on Calendar; B posts in the shared chat unit. A's chip for that
+     * unit shows an unread badge; when A opens the unit the "New Messages" header sits above B's
+     * post and the badge clears.
+     */
+    @Test
+    @Order(9)
+    @DisplayName("[WEB M9] Unread badge on the unit chip and the New Messages divider")
+    void unreadBadgeAndNewMessagesDivider() {
+        assumeTrue(ready, "Both devices not in the same unit — skipping");
+        settle(A); settle(B);
+        HomeChatPage aChat = A.chat(), bChat = B.chat();
+        String unit = aChat.bulletinLikeUnit();
+        String cal = aChat.unitNameContaining("calendar");
+        assumeTrue(unit != null && cal != null, "Need a Bulletin-like chat unit and a Calendar chip on A");
+        assumeTrue(bChat.selectUnit(unit) && bChat.isInputBarVisible(), "B cannot post in " + unit);
+        String marker = "ZL_AUTO-m9-" + stamp();
+        try {
+            assumeTrue(aChat.selectUnit(cal), "A could not switch to Calendar");
+            sleepQuiet(1500);
+            bChat.sendMessage(marker);
+            assumeTrue(bChat.waitMessageSent(marker, Duration.ofSeconds(30)), "B's post did not reach the server");
+            String badge = "";
+            long deadline = System.currentTimeMillis() + DELIVER.toMillis();
+            while (badge.isBlank() && System.currentTimeMillis() < deadline) {
+                badge = aChat.unitBadge(unit);
+                if (badge.isBlank()) sleepQuiet(1000);
+            }
+            System.out.println(">>> M9 A's badge on '" + unit + "': '" + badge + "'");
+            assertTrue(!badge.isBlank(), "A's '" + unit + "' chip should show an unread badge after B posts");
+
+            aChat.selectUnit(unit);
+            assertTrue(waitText(aChat, marker, DELIVER), "A should see B's post after opening " + unit);
+            boolean header = aChat.textShown("New Messages", Duration.ofSeconds(5));
+            assertTrue(header, "The 'New Messages' divider should show above B's unread post");
+            sleepQuiet(2500);
+            assertTrue(aChat.unitBadge(unit).isBlank(), "The badge should clear once A has opened " + unit
+                    + " (still '" + aChat.unitBadge(unit) + "')");
+        } finally {
+            aChat.selectUnit(unit);
+            bChat.deleteOwnMessage(marker);
+        }
+    }
+
+    /**
+     * [WEB M34 #152] (sheet BUL-29). A posts and replies to it; B sees the reply under the post.
+     * A edits the post; on B the post shows the edited text and the reply is still under it.
+     */
+    @Test
+    @Order(10)
+    @DisplayName("[WEB M34] An edit arriving live keeps the replies under the post (BUL-29)")
+    void liveEditKeepsReplies() {
+        assumeTrue(ready, "Both devices not in the same unit — skipping");
+        settle(A); settle(B);
+        HomeChatPage aChat = A.chat(), bChat = B.chat();
+        String id = stamp();
+        String orig = "ZL_AUTO-m34-o" + id;
+        String edited = "ZL_AUTO-m34-e" + id;
+        String reply = "ZL_AUTO-m34-r" + id;
+        try {
+            aChat.sendMessage(orig);
+            assumeTrue(aChat.waitMessageSent(orig, Duration.ofSeconds(30)), "A's post did not reach the server");
+            assumeTrue(aChat.longPressMessage(orig) && aChat.tapMenuOption("Reply"), "A could not start a reply");
+            aChat.sendMessage(reply);
+            assumeTrue(waitText(bChat, reply, DELIVER), "B never got A's reply");
+            assumeTrue(bChat.replyUnderRow(orig, reply), "On B the reply is not under the post before the edit");
+
+            assumeTrue(aChat.longPressMessage(orig) && aChat.tapMenuOption("Edit"), "A could not open Edit");
+            assumeTrue(aChat.isEditDialogOpen(Duration.ofSeconds(6)), "Edit dialog did not open");
+            aChat.setEditDialogTextNoBack(edited);
+            aChat.saveEditDialog();
+            assumeTrue(aChat.messageShown(edited, Duration.ofSeconds(15)), "A's edit did not apply");
+
+            assertTrue(waitText(bChat, edited, DELIVER), "B should see the edited text live");
+            sleepQuiet(1500);
+            assertTrue(bChat.replyUnderRow(edited, reply),
+                    "BUL-29: after the live edit B lost the reply under the post");
+        } finally {
+            aChat.cancelReplyPreview();
+            if (!aChat.deleteOwnMessage(edited)) aChat.deleteOwnMessage(orig);
+        }
+    }
+
+    /**
+     * [WEB M20 #126 #162] (sheet BUL-18, two-device half). B sits on Calendar; A posts and opens
+     * Read By on the post; B opens the unit. B's name should move into A's read list live.
+     */
+    @Test
+    @Order(11)
+    @DisplayName("[WEB M20b] Read By updates live: B moves into the read list when B opens the unit")
+    void readByUpdatesLive() {
+        assumeTrue(ready, "Both devices not in the same unit — skipping");
+        settle(A); settle(B);
+        HomeChatPage aChat = A.chat(), bChat = B.chat();
+        String unit = aChat.bulletinLikeUnit();
+        String cal = bChat.unitNameContaining("calendar");
+        assumeTrue(unit != null && cal != null, "Need a Bulletin-like unit and a Calendar chip");
+        aChat.selectUnit(unit);
+        String probe = "ZL_AUTO-m20p-" + stamp();
+        String m = "ZL_AUTO-m20-" + stamp();
+        try {
+            assumeTrue(bChat.selectUnit(unit) && bChat.isInputBarVisible(), "B cannot post in " + unit);
+            bChat.sendMessage(probe);
+            assumeTrue(waitText(aChat, probe, DELIVER), "A never got B's probe message");
+            aChat.revealNewestRow();
+            String bName = aChat.rowText(probe, "tvUserName");
+            if (bName.contains(" (")) bName = bName.substring(0, bName.indexOf(" ("));
+            assumeTrue(!bName.isBlank(), "Could not read B's display name from the probe row");
+            bChat.deleteOwnMessage(probe);
+            bChat.selectUnit(cal);
+            sleepQuiet(1500);
+
+            aChat.sendMessage(m);
+            assumeTrue(aChat.waitMessageSent(m, Duration.ofSeconds(30)), "A's post did not reach the server");
+            assumeTrue(aChat.readByOpensPage(m), "Read By did not open on A");
+            final String name = bName;
+            boolean readBefore = listHas(A.driver, "readByRv", name);
+            System.out.println(">>> M20b '" + name + "' in read list before B opens: " + readBefore);
+            bChat.selectUnit(unit);
+            assumeTrue(waitText(bChat, m, DELIVER), "B never saw A's post");
+            long end = System.currentTimeMillis() + DELIVER.toMillis();
+            boolean readAfter = false;
+            while (!readAfter && System.currentTimeMillis() < end) { readAfter = listHas(A.driver, "readByRv", name); sleepQuiet(1000); }
+            assertTrue(readAfter, "BUL-18: " + name + " should move into A's read list live once B opens the unit");
+        } finally {
+            aChat.leaveOverlayScreen();
+            bChat.selectUnit(unit);
+            bChat.deleteOwnMessage(probe);
+            aChat.deleteOwnMessage(m);
+        }
+    }
+
+    private boolean listHas(AndroidDriver d, String listId, String text) {
+        try {
+            return !d.findElements(AppiumBy.xpath("//*[@resource-id='" + pkg + ":id/" + listId + "']//*[contains(@text,'"
+                    + text.replace("'", "") + "')]")).isEmpty();
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    /**
+     * [WEB M11 #153] (sheet BUL-30). A searches B's name and notes the count; B then only REPLIES
+     * to a fresh post of A's; A searches again. The comment sender should be searched too, so
+     * the count should grow by one (HomeChatAdapter searches only the comment TEXT, :708-715).
+     */
+    @Test
+    @Order(12)
+    @DisplayName("[WEB M11b] Searching a member's name finds a post they only replied to (BUL-30)")
+    void searchFindsCommentSender() {
+        assumeTrue(ready, "Both devices not in the same unit — skipping");
+        settle(A); settle(B);
+        HomeChatPage aChat = A.chat(), bChat = B.chat();
+        String unit = aChat.bulletinLikeUnit();
+        assumeTrue(unit != null, "No Bulletin-like unit");
+        aChat.selectUnit(unit);
+        assumeTrue(bChat.selectUnit(unit) && bChat.isInputBarVisible(), "B cannot post in " + unit);
+        String probe = "ZL_AUTO-m11p-" + stamp();
+        String parent = "ZL_AUTO-m11-" + stamp();
+        String reply = "ZL_AUTO-m11r-" + stamp();
+        try {
+            bChat.sendMessage(probe);
+            assumeTrue(waitText(aChat, probe, DELIVER), "A never got B's probe");
+            aChat.revealNewestRow();
+            String bName = aChat.rowText(probe, "tvUserName");
+            if (bName.contains(" (")) bName = bName.substring(0, bName.indexOf(" ("));
+            assumeTrue(!bName.isBlank(), "Could not read B's display name");
+            bChat.deleteOwnMessage(probe);
+            sleepQuiet(2000);
+
+            aChat.sendMessage(parent);
+            assumeTrue(aChat.waitMessageSent(parent, Duration.ofSeconds(30)), "A's post did not reach the server");
+            assumeTrue(aChat.openSearch(), "Search did not open on A");
+            aChat.searchFor(bName, true);
+            int c0 = parseInt(aChat.searchCount());
+            aChat.closeSearch();
+
+            assumeTrue(waitText(bChat, parent, DELIVER), "B never got A's post");
+            assumeTrue(bChat.longPressMessage(parent) && bChat.tapMenuOption("Reply"), "B could not reply");
+            bChat.sendMessage(reply);
+            assumeTrue(waitText(aChat, reply, DELIVER), "A never got B's reply");
+
+            assumeTrue(aChat.openSearch(), "Search did not reopen on A");
+            aChat.searchFor(bName, true);
+            int c1 = parseInt(aChat.searchCount());
+            System.out.println(">>> M11b search '" + bName + "': before=" + c0 + " after B's reply=" + c1);
+            assertTrue(c1 > c0, "BUL-30: a post B only replied to is not found by B's name (count " + c0 + " → " + c1 + ")");
+        } finally {
+            if (aChat.isSearchOpen(Duration.ofMillis(500))) aChat.closeSearch();
+            bChat.cancelReplyPreview();
+            bChat.deleteOwnMessage(probe);
+            aChat.deleteOwnMessage(parent);
+        }
+    }
+
+    /**
+     * [WEB M8 #151 #95] (sheet BUL-26 High). A forwards its own text to Home → Bulletin (a copy
+     * lands in the feed), then forwards that COPY to member B. B must receive it in the C&C chat
+     * with A within 60 s — never silently dropped.
+     */
+    @Test
+    @Order(13)
+    @DisplayName("[WEB M8] Forwarding a forwarded copy to a member delivers it to the member's C&C chat (BUL-26)")
+    void forwardForwardedCopyToMember() {
+        assumeTrue(ready, "Both devices not in the same unit — skipping");
+        settle(A); settle(B);
+        HomeChatPage aChat = A.chat(), bChat = B.chat();
+        String unit = aChat.bulletinLikeUnit();
+        assumeTrue(unit != null, "No Bulletin-like unit");
+        aChat.selectUnit(unit);
+        assumeTrue(bChat.selectUnit(unit), "B cannot open " + unit);
+        String probe = "ZL_AUTO-m8p-" + stamp();
+        String m = "ZL_AUTO-m8-" + stamp();
+        String aName = "", bName = "";
+        try {
+            bChat.sendMessage(probe);
+            assumeTrue(waitText(aChat, probe, DELIVER), "A never got B's probe");
+            aChat.revealNewestRow();
+            bName = shortName(aChat.rowText(probe, "tvUserName"));
+            bChat.deleteOwnMessage(probe);
+            aChat.sendMessage(m);
+            assumeTrue(aChat.waitMessageSent(m, Duration.ofSeconds(30)), "A's post did not reach the server");
+            assumeTrue(waitText(bChat, m, DELIVER), "B never got A's post");
+            bChat.revealNewestRow();
+            aName = shortName(bChat.rowText(m, "tvUserName"));
+            assumeTrue(!aName.isBlank() && !bName.isBlank(), "Could not read the two display names");
+
+            // 1) forward to Home → this unit: a copy appears in the feed
+            assumeTrue(aChat.forwardOpensPage(m), "Forward did not open ForwardPage");
+            assumeTrue(clickText(A.driver, "Home"), "ForwardPage has no Home row");
+            sleepQuiet(1500);
+            assumeTrue(clickText(A.driver, unit), "Select Unit did not list " + unit);
+            clickId(A.driver, "submit_btn");
+            aChat.confirmPopup().acceptIfShown(Duration.ofSeconds(4));
+            aChat.leaveOverlayScreen();
+            aChat.selectUnit(unit);
+            long end = System.currentTimeMillis() + 30_000;
+            while (aChat.rowsContaining(m) < 2 && System.currentTimeMillis() < end) { aChat.revealNewestRow(); sleepQuiet(1000); }
+            assertTrue(aChat.rowsContaining(m) >= 2, "#95: forwarding to " + unit + " should add a copy to the feed");
+
+            // 2) forward the COPY to member B
+            assumeTrue(aChat.longPressLastMessage(m), "Long-press on the forwarded copy failed");
+            assumeTrue(aChat.tapMenuOption("Forward"), "The copy offers no Forward");
+            aChat.confirmPopup().acceptIfShown(Duration.ofSeconds(8));
+            sleepQuiet(1500);
+            assumeTrue(clickText(A.driver, "Members"), "ForwardPage has no Members row");
+            sleepQuiet(2000);
+            assumeTrue(clickText(A.driver, "(?i).*" + bName + ".*"), "The member list does not show " + bName);
+            clickId(A.driver, "submit_btn");
+            aChat.confirmPopup().acceptIfShown(Duration.ofSeconds(4));
+            boolean errorOnA = aChat.textShown("went wrong", Duration.ofSeconds(3)) || aChat.textShown("failed", Duration.ofSeconds(1));
+            aChat.leaveOverlayScreen();
+
+            // 3) B: C&C → chat with A → the forwarded text
+            boolean received = false;
+            if (new BottomNavPage(B.driver).selectTab("C&C")) {
+                sleepQuiet(2500);
+                if (clickText(B.driver, "(?i).*" + aName + ".*")) {
+                    long until = System.currentTimeMillis() + 60_000;
+                    while (!received && System.currentTimeMillis() < until) received = bChat.messageShown(m, Duration.ofSeconds(2));
+                }
+            }
+            System.out.println(">>> M8 B received in C&C=" + received + " errorOnA=" + errorOnA);
+            assertTrue(received || errorOnA,
+                    "BUL-26: the forwarded copy never reached " + bName + "'s C&C chat with " + aName + ", and A saw no error");
+        } finally {
+            try { B.driver.navigate().back(); } catch (WebDriverException ignored) { }
+            new BottomNavPage(B.driver).goHome();
+            aChat.leaveOverlayScreen();
+            aChat.selectUnit(unit);
+            for (int i = 0; i < 3 && aChat.messageShown(m, Duration.ofSeconds(2)); i++) aChat.deleteOwnMessage(m);
+            bChat.selectUnit(unit);
+            bChat.deleteOwnMessage(probe);
+        }
+    }
+
+    private static String shortName(String s) {
+        if (s == null) return "";
+        return s.contains(" (") ? s.substring(0, s.indexOf(" (")).trim() : s.trim();
+    }
+
+    private static int parseInt(String s) {
+        try { return Integer.parseInt(s.trim()); } catch (RuntimeException e) { return -1; }
     }
 
     // ============================================================= helpers
@@ -402,7 +739,9 @@ class TwoUserChatTest {
         if (home.isInputBarVisible()) return;
         // Last resort: relaunch (fast, no reinstall) and re-enter the unit. Also
         // resets the chat to a clean bottom-scrolled state, which makes the
-        // subsequent long-press reliable.
+        // subsequent long-press reliable. Never on B (the Pixel): a cold start there raises the
+        // app lock, which needs the owner's credential.
+        if (d.name.equals("B")) return;
         try {
             d.driver.executeScript("mobile: terminateApp", Map.of("appId", pkg));
             d.driver.executeScript("mobile: activateApp", Map.of("appId", pkg));
@@ -454,6 +793,26 @@ class TwoUserChatTest {
     private boolean enterUnit(Dev d, String unitName) {
         AndroidDriver drv = d.driver;
         try {
+            // The device may be parked deep in another module by the previous suite (seen:
+            // emulator-5554 left inside Doc Distribution), where none of the landing markers exist.
+            // Back out first; relaunch ONLY when that does not reach a landing. A cold start on the
+            // Pixel raises Zillit's app lock (BiometricPrompt, device credential required) which a
+            // test must never answer — the unconditional relaunch used here before left the Pixel
+            // stuck on that prompt (2026-11-24 05:17).
+            drv.executeScript("mobile: activateApp", Map.of("appId", pkg));
+            boolean landed = false;
+            for (int i = 0; i < 6 && !landed; i++) {
+                landed = isPresent(drv, "bottomNavigation") || isPresent(drv, "projectListRecyclerView")
+                        || isPresent(drv, "start_project_btn") || isPresent(drv, "recTab");
+                if (!landed) { try { drv.navigate().back(); } catch (WebDriverException ignored) { } sleepQuiet(1500); }
+            }
+            if (!landed && d.name.equals("A")) {        // A is always an emulator (no app lock there)
+                try {
+                    drv.executeScript("mobile: terminateApp", Map.of("appId", pkg, "timeout", 10000));
+                } catch (WebDriverException ignored) { }
+                try { drv.executeScript("mobile: activateApp", Map.of("appId", pkg)); } catch (WebDriverException ignored) { }
+                sleepQuiet(3000);
+            }
             long deadline = System.currentTimeMillis() + 90_000;
             while (System.currentTimeMillis() < deadline) {
                 dismiss(drv);
@@ -540,8 +899,9 @@ class TwoUserChatTest {
         return null;
     }
 
-    private long stamp() {
-        return System.currentTimeMillis() % 10_000_000L;
+    /** Digit-free (see HomeChatPage.letterStamp): a 7-digit run is autolinked as a phone number. */
+    private String stamp() {
+        return HomeChatPage.letterStamp();
     }
 
     private void quitQuiet(AndroidDriver d) {

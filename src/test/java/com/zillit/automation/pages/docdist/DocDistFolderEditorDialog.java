@@ -90,6 +90,14 @@ public class DocDistFolderEditorDialog extends BasePage {
 
     public boolean cancel() { return clickFramework(CANCEL); }
 
+    /** Enabled state of Save (DD-07: disabled while the name is blank or spaces only). */
+    public boolean isSaveEnabled() {
+        try {
+            return driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiSelector().resourceId(\"" + SAVE + "\")")).isEnabled();
+        } catch (WebDriverException e) { return false; }
+    }
+
     public boolean saveAndWaitClosed(Duration timeout) {
         return save() && waitClosed(timeout);
     }

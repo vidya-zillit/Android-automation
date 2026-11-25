@@ -171,6 +171,26 @@ Gates (from `postingRightsList[schedule_distribution_tool]` unless noted):
 |---|---|---|
 | SD-99 | Sweep | No **page** whose page number carries `ZL_AUTO` (or scene number `99ZLAUTO…`) is left on the project, including leftovers from a broken run and folders below the fold. Full and One Line cannot be swept — the sweep asserts instead that there is **at most one** automation row on each, the sentinel (see *Fixtures*) |
 
+## Web gap cases (2026-11-23)
+
+The web E2E sheet's four Schedule bugs (`SCH-01..04`, gap file `schedule-full-and-one-line.md`),
+added to the Android suite. Each assertion message names its bug id.
+
+| # | Web id | Case | Expected | Last result |
+|---|---|---|---|---|
+| SD-25 | SCH-01 | A fresh One Line upload form, opened after SD-13/16/22's dated uploads and Replace, starts with **no** date | `tvSelectedDate` holds no date (hint "Set Date (Optional)"); nothing is submitted, so no row is left | **PASS** 2026-11-23 (emulator, ZL-Android-Automation): the fresh form starts undated — SCH-01 does not reproduce on Android at form level |
+| SD-25b | SCH-01 | Undated One Line upload (episode `9901`) — **opt-in** `-Dzillit.schedule.undated=true`, because Full / One Line rows can never be deleted | The new row's `tv_name` is the label with an empty value, `One Line date :` | skipped by design (opt-in) |
+| SD-36b | SCH-02 | Scene search in lower case, then the scene typed one character at a time (80 ms apart), three times | The folder is found in lower case; after each fast typing the folder is listed and "No Schedule Page found" is not shown | **FAIL — reproduces SCH-02** 2026-11-23: "99zlauto5537" found nothing, "99ZLAUTO5537" finds the folder (server search is case-sensitive). The fast-typing half passed all three tries |
+| SD-45b | SCH-04 | Upload one page for scene `97ZLAUTO<run>`, delete it from its folder, go back to Pages **without searching again** | The folder leaves the Pages tab (refresh is socket-driven: `isScheduleDistHasChange`); if it lingers, reopening it must not list the deleted page | **PASS** 2026-11-23: the folder left Pages once its last page was deleted — SCH-04 does not reproduce on Android |
+| SD-70 | SCH-03 | **Two devices** (`ScheduleDistTwoUserTest`, `TestOrder.SCHEDULE_DIST_TWO_USER` = 192): A uploads a page, B's Tools badge on "Schedule Full & One Line" rises (control); A deletes it | B's badge returns to its starting value within 30 s | **Not run — blocked: Pixel app-locked** (2026-11-24). Compiled; the one attempt (01:56, emulator-5554 + Pixel) died on an environment failure (UiAutomator2 instrumentation gone, app could not start), nothing exercised |
+
+Notes:
+- SD-25/36b/45b live in `ScheduleDistTest`; the shared upload / folder steps (`tab`, `openForm`,
+  `uploadPage`, `openFolder`) moved to `ScheduleDistBaseTest` so the two-device class can use them.
+- SD-45b and SD-70 use their own scenes (`97ZLAUTO…`, `96ZLAUTO…`); SD-99's sweep removes any
+  that a broken run leaves.
+- SD-70 never opens the tool on B — opening it clears the badge for the wrong reason.
+
 ---
 
 ## Findings

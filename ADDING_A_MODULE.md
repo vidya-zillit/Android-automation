@@ -98,5 +98,5 @@ Then **look at the Run/Debug Configurations dropdown in Android Studio**. The Ma
 was fully wired through the scripts and still invisible there, because step 6 was missed —
 from the user's seat that is indistinguishable from not having done the work.
 
-The flavour is picked automatically when exactly one Zillit build is installed, so no
+Every run uses the dev build, so no
 `ZILLIT_FLAVOR` is needed for the common case.

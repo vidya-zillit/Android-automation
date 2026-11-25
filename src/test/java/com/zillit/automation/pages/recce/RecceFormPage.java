@@ -416,6 +416,125 @@ public class RecceFormPage extends BasePage {
         } catch (WebDriverException e) { return false; }
     }
 
+    /**
+     * Sets the kind of the LAST stop row (the one {@link #addStop()} just added).
+     *
+     * <p>Indexing visible rows does not work for that row: a stop row is taller than half the
+     * screen, so after scrolling to "Add stop" the new row's header line (time · kind · delete)
+     * is usually above the fold and the last visible {@code stopKind} belongs to the row before.
+     * With {@code fAddStop} on screen, the lowest {@code stopKind} above it IS the last row's
+     * header — so the form is nudged down in small steps until one is showing. [WEB RECCE-02]
+     */
+    public boolean setLastStopKind(String kind) {
+        if (!scrollTo("fAddStop")) { System.out.println(">>> setLastStopKind: fAddStop not found"); return false; }
+        WebElement header = null;
+        for (int i = 0; i < 8 && header == null; i++) {
+            header = lastStopKindAboveAddStop();
+            if (header == null) nudgeDown();
+        }
+        if (header == null) {
+            System.out.println(">>> setLastStopKind: no stopKind above fAddStop after nudging");
+            return false;
+        }
+        // The exposed-dropdown popup is drawn but absent from the accessibility tree (same as
+        // the External Users dropdowns), so the item is tapped where it is drawn — rows of
+        // simple_list_item_1 (48dp) directly under the field, in RecceEnums.Kind.ALL order —
+        // and the field is read back to verify, correcting the aim if another kind landed.
+        int index = STOP_KINDS.indexOf(kind);
+        if (index < 0) return false;
+        int aim = index;
+        for (int attempt = 0; attempt < 4; attempt++) {
+            try {
+                org.openqa.selenium.Rectangle r = header.getRect();
+                header.click();
+                sleep(1300);
+                int itemH = dp(48);
+                int x = r.getX() + r.getWidth() / 2;
+                int y = r.getY() + r.getHeight() + dp(8) + itemH * aim + itemH / 2;
+                tapAt(x, y);
+                sleep(1000);
+                header = lastStopKindAboveAddStop();
+                String now = header == null ? "" : String.valueOf(header.getText()).trim();
+                System.out.println(">>> setLastStopKind: attempt " + attempt + " aim=" + aim + " → '" + now + "'");
+                if (now.equalsIgnoreCase(kind)) return true;
+                int landed = STOP_KINDS.indexOf(now);
+                if (landed >= 0) aim = Math.max(0, aim + (index - landed));
+                if (header == null) return false;
+            } catch (WebDriverException e) {
+                System.out.println(">>> setLastStopKind: " + e.getClass().getSimpleName());
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /** RecceEnums.Kind.ALL — the dropdown's order. */
+    private static final java.util.List<String> STOP_KINDS =
+            java.util.List.of("Rendezvous", "Start", "Continue", "Lunch", "End");
+
+    private int dp(int v) {
+        try {
+            Object d = driver.getCapabilities().getCapability("deviceScreenDensity");
+            if (d != null) {
+                int dpi = Integer.parseInt(String.valueOf(d).trim());
+                if (dpi > 0) return Math.round(v * dpi / 160f);
+            }
+        } catch (Exception ignored) { }
+        return Math.round(v * 2.625f);
+    }
+
+    private void tapAt(int x, int y) {
+        var finger = new org.openqa.selenium.interactions.PointerInput(
+                org.openqa.selenium.interactions.PointerInput.Kind.TOUCH, "finger");
+        var seq = new org.openqa.selenium.interactions.Sequence(finger, 1);
+        seq.addAction(finger.createPointerMove(Duration.ZERO,
+                org.openqa.selenium.interactions.PointerInput.Origin.viewport(), x, y));
+        seq.addAction(finger.createPointerDown(0));
+        seq.addAction(finger.createPointerUp(0));
+        driver.perform(java.util.Collections.singletonList(seq));
+    }
+
+    private WebElement lastStopKindAboveAddStop() {
+        try {
+            java.util.List<WebElement> add = driver.findElements(byId("fAddStop"));
+            if (add.isEmpty()) return null;
+            int addY = add.get(0).getRect().getY();
+            WebElement best = null;
+            int bestY = -1;
+            for (WebElement k : driver.findElements(byId("stopKind"))) {
+                int y = k.getRect().getY();
+                if (y < addY && y > bestY) { best = k; bestY = y; }
+            }
+            return best;
+        } catch (WebDriverException e) { return null; }
+    }
+
+    /** Moves the form content DOWN by ~20% of the screen (reveals what is just above). */
+    private void nudgeDown() {
+        var size = driver.manage().window().getSize();
+        var finger = new org.openqa.selenium.interactions.PointerInput(
+                org.openqa.selenium.interactions.PointerInput.Kind.TOUCH, "finger");
+        var seq = new org.openqa.selenium.interactions.Sequence(finger, 1);
+        seq.addAction(finger.createPointerMove(Duration.ZERO,
+                org.openqa.selenium.interactions.PointerInput.Origin.viewport(),
+                size.getWidth() / 2, (int) (size.getHeight() * 0.40)));
+        seq.addAction(finger.createPointerDown(0));
+        seq.addAction(finger.createPointerMove(Duration.ofMillis(600),
+                org.openqa.selenium.interactions.PointerInput.Origin.viewport(),
+                size.getWidth() / 2, (int) (size.getHeight() * 0.60)));
+        seq.addAction(finger.createPointerUp(0));
+        driver.perform(java.util.Collections.singletonList(seq));
+        sleep(500);
+    }
+
+    /** Text of the last stop row's kind field ("" when unreadable or not on screen). */
+    public String lastStopKindText() {
+        WebElement k = lastStopKindAboveAddStop();
+        if (k == null) return "";
+        String t = k.getText();
+        return t == null ? "" : t;
+    }
+
     public String stopKindText(int index) {
         try {
             var kinds = driver.findElements(byId("stopKind"));
@@ -432,6 +551,145 @@ public class RecceFormPage extends BasePage {
             sleep(1800);
             return confirmMaterialPicker();
         } catch (WebDriverException e) { return false; }
+    }
+
+    // ---------------- crew picker (RecceCrewPickerBottomSheet) [WEB RECCE-01] ----------------
+    // Ids: crewSearch, crewRecycler, crewEmpty, crewChosen ("%d chosen"), crewAdd ("Done");
+    // rows item_recce_crew.xml: crewName / crewRole / crewCheck. A row tap toggles a set of
+    // user ids, and the search rebuilds the list from the full crew (filter()).
+
+    public boolean isCrewPickerOpen(Duration timeout) {
+        return isVisible("crewSearch", timeout) || isVisible("crewRecycler", Duration.ofSeconds(2));
+    }
+
+    public java.util.List<String> crewNames() {
+        try {
+            return driver.findElements(byId("crewName")).stream()
+                    .map(WebElement::getText).filter(t -> t != null && !t.isBlank()).toList();
+        } catch (WebDriverException e) { return java.util.List.of(); }
+    }
+
+    /** Types into the picker's search WITHOUT hideKeyboard (a BACK would close the sheet). */
+    public void searchCrew(String text) {
+        try {
+            WebElement f = driver.findElement(byId("crewSearch"));
+            f.click(); f.clear();
+            if (!text.isEmpty()) f.sendKeys(text);
+            sleep(1200);
+        } catch (WebDriverException ignored) { }
+    }
+
+    /** Index of the row named exactly {@code name}, or -1. Names and checks pair by row order. */
+    private int crewRowIndex(String name) {
+        java.util.List<WebElement> names = driver.findElements(byId("crewName"));
+        for (int i = 0; i < names.size(); i++) {
+            if (name.equals(names.get(i).getText())) return i;
+        }
+        return -1;
+    }
+
+    public boolean tapCrewRow(String name) {
+        try {
+            int i = crewRowIndex(name);
+            if (i < 0) return false;
+            driver.findElements(byId("crewName")).get(i).click();
+            sleep(800);
+            return true;
+        } catch (WebDriverException e) { return false; }
+    }
+
+    /** True / false for the row's crewCheck, or null when the row is not on screen. */
+    public Boolean crewChecked(String name) {
+        try {
+            int i = crewRowIndex(name);
+            java.util.List<WebElement> checks = driver.findElements(byId("crewCheck"));
+            if (i < 0 || i >= checks.size()) return null;
+            return "true".equals(checks.get(i).getAttribute("checked"));
+        } catch (WebDriverException e) { return null; }
+    }
+
+    public String crewChosenText() {
+        try { return driver.findElement(byId("crewChosen")).getText(); }
+        catch (WebDriverException e) { return ""; }
+    }
+
+    public boolean tapCrewDone() {
+        try { driver.findElement(byId("crewAdd")).click(); sleep(1500); return true; }
+        catch (WebDriverException e) { return false; }
+    }
+
+    /**
+     * Every personName value on the form (crew rows are filled with the member's name).
+     * The Personnel section sits below the fold, so it is scrolled into view first: the
+     * rows ({@code fPeople}) sit BELOW the "Add from project crew" / "Add person" buttons
+     * (fragment_recce_form.xml:292-311).
+     */
+    public java.util.List<String> personNames() {
+        java.util.List<String> names = readPersonNames();
+        if (names.isEmpty() && scrollTo("fAddPerson")) {
+            names = readPersonNames();
+            for (int i = 0; i < 4 && names.isEmpty(); i++) { swipeUp(); names = readPersonNames(); }
+        }
+        return names;
+    }
+
+    private java.util.List<String> readPersonNames() {
+        try {
+            return driver.findElements(byId("personName")).stream()
+                    .map(WebElement::getText).filter(t -> t != null && !t.isBlank()).toList();
+        } catch (WebDriverException e) { return java.util.List.of(); }
+    }
+
+    /**
+     * Ticks the first member in the crew picker and confirms; returns the name, or "" when
+     * the picker had nobody. Publishing requires at least one crew-sourced person
+     * (RecceFormFragment.submit: "recce_publish_needs_crew", since Oct 2026).
+     */
+    public String addFirstCrewMember() {
+        if (!openAddFromCrew() || !isCrewPickerOpen(Duration.ofSeconds(10))) return "";
+        java.util.List<String> crew = crewNames();
+        if (crew.isEmpty() || !tapCrewRow(crew.get(0))) { tapCrewDone(); return ""; }
+        tapCrewDone();
+        return crew.get(0);
+    }
+
+    // ---------------- picker "Use" button look [WEB RECCE-05] ----------------
+
+    /** pickerUse's enabled attribute ("true"/"false"), or "" when absent. */
+    public String pickerUseEnabled() {
+        try { return driver.findElement(byId("pickerUse")).getAttribute("enabled"); }
+        catch (WebDriverException e) { return ""; }
+    }
+
+    /**
+     * The button's dominant fill colour as 0xRRGGBB: the most common pixel along its middle
+     * row, so the white label and icon do not decide it. -1 when it cannot be captured.
+     */
+    public int pickerUseDominantColor() {
+        try {
+            WebElement b = driver.findElement(byId("pickerUse"));
+            byte[] png = b.getScreenshotAs(org.openqa.selenium.OutputType.BYTES);
+            java.awt.image.BufferedImage img =
+                    javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(png));
+            if (img == null) return -1;
+            java.util.Map<Integer, Integer> freq = new java.util.HashMap<>();
+            int y = img.getHeight() / 2;
+            for (int x = 0; x < img.getWidth(); x++) {
+                int rgb = img.getRGB(x, y) & 0xFFFFFF;
+                // Bucket to 4 bits a channel so anti-aliasing does not split the vote.
+                int key = rgb & 0xF0F0F0;
+                freq.merge(key, 1, Integer::sum);
+            }
+            int bestKey = freq.entrySet().stream().max(java.util.Map.Entry.comparingByValue())
+                    .map(java.util.Map.Entry::getKey).orElse(-1);
+            if (bestKey < 0) return -1;
+            // Return the first real pixel of that bucket (not the bucket's floor).
+            for (int x = 0; x < img.getWidth(); x++) {
+                int rgb = img.getRGB(x, y) & 0xFFFFFF;
+                if ((rgb & 0xF0F0F0) == bestKey) return rgb;
+            }
+            return bestKey;
+        } catch (Exception e) { return -1; }
     }
 
     // ---------------- people ----------------

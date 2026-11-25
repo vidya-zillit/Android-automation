@@ -124,4 +124,66 @@ public class EmailSettingsPage extends BasePage {
     public boolean isForwardingStillOpen() {
         return isVisible("etForwardEmail", Duration.ofSeconds(2));
     }
+
+    // ---------------- Email Rules (EmailRulesActivity / EditEmailRuleActivity) ----------------
+
+    /** Settings → Email Rules card (cardEmailRules; hidden while the join request is pending). */
+    public boolean tapEmailRules() {
+        try {
+            driver.findElement(io.appium.java_client.AppiumBy.androidUIAutomator(
+                    "new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView("
+                            + "new UiSelector().resourceIdMatches(\".*:id/cardEmailRules\"))"));
+        } catch (org.openqa.selenium.WebDriverException ignored) {
+        }
+        try {
+            driver.findElement(byId("cardEmailRules")).click();
+            return isVisible("fabAdd", Duration.ofSeconds(15)) || isVisible("recyclerRules", Duration.ofSeconds(3));
+        } catch (org.openqa.selenium.WebDriverException e) {
+            return false;
+        }
+    }
+
+    /** Rules list → FAB → Edit Rule screen (etName visible). */
+    public boolean openNewRule() {
+        try {
+            waitVisible("fabAdd").click();
+            return isVisible("etName", Duration.ofSeconds(15));
+        } catch (org.openqa.selenium.WebDriverException e) {
+            return false;
+        }
+    }
+
+    /** Types into an Edit Rule field (etName / etFrom / etSubject / etHasWords). */
+    public void setRuleField(String id, String text) {
+        scrollToId(id);
+        org.openqa.selenium.WebElement f = waitVisible(id);
+        f.click();
+        f.clear();
+        f.sendKeys(text);
+    }
+
+    public void tickRuleHasAttachment() {
+        scrollToId("checkHasAttachment");
+        org.openqa.selenium.WebElement cb = waitVisible("checkHasAttachment");
+        if (!"true".equals(cb.getAttribute("checked"))) cb.click();
+    }
+
+    /** The live summary tvReadback (RuleSummary.readback). */
+    public String ruleReadback() {
+        scrollToId("tvReadback");
+        try {
+            return driver.findElement(byId("tvReadback")).getText();
+        } catch (org.openqa.selenium.WebDriverException e) {
+            return "";
+        }
+    }
+
+    /** Whether tvReadback is drawn with an ellipsis / clipped (text shorter than expected). */
+    public org.openqa.selenium.Rectangle ruleReadbackRect() {
+        try {
+            return driver.findElement(byId("tvReadback")).getRect();
+        } catch (org.openqa.selenium.WebDriverException e) {
+            return null;
+        }
+    }
 }

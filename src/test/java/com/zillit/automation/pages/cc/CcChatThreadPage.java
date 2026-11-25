@@ -349,15 +349,23 @@ public class CcChatThreadPage extends BasePage {
      * returns false (caller should skip) when the picker can't be navigated.
      */
     public boolean sendImageViaGallery() {
-        int before = imageBubbleCount();
-        if (!openAttachmentSheet()) return false;
-        if (!tapAttachmentOption("Gallery")) return false;
+        return sendImagesViaGallery(1) == 1 && waitImageBubble(Duration.ofSeconds(25));
+    }
+
+    /**
+     * Picks {@code n} photos together in the app's gallery and sends them in one go.
+     * Returns how many were picked and sent (0 when the gallery could not be driven, or
+     * held fewer than {@code n} photos — nothing is sent then).
+     */
+    public int sendImagesViaGallery(int n) {
+        if (!openAttachmentSheet()) return 0;
+        if (!tapAttachmentOption("Gallery")) return 0;
         grantPermissionIfPresent();
         // The Gallery uses the app's own "All Media" grid + preview (same as Home
-        // chat), so reuse MediaPreviewPage: open All Media → select 1 → send FAB →
+        // chat), so reuse MediaPreviewPage: open All Media → select n → send FAB →
         // preview → send.
         MediaPreviewPage media = new MediaPreviewPage(driver);
-        if (!media.isGalleryOpen()) return false;
+        if (!media.isGalleryOpen()) return 0;
         media.openAllMediaAlbumIfListed();
         // The Fallery gallery opens on the album/bucket list — if no photo grid yet,
         // tap the first bucket (imageViewBucketImage) to enter an album.
@@ -367,16 +375,125 @@ public class CcChatThreadPage extends BasePage {
                 if (!buckets.isEmpty()) { buckets.get(0).click(); sleep(1500); }
             } catch (WebDriverException ignored) {}
         }
-        if (media.galleryThumbCount() == 0) { try { driver.navigate().back(); } catch (WebDriverException ignored) {} return false; }
-        media.selectPhotos(1);
-        if (!media.isSendFabVisible()) { try { driver.navigate().back(); } catch (WebDriverException ignored) {} return false; }
+        if (media.galleryThumbCount() < n) { recoverBack(); return 0; }
+        int picked = media.selectPhotos(n);
+        if (picked < n || !media.isSendFabVisible()) { recoverBack(); return 0; }
         media.tapGallerySendFab();
-        if (!media.isPreviewOpen()) return false;
+        if (!media.isPreviewOpen()) { recoverBack(); return 0; }
         media.setCaption("");
         media.tapPreviewSend();
         media.waitPreviewClosed(Duration.ofSeconds(60));
-        // The image bubble (srcImage) appears asynchronously as the upload completes.
-        return waitImageBubble(Duration.ofSeconds(25));
+        return picked;
+    }
+
+    /**
+     * Counts bubbles with {@code id} that sit BELOW the newest bubble showing {@code marker}
+     * (i.e. were posted after it). Returns -1 when the marker is not on screen any more,
+     * which after a send means newer content pushed it off the top.
+     */
+    public int countBelowMarker(String marker, String id) {
+        try {
+            var labels = driver.findElements(AppiumBy.androidUIAutomator(
+                    "new UiSelector().textContains(\"" + escape(marker) + "\")"));
+            if (labels.isEmpty()) return -1;
+            var m = labels.get(labels.size() - 1).getRect();
+            int markerBottom = m.getY() + m.getHeight();
+            int n = 0;
+            for (WebElement e : driver.findElements(byId(id))) {
+                if (e.getRect().getY() >= markerBottom) n++;
+            }
+            return n;
+        } catch (WebDriverException e) {
+            return -1;
+        }
+    }
+
+    /** Count of AUDIO bubbles on screen (rv_item_audio_* : audioProgressbar). */
+    public int audioBubbleCount() {
+        try { return driver.findElements(byId("audioProgressbar")).size(); }
+        catch (WebDriverException e) { return 0; }
+    }
+
+    /**
+     * Attachment sheet → "Audio" → system audio picker (ACTION_GET_CONTENT audio/*) →
+     * the file whose name contains {@code namePart}; a preview / "Post Audio" step is
+     * confirmed when one appears. Returns false (after recovering) when the picker could
+     * not surface the file.
+     */
+    public boolean sendAudioFile(String namePart) {
+        if (!openAttachmentSheet()) return false;
+        if (!tapAttachmentOption("Audio")) return false;
+        grantPermissionIfPresent();
+        sleep(2000);
+        boolean picked = pickSystemFileByName(namePart, Duration.ofSeconds(12));
+        if (!picked) { recoverBack(); return false; }
+        sleep(1500);
+        try {
+            var post = driver.findElements(AppiumBy.androidUIAutomator(
+                    "new UiSelector().textMatches(\"(?i)post audio\")"));
+            if (!post.isEmpty()) { post.get(0).click(); sleep(1500); }
+        } catch (WebDriverException ignored) {}
+        if (isVisible("sendBtn", Duration.ofSeconds(4))) {
+            MediaPreviewPage media = new MediaPreviewPage(driver);
+            media.tapPreviewSend();
+            media.waitPreviewClosed(Duration.ofSeconds(40));
+        }
+        return true;
+    }
+
+    // ---------------- Media, Docs, Links (ChatLibraryActivity) ----------------
+
+    /** Taps the toolbar mediaDocsLinksBtn; true when the library's tabs show. */
+    public boolean openMediaLibrary() {
+        try { waitVisible("mediaDocsLinksBtn").click(); }
+        catch (WebDriverException e) { return false; }
+        return isVisible("tlTabs", Duration.ofSeconds(10));
+    }
+
+    public String libraryHeader() {
+        try { return driver.findElement(byId("headerText")).getText(); }
+        catch (WebDriverException e) { return ""; }
+    }
+
+    /** Tab labels in order: "Media" / "Media (n)", "Docs…", "Links…". */
+    public List<String> libraryTabLabels() {
+        try {
+            return driver.findElement(byId("tlTabs"))
+                    .findElements(By.className("android.widget.TextView")).stream()
+                    .map(WebElement::getText).filter(t -> t != null && !t.isBlank()).toList();
+        } catch (WebDriverException e) {
+            return List.of();
+        }
+    }
+
+    public boolean tapLibraryTab(String startsWith) {
+        try {
+            for (WebElement t : driver.findElement(byId("tlTabs"))
+                    .findElements(By.className("android.widget.TextView"))) {
+                String s = t.getText();
+                if (s != null && s.toLowerCase().startsWith(startsWith.toLowerCase())) { t.click(); sleep(1000); return true; }
+            }
+        } catch (WebDriverException ignored) {}
+        return false;
+    }
+
+    /** Items listed in the current library tab (rvContent children); 0 when hidden. */
+    public int libraryItemCount() {
+        try {
+            WebElement rv = driver.findElement(byId("rvContent"));
+            if (!rv.isDisplayed()) return 0;
+            return rv.findElements(By.xpath("./*")).size();
+        } catch (WebDriverException e) {
+            return 0;
+        }
+    }
+
+    public boolean libraryEmptyShown() {
+        return isVisible("emptyView", Duration.ofSeconds(2));
+    }
+
+    public boolean isLibraryOpen() {
+        return isVisible("tlTabs", Duration.ofSeconds(3));
     }
 
     /** Count of NON-image media bubbles (video/doc/audio/location/contact cards). */

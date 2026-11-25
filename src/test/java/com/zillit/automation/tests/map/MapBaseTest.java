@@ -280,8 +280,22 @@ abstract class MapBaseTest extends BaseTest {
     void ensureToolbarReady() {
         MapPage m = new MapPage(driver);
         if (m.searchBarShown(Duration.ofSeconds(1))) {
-            m.closeInScreenSearch();
-            sleep(800);
+            // A bar that was JUST closed is still animating out and reads as shown; a
+            // second tap on the toggle then RE-OPENS it, and with the bar open the strip
+            // drops View All / Zones / Types (seen 2026-11-23: "View All not available.
+            // Toolbar showed [btnSearch, btnFilter, btnPin]"). Let it settle, look again.
+            sleep(1000);
+            if (m.searchBarShown(Duration.ofMillis(200))) {
+                m.closeInScreenSearch();
+                sleep(1200);
+            }
+            // Still open: with the IME up the bar overlays the strip and the toggle tap lands
+            // in etSearch instead. BACK closes the IME, then the bar — checked before each
+            // press so it never walks the app out of the Map.
+            for (int i = 0; i < 2 && m.searchBarShown(Duration.ofMillis(300)); i++) {
+                try { driver.navigate().back(); } catch (Exception ignored) { }
+                sleep(1000);
+            }
         }
         // Pin mode left ON by an earlier case: createLocationByPin returns early on
         // several paths, and the diagnostic caught it — "pin mode active=true" while a

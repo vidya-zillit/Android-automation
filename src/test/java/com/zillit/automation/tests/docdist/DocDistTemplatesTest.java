@@ -546,7 +546,162 @@ class DocDistTemplatesTest extends DocDistBaseTest {
                         + "H-5 (dd_editor is a RichEditor WebView, opaque to the native tree)");
             }
         } finally {
-            composer.tapCancel();
+            // Applying a template dirties the composer, which now asks "Keep this email
+            // as a draft?" — Discard, so no QA draft is left in Drafts.
+            composer.leaveDiscarding();
+            backToLibrary();
+        }
+    }
+
+    // ==================== WEB gap cases (2026-11-23) ====================
+
+    /** Opens a fresh composer from the library, or skips saying why. */
+    private DocDistComposerPage openFreshComposer() {
+        DocDistLibraryPage lib = new DocDistLibraryPage(driver);
+        boolean opened = lib.hasCompose() && lib.openCompose();
+        assumeTrue(opened, "Compose is not reachable on this build");
+        DocDistComposerPage composer = new DocDistComposerPage(driver);
+        assumeTrue(composer.isOpen(Duration.ofSeconds(20)), "The composer did not open");
+        sleep(2500);   // signatures load asynchronously and are inserted once
+        return composer;
+    }
+
+    /**
+     * [WEB L191 / C06 L331] Sheet DD-20: loading a template replaced a typed subject and
+     * message with no prompt. Now the composer asks "Replace your message?" first; "Keep
+     * my message" leaves the typed subject alone and "Replace" loads the template.
+     */
+    @Test
+    @Order(10)
+    @DisplayName("H-11 [WEB DD-20]: loading a template over a typed subject asks first; Keep keeps it, Replace loads")
+    void templateOverTypedMessageAsksFirst() {
+        assumeTrue(created, "H-5 must create the template first");
+        String typed = "QA-NOTE-" + SUFFIX;
+        DocDistComposerPage composer = openFreshComposer();
+        DocDistTemplatesPage templates = new DocDistTemplatesPage(driver);
+        ConfirmPopupPage prompt = templates.confirmPopup();
+        try {
+            assumeTrue(composer.setSubject(typed), "Could not type a subject");
+            assumeTrue(composer.subject().contains(typed), "The subject did not take the typed text");
+
+            assumeTrue(templates.openTemplatePickerInComposer(), "The template chooser did not open");
+            assumeTrue(templates.chooseTemplateInPicker(TEMPLATE), TEMPLATE + " not offered in the chooser");
+            boolean asked = prompt.isShown(Duration.ofSeconds(6));
+            String text = asked ? prompt.text() : "";
+            System.out.println(">>> H-11 prompt shown=" + asked + " text='" + text + "' subject now='"
+                    + composer.subject() + "'");
+            screenshot("ddt-h11-prompt");
+            assertTrue(asked, "[DD-20] Loading a template over a typed subject must ask first; instead the "
+                    + "subject became '" + composer.subject() + "'");
+            // ConfirmPopupPage.text() returns the dialog's message (its title is not always
+            // read back): "Loading this template replaces the subject and message…".
+            assertTrue(text.contains("Replace your message") || text.contains("replaces the subject"),
+                    "The prompt should warn that the template replaces the message, got '" + text + "'");
+
+            assertTrue(prompt.cancel(Duration.ofSeconds(4)), "Could not tap 'Keep my message'");
+            sleep(800);
+            String kept = composer.subject();
+            assertTrue(kept.contains(typed), "[DD-20] 'Keep my message' must leave the typed subject, got '" + kept + "'");
+
+            assumeTrue(templates.openTemplatePickerInComposer(), "The chooser did not reopen");
+            assumeTrue(templates.chooseTemplateInPicker(TEMPLATE), TEMPLATE + " not offered the second time");
+            assertTrue(prompt.accept(Duration.ofSeconds(6)), "The replace prompt should show again and accept Replace");
+            sleep(1500);
+            String replaced = composer.subject();
+            System.out.println(">>> H-11 after Replace subject='" + replaced + "'");
+            assertTrue(replaced.contains(savedSubject),
+                    "'Replace' should load the template's subject '" + savedSubject + "', got '" + replaced + "'");
+        } finally {
+            prompt.clearIfBlocking();
+            composer.leaveDiscarding();
+            backToLibrary();
+        }
+    }
+
+    /**
+     * [WEB L198] Sheet DD-20, second half: the auto-inserted signature was dropped when a
+     * template loaded. Only assertable when the editor WebView exposes its text to the
+     * native tree; otherwise it skips with that reason.
+     */
+    @Test
+    @Order(11)
+    @DisplayName("H-12 [WEB DD-20]: a loaded template keeps the signature at the end of the message")
+    void templateKeepsSignature() {
+        assumeTrue(created, "H-5 must create the template first");
+        DocDistComposerPage composer = openFreshComposer();
+        DocDistTemplatesPage templates = new DocDistTemplatesPage(driver);
+        try {
+            String before = templates.bodyText();
+            System.out.println(">>> H-12 body before='" + before + "'");
+            assumeTrue(!before.isBlank(), "The composer's editor (a WebView) exposes no text to the native "
+                    + "tree on this device, so the signature cannot be read");
+            String signatureTail = lastLine(before);
+            assumeTrue(templates.openTemplatePickerInComposer(), "The template chooser did not open");
+            assumeTrue(templates.chooseTemplateInPicker(TEMPLATE), TEMPLATE + " not offered");
+            // Nothing typed, so no prompt; accept one defensively if a build asks anyway.
+            templates.confirmPopup().acceptIfShown(Duration.ofSeconds(2));
+            sleep(2000);
+            String after = templates.bodyText();
+            System.out.println(">>> H-12 body after='" + after + "' signature='" + signatureTail + "'");
+            screenshot("ddt-h12");
+            assertTrue(composer.subject().contains(savedSubject), "The template should have loaded");
+            assertTrue(after.contains(signatureTail),
+                    "[DD-20] The signature '" + signatureTail + "' should still be in the message after "
+                            + "loading the template, body='" + after + "'");
+        } finally {
+            composer.leaveDiscarding();
+            backToLibrary();
+        }
+    }
+
+    private static String lastLine(String text) {
+        String[] parts = text.trim().split("\\s*\\n\\s*");
+        String last = parts[parts.length - 1].trim();
+        return last.length() > 40 ? last.substring(last.length() - 40) : last;
+    }
+
+    /**
+     * [WEB L235] Sheet DD-31: a second template could be saved with an existing name.
+     * Now Save fails with "A template with this name already exists." and the editor stays.
+     */
+    @Test
+    @Order(12)
+    @DisplayName("H-13 [WEB DD-31]: a second template with the same name is refused")
+    void duplicateTemplateNameRefused() {
+        assumeTrue(created, "H-5 must create the template first");
+        DocDistTemplatesPage templates = openTemplates();
+        String dupName = TEMPLATE.toLowerCase();   // the check is case-insensitive
+        try {
+            openEditorFromNew(templates);
+            assertTrue(templates.setName(dupName), "Could not type the duplicate name");
+            templates.setSubject("dup " + SUFFIX);
+            assumeTrue(templates.isSaveEnabled(), "Save should be enabled with a name");
+            assertTrue(templates.tapSave(), "Could not tap Save");
+            boolean error = templates.textShown("already exists", Duration.ofSeconds(8));
+            // editorOpen (dd_save + the fields), not !editorClosed: the latter also keys on
+            // dd_editor, which this build never publishes, so it always reads "closed".
+            boolean stillOpen = templates.editorOpen(Duration.ofSeconds(3));
+            System.out.println(">>> H-13 error shown=" + error + " editor still open=" + stillOpen);
+            screenshot("ddt-h13");
+            assertTrue(error, "[DD-31] Saving a template whose name is taken should say 'A template with this "
+                    + "name already exists.'");
+            assertTrue(stillOpen, "[DD-31] The editor should stay open after the refused save");
+        } finally {
+            templates.forceCloseEditor();
+            sleep(800);
+        }
+        try {
+            if (!templates.isManager(Duration.ofSeconds(5))) {
+                backToLibrary();
+                templates = openTemplates();
+            }
+            assumeTrue(templates.waitForTemplate(TEMPLATE, Duration.ofSeconds(30)),
+                    "The manager did not list " + TEMPLATE + " after closing the editor");
+            long copies = templates.allTemplateNamesScrolled().stream()
+                    .filter(n -> n.equalsIgnoreCase(TEMPLATE)).count();
+            System.out.println(">>> H-13 rows named " + TEMPLATE + " = " + copies);
+            assertEquals(1, copies, "[DD-31] Exactly one template should carry the name " + TEMPLATE);
+        } finally {
             backToLibrary();
         }
     }
@@ -554,7 +709,7 @@ class DocDistTemplatesTest extends DocDistBaseTest {
     // ==================== H-7 / CLEANUP ====================
 
     @Test
-    @Order(9)
+    @Order(20)
     @DisplayName("H-7 / CLEANUP: deleting the template asks to confirm, and the row disappears")
     void deleteTemplate() {
         assumeTrue(created, "Nothing to delete — H-5 must run first");

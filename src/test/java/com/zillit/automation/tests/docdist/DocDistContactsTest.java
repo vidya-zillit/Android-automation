@@ -582,10 +582,58 @@ class DocDistContactsTest extends DocDistBaseTest {
                 + "activity was destroyed behind DocumentsUI (check 'Don't keep activities').");
     }
 
+    // ==================== I-13b · WEB L248 / DD-09 ====================
+
+    /**
+     * [WEB L248] Sheet DD-09: the address-book CSV had no UTF-8 BOM, so Excel garbled
+     * accented names. The saved file is read back from the device (the save picker opens
+     * on Downloads) and must start with EF BB BF and carry a header row. The copy is removed.
+     */
+    @Test
+    @Order(13)
+    @DisplayName("I-13b [WEB DD-09]: the exported address-book CSV starts with a UTF-8 BOM")
+    void exportedCsvHasBom() {
+        DocDistAddressBookPage book = new DocDistAddressBookPage(driver);
+        assumeTrue(book.isExportEnabled(), "Export is disabled (no contacts) — nothing to export");
+        String path = "/sdcard/Download/Address Book.csv";
+        try { driver.executeScript("mobile: deleteFile", java.util.Map.of("remotePath", path)); }
+        catch (Exception ignored) { }   // nothing there yet
+        boolean saved;
+        try {
+            assumeTrue(book.tapExport(), "Could not tap Export CSV");
+            skipIfRightsPrompt("Export CSV");
+            assumeTrue(book.isSystemPickerOpen(Duration.ofSeconds(25)), "The save picker did not open");
+            assumeTrue(book.saveInSystemPicker(), "Could not commit the save");
+            saved = book.exportSavedConfirmationShown(Duration.ofSeconds(20));
+        } finally {
+            book.cancelSystemPicker();
+        }
+        assumeTrue(saved, "The app did not confirm the save");
+        byte[] bytes;
+        try {
+            bytes = driver.pullFile(path);
+        } catch (Exception e) {
+            assumeTrue(false, "The picker did not save into Downloads, so the file cannot be read back: "
+                    + e.getMessage());
+            return;
+        } finally {
+            try { driver.executeScript("mobile: deleteFile", java.util.Map.of("remotePath", path)); }
+            catch (Exception ignored) { }
+        }
+        String head = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+        System.out.println(">>> I-13b " + bytes.length + " bytes, first 3 = "
+                + (bytes.length >= 3 ? String.format("%02X %02X %02X", bytes[0], bytes[1], bytes[2]) : "?")
+                + " head='" + head.substring(0, Math.min(80, head.length())).replace("\n", "\\n") + "'");
+        assertTrue(bytes.length >= 3 && (bytes[0] & 0xFF) == 0xEF && (bytes[1] & 0xFF) == 0xBB && (bytes[2] & 0xFF) == 0xBF,
+                "[DD-09] The CSV should start with the UTF-8 BOM (EF BB BF)");
+        assertTrue(head.toLowerCase().contains("email"), "The CSV should carry its header row, got '"
+                + head.substring(0, Math.min(80, head.length())) + "'");
+    }
+
     // ==================== I-14 · CSV import (spec correction) ====================
 
     @Test
-    @Order(13)
+    @Order(14)
     @DisplayName("I-14: CSV import is NOT an address-book affordance — it belongs to the Lists editor")
     void csvImportIsNotAnAddressBookAffordance() {
         DocDistAddressBookPage book = new DocDistAddressBookPage(driver);
@@ -613,7 +661,7 @@ class DocDistContactsTest extends DocDistBaseTest {
     // ==================== I-12 · delete (and the suite's cleanup) ====================
 
     @Test
-    @Order(14)
+    @Order(15)
     @DisplayName("I-12 / CLEANUP: Delete confirms with the FRAMEWORK dialog, then the contact is gone")
     void deleteRemovesTheContact() {
         assumeTrue(created, "Nothing to delete — I-5 must have created the contact");

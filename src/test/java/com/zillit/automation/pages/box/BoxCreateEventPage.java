@@ -157,6 +157,81 @@ public class BoxCreateEventPage extends BoxSchedulePage {
     public String reminderValue() { return text("spinnerReminder"); }
 
     public boolean openCallType()  { return clickIfPresent("spinnerCallType"); }
+
+    /**
+     * Call Type = "Meet in Person" (spinner position 1): required on save ("Please select a
+     * call type"), and the only option with no virtual room and no location requirement.
+     */
+    public boolean chooseMeetInPerson() {
+        if (!bringIntoView("spinnerCallType") || !openCallType()) {
+            System.out.println(">>> chooseMeetInPerson: spinnerCallType not reachable");
+            return false;
+        }
+        pause(900);
+        try {
+            for (WebElement e : driver.findElements(io.appium.java_client.AppiumBy.androidUIAutomator(
+                    "new UiSelector().text(\"Meet in Person\")"))) {
+                if (e.isDisplayed()) {
+                    e.click();
+                    pause(800);
+                    System.out.println(">>> chooseMeetInPerson: spinner now reads \"" + callTypeValueText() + "\"");
+                    return true;
+                }
+            }
+        } catch (Exception ignored) { }
+        System.out.println(">>> chooseMeetInPerson: no \"Meet in Person\" option on screen");
+        try { driver.navigate().back(); } catch (Exception ignored) { }
+        return false;
+    }
+
+    private String callTypeValueText() {
+        try {
+            for (WebElement t : driver.findElement(byId("spinnerCallType"))
+                    .findElements(io.appium.java_client.AppiumBy.className("android.widget.TextView"))) {
+                String s = t.getText();
+                if (s != null && !s.isBlank()) return s.trim();
+            }
+        } catch (Exception ignored) { }
+        return null;
+    }
+
+    /**
+     * Swipes the form up (from the screen's lower middle) until {@code id} is displayed, at most
+     * six times. Not {@code scrollToId}: its UiScrollable takes the FIRST scrollable on screen,
+     * which here is not the form, so it never moved and the lower fields stayed out of reach.
+     */
+    private boolean bringIntoView(String id) {
+        for (int i = 0; i < 7; i++) {
+            if (displayed(id)) return true;
+            try {
+                var size = driver.manage().window().getSize();
+                var finger = new org.openqa.selenium.interactions.PointerInput(
+                        org.openqa.selenium.interactions.PointerInput.Kind.TOUCH, "finger");
+                var seq = new org.openqa.selenium.interactions.Sequence(finger, 1);
+                int x = size.getWidth() / 2;
+                seq.addAction(finger.createPointerMove(Duration.ZERO,
+                        org.openqa.selenium.interactions.PointerInput.Origin.viewport(), x, (int) (size.getHeight() * 0.72)));
+                seq.addAction(finger.createPointerDown(0));
+                seq.addAction(finger.createPointerMove(Duration.ofMillis(500),
+                        org.openqa.selenium.interactions.PointerInput.Origin.viewport(), x, (int) (size.getHeight() * 0.42)));
+                seq.addAction(finger.createPointerUp(0));
+                driver.perform(java.util.List.of(seq));
+            } catch (Exception ignored) { }
+            pause(700);
+        }
+        return displayed(id);
+    }
+
+    /** The toast on screen right now, if UiAutomator can see it. */
+    public String toastText() {
+        try {
+            for (WebElement t : driver.findElements(io.appium.java_client.AppiumBy.xpath("//android.widget.Toast"))) {
+                String s = t.getText();
+                if (s != null && !s.isBlank()) return s.trim();
+            }
+        } catch (Exception ignored) { }
+        return null;
+    }
     public String callTypeValue()  { return text("spinnerCallType"); }
     public boolean callLineShown() { return displayed("layoutCallLine"); }
 
@@ -164,7 +239,12 @@ public class BoxCreateEventPage extends BoxSchedulePage {
 
     public String distributeTo() { return text("tvDistributeTo"); }
 
-    public boolean openDistribute() { return clickIfPresent("tvDistributeTo"); }
+    /** Opens the invitee picker; the field sits below the fold on a full form, so scroll first. */
+    public boolean openDistribute() {
+        if (bringIntoView("tvDistributeTo") && clickIfPresent("tvDistributeTo")) return true;
+        System.out.println(">>> openDistribute: tvDistributeTo not on screen even after scrolling");
+        return false;
+    }
 
     /**
      * Sets Distribute To = "Only Me".
@@ -179,6 +259,24 @@ public class BoxCreateEventPage extends BoxSchedulePage {
     public boolean distributeToSelf() {
         if (!openDistribute()) return false;
         pause(1200);
+        // Current builds open SelectInviteesActivity: the Self tab → "Select Me" → Done.
+        BoxInviteePage inv = new BoxInviteePage(driver);
+        if (inv.isLoaded(Duration.ofSeconds(6))) {
+            boolean self = inv.openSelf();
+            pause(600);
+            boolean me = self && inv.selectSelf();
+            pause(600);
+            if (me && inv.done()) {
+                pause(1500);
+                // Back on the form; tvDistributeTo may sit below the fold now, so the
+                // picker closing is the evidence, not its label.
+                return !inv.isLoaded(Duration.ofSeconds(2));
+            }
+            System.out.println(">>> distributeToSelf: Self tab=" + self + " Select Me=" + me);
+            inv.cancel();
+            pause(1000);
+            return false;
+        }
         if (tapText("Only Me")) { pause(900); return true; }
         // Some builds word it differently; fall back to the self-ish options, never to
         // a department or "all".

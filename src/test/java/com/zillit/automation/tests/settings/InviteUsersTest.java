@@ -22,7 +22,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * Settings → "Invite Users" (header "SHARE PROJECT CODE").
  *
  * <p>Read-only: it checks the invitation text and the project code, then leaves.
- * It never presses Share, so no invitation is ever sent.
+ * It never picks a share target: S-M7 opens the OS chooser and backs out of it,
+ * so no invitation is ever sent.
  *
  * <p>The code is per project and regenerates, so only its SHAPE is asserted —
  * "CODE: " followed by digits, starting with the expected prefix. Pinning the
@@ -102,8 +103,40 @@ class InviteUsersTest extends BaseTest {
                 "The code should start with " + CODE_PREFIX + "; got " + code);
     }
 
+    /**
+     * Web Settings #35, adapted (gap S-M7): the web copies the invitation; Android hands it
+     * to the OS chooser ("Share Via"). Only the chooser is opened, then closed with Back —
+     * no target is picked, so no invitation leaves the device.
+     */
     @Test
     @Order(3)
+    @DisplayName("S-M7 [WEB SET-35] Tapping the code opens the Android share sheet; Back returns to the code screen")
+    void codeOpensShareSheet() {
+        InviteUsersPage page = invite();
+        assumeTrue(page.codeShown(WAIT), "No project code rendered — nothing to share");
+        String code = page.projectCode();
+        assertTrue(page.tapCode(), "The code block (invite_code_view) should be tappable");
+        boolean chooser = page.shareChooserOpen(appPackage, Duration.ofSeconds(12));
+        String pkg = page.foregroundPackage();
+        boolean title = page.chooserShowsText("Share Via") || page.chooserShowsText("Share via");
+        boolean preview = page.chooserShowsText(code);
+        System.out.println(">>> share sheet: open=" + chooser + " pkg=" + pkg + " title=" + title
+                + " previewHasCode=" + preview);
+        screenshot("invite-users-share-sheet");
+        try {
+            assertTrue(chooser, "Tapping the code should open the Android share chooser, but "
+                    + appPackage + " stayed in front");
+        } finally {
+            if (chooser) {
+                driver.navigate().back();
+                sleep(1500);
+            }
+        }
+        assertTrue(page.isLoaded(WAIT), "Closing the chooser should leave SHARE PROJECT CODE on screen");
+    }
+
+    @Test
+    @Order(4)
     @DisplayName("TC3: Back returns to the Settings tab")
     void backToSettings() {
         InviteUsersPage page = invite();
@@ -111,5 +144,9 @@ class InviteUsersTest extends BaseTest {
         assertTrue(page.tapBack(), "The top back arrow should be tappable");
         assertTrue(page.isOnSettingsTab(WAIT), "Back should return to the Settings tab");
         screenshot("invite-users-finished");
+    }
+
+    private void sleep(long ms) {
+        try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
     }
 }

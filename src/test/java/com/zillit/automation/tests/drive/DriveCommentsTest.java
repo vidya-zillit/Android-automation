@@ -2,6 +2,7 @@ package com.zillit.automation.tests.drive;
 
 import com.zillit.automation.core.BaseTest;
 import com.zillit.automation.core.TestOrder;
+import com.zillit.automation.core.ReasonLogger;
 import com.zillit.automation.pages.common.BottomNavPage;
 import com.zillit.automation.pages.drive.DriveCommentsPage;
 import com.zillit.automation.pages.drive.DriveFileDetailPage;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.Duration;
@@ -46,6 +48,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *       proof is that the list did not change (3.1).</li>
  * </ul>
  */
+@ExtendWith(ReasonLogger.class)
 @Order(TestOrder.DRIVE_COMMENTS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class DriveCommentsTest extends BaseTest {
@@ -105,7 +108,7 @@ class DriveCommentsTest extends BaseTest {
             if (!tools.isLoaded(Duration.ofSeconds(15))) { sleep(2000); continue; }
             tools.searchTools("Drive");
             sleep(2000);
-            if (tools.isModuleListed("Drive", Duration.ofSeconds(6)) && tools.openModule("Drive")) {
+            if (tools.isModuleListed("Drive", Duration.ofSeconds(6)) && tools.openModuleContaining("Drive")) {
                 // 40s, not 20s: on a loaded emulator Drive's first open takes longer than
                 // that, and the retry then pressed Tools again — cancelling a launch that
                 // was about to succeed, over and over.
@@ -473,6 +476,27 @@ class DriveCommentsTest extends BaseTest {
         assertTrue(detail.commentsStateShown(),
                 "The comments section should still be readable after cleanup");
         detail.back();
+    }
+
+    // WEB GAP (web-e2e/gaps/drive.md M33, L1516): a comment over 2000 characters.
+    @Test
+    @Order(8)
+    @DisplayName("[WEB L1516] P-7: a 2001-character comment is either stored whole or refused — never cut silently")
+    void gLongComment() {
+        DriveFileDetailPage detail = openDetail();
+        String body = "QA long " + STAMP + " " + "z".repeat(2001 - ("QA long " + STAMP + " ").length());
+        assumeTrue(detail.postComment(body), "Could not post");
+        sleep(5000);
+        List<String> texts = detail.commentTexts();
+        boolean whole = texts.contains(body);
+        boolean cut = texts.stream().anyMatch(t -> t.startsWith("QA long " + STAMP) && !t.equals(body));
+        System.out.println(">>> 2001-char comment whole=" + whole + " cut=" + cut);
+        try {
+            assertFalse(cut, "The comment was stored shortened without telling the user");
+        } finally {
+            if (whole) deleteIfPresent(detail, body);
+            for (String t : texts) if (t.startsWith("QA long " + STAMP)) deleteIfPresent(detail, t);
+        }
     }
 
     private void sleep(long ms) {

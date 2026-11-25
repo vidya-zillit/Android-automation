@@ -180,16 +180,25 @@ public class BoxListPage extends BoxSchedulePage {
             if (lists.isEmpty()) return false;
             List<WebElement> titles = lists.get(0).findElements(byId("leTitle"));
             List<WebElement> controls = lists.get(0).findElements(byId(controlId));
+            // Paired by POSITION, not index: rows the user cannot edit (another member's
+            // event) carry no controls, so the i-th control is not the i-th row's.
             for (int i = 0; i < titles.size(); i++) {
                 String t = safeText(titles.get(i));
                 if (t == null || !t.contains(title)) continue;
-                if (i >= controls.size()) {
-                    System.out.println(">>> list: event \"" + t + "\" has no " + controlId
-                            + " (" + titles.size() + " rows, " + controls.size()
-                            + " controls)");
+                int y = titles.get(i).getRect().getY();
+                int next = Integer.MAX_VALUE;
+                for (WebElement o : titles) { int oy = o.getRect().getY(); if (oy > y && oy < next) next = oy; }
+                WebElement mine = null;
+                for (WebElement c : controls) {
+                    int cy = c.getRect().getY();
+                    if (cy > y && cy < next && (mine == null || cy < mine.getRect().getY())) mine = c;
+                }
+                if (mine == null) {
+                    System.out.println(">>> list: event \"" + t + "\" has no " + controlId + " on screen ("
+                            + titles.size() + " rows, " + controls.size() + " controls)");
                     return false;
                 }
-                controls.get(i).click();
+                mine.click();
                 pause(1800);
                 return true;
             }
@@ -220,6 +229,43 @@ public class BoxListPage extends BoxSchedulePage {
     }
 
     public boolean search(String term) { return fill("etListSearch", term); }
+
+    /** What the List's search box holds — the search text is shared with the Calendar. */
+    public String searchText() { return text("etListSearch"); }
+
+    /** Every visible text inside the empty state, joined — its title and description. */
+    public String emptyStateText() {
+        StringBuilder b = new StringBuilder();
+        try {
+            for (WebElement root : driver.findElements(byId("emptyState"))) {
+                if (!root.isDisplayed()) continue;
+                for (WebElement t : root.findElements(AppiumBy.className("android.widget.TextView"))) {
+                    String s = safeText(t);
+                    if (s != null) { if (b.length() > 0) b.append(" / "); b.append(s); }
+                }
+            }
+        } catch (Exception ignored) { }
+        return b.toString();
+    }
+
+    /**
+     * The event or note with this title, scrolling the UNFILTERED list for it (bounded). For
+     * cleanup when a search cannot find the row — the List search ignores event titles
+     * (web gap BOX-01).
+     */
+    public EventRow findEventScrolling(String title, int maxSwipes) {
+        for (int i = 0; i <= maxSwipes; i++) {
+            EventRow r = findEvent(title);
+            if (r != null) return r;
+            if (!scrollList("scheduleList", true)) break;
+        }
+        return null;
+    }
+
+    /** Scrolls the list back to its top (bounded). */
+    public void scrollToTop() {
+        for (int i = 0; i < 8 && scrollList("scheduleList", false); i++) { }
+    }
 
     public boolean clearSearch() { return fill("etListSearch", ""); }
 

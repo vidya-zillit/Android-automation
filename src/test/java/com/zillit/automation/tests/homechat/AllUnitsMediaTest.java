@@ -27,8 +27,10 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *  - text, image, recorded-audio → app's own UI, sent + asserted.
  *  - video, document → need a file on the device + the system picker; attempted
  *    best-effort and counted, never a false failure.
- * Per-unit rules honoured: Call Sheet is document-only (no text/image/audio),
- * and recorded audio is unavailable on Call Sheet.
+ * Per-unit rules honoured: Call Sheet's ATTACHMENT picker is document-only (no
+ * image/audio), and recorded audio is unavailable on Call Sheet. Call Sheet DOES accept
+ * typed text (the composer is registered for every unit, Home.kt:405-408) — this suite
+ * only sends documents there; text on Call Sheet is covered by CallSheetTest [WEB CS-M1].
  *
  * The runner pushes zl_test_image.jpg (Pictures) and zl_test_doc.pdf (Documents)
  * and grants RECORD_AUDIO, so these have content to send.
@@ -210,7 +212,7 @@ class AllUnitsMediaTest extends BaseTest {
             // Per unit: for each message type → send 2-3 → CHECK long-press
             // functionality on it → next type. Finish the whole unit, then move on.
             if (callSheet) {
-                // Call Sheet is document-only.
+                // Call Sheet's picker is document-only (text there: CallSheetTest CS-M1).
                 int docs = sendDocuments(home, COUNT, true);
                 checkLongPress(home, unit + "/document", null);
                 System.out.println(">>> " + unit + ": documents=" + docs);

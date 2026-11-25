@@ -182,7 +182,7 @@ class CreateRemoteShootingUnitTest extends BaseTest {
         screenshot("remote-unit-project-listing");
 
         projectList.search(unitName);
-        assertTrue(projectList.visibleProjectNames().stream()
+        assertTrue(projectList.listedProjectNames().stream()
                         .anyMatch(name -> name.toLowerCase().contains(unitName.toLowerCase())),
                 unitName + " should appear in the project search results");
         screenshot("remote-unit-project-search");

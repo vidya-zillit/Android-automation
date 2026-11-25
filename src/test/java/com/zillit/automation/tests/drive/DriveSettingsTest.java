@@ -2,6 +2,7 @@ package com.zillit.automation.tests.drive;
 
 import com.zillit.automation.core.BaseTest;
 import com.zillit.automation.core.TestOrder;
+import com.zillit.automation.core.ReasonLogger;
 import com.zillit.automation.pages.common.BottomNavPage;
 import com.zillit.automation.pages.drive.DriveActivityPage;
 import com.zillit.automation.pages.drive.DriveHomePage;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.Duration;
@@ -45,6 +47,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * covered, against the entry points this build actually ships: the drawer's own Trash
  * and Activity rows, which lead to the same two destinations.
  */
+@ExtendWith(ReasonLogger.class)
 @Order(TestOrder.DRIVE_SETTINGS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class DriveSettingsTest extends BaseTest {
@@ -89,7 +92,7 @@ class DriveSettingsTest extends BaseTest {
             if (!tools.isLoaded(Duration.ofSeconds(15))) { sleep(2000); continue; }
             tools.searchTools("Drive");
             sleep(2000);
-            if (tools.isModuleListed("Drive", Duration.ofSeconds(6)) && tools.openModule("Drive")) {
+            if (tools.isModuleListed("Drive", Duration.ofSeconds(6)) && tools.openModuleContaining("Drive")) {
                 // 40s, not 20s: on a loaded emulator Drive's first open takes longer than
                 // that, and the retry then pressed Tools again — cancelling a launch that
                 // was about to succeed, over and over.

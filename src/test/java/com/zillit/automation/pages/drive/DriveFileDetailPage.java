@@ -50,6 +50,268 @@ public class DriveFileDetailPage extends BasePage {
     public boolean hasShare()         { return isVisible("btnShare", Duration.ofSeconds(2)); }
     public boolean hasManageAccess()  { return isVisible("btnManageAccess", Duration.ofSeconds(2)); }
 
+    /** A detail view with this id is on screen (scrolling to it first). */
+    public boolean isVisibleId(String id) {
+        if (isVisible(id, Duration.ofSeconds(3))) return true;
+        scrollToId(id);
+        return isVisible(id, Duration.ofSeconds(3));
+    }
+
+    public boolean hasEdit()          { return isVisible("btnEdit", Duration.ofSeconds(2)); }
+
+    /**
+     * Waits for an action button. The detail screen sets them from an async state flow (the
+     * permissions arrive after the screen is drawn), so a fixed sleep reports a missing button.
+     */
+    public boolean waitFor(String id, Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            try { if (!driver.findElements(byId(id)).isEmpty()) return true; }
+            catch (WebDriverException ignored) { }
+            sleep(700);
+        }
+        return false;
+    }
+
+    /** {@code btnEdit} → the office editor in EDIT mode (txt/md: the text editor, editing). */
+    public boolean tapEdit()     { return click("btnEdit"); }
+    /** {@code btnOpen} → the office editor in VIEW mode (txt/md: the text viewer). */
+    public boolean tapOpen()     { return click("btnOpen"); }
+    public boolean tapDownload() { return click("btnDownload"); }
+
+    /** Waits until the Download button is back from "Downloading…". */
+    public boolean waitDownloadDone(Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        sleep(1500);
+        while (System.currentTimeMillis() < deadline) {
+            String t = text("btnDownload");
+            if (t != null && !t.toLowerCase().contains("downloading")) return true;
+            sleep(800);
+        }
+        return false;
+    }
+
+    // ---------------- version history (2e8cd2801) ----------------
+
+    /** Matches a version row label: "v3", "v3 · Autosaved", "v3 · Autosaved · Name". */
+    public static final java.util.regex.Pattern VERSION_LABEL = java.util.regex.Pattern.compile(
+            "^v(\\d+)( · (Created|Autosaved|Saved|Saved on close|Restored|Uploaded|Earlier version))?( · .+)?$");
+
+    public boolean hasVersionsCard() {
+        if (isVisible("cardVersions", Duration.ofSeconds(2))) return true;
+        scrollToId("tvVersionsHeader");
+        return isVisible("tvVersionsHeader", Duration.ofSeconds(2));
+    }
+
+    /** "Versions (N)" → N, or -1 when the card is not there. */
+    public int versionCount() {
+        if (!hasVersionsCard()) return -1;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)").matcher(text("tvVersionsHeader"));
+        return m.find() ? Integer.parseInt(m.group(1)) : -1;
+    }
+
+    /** Rendered version-row labels ("v3 · Autosaved"), top (latest) first. */
+    public List<String> versionLabels() {
+        List<String> out = new ArrayList<>();
+        scrollToId("rvVersions");
+        try {
+            WebElement rv = driver.findElement(byId("rvVersions"));
+            for (WebElement tv : rv.findElements(By.className("android.widget.TextView"))) {
+                String t = tv.getText();
+                if (t != null && t.matches("^v\\d+.*")) out.add(t);
+            }
+        } catch (WebDriverException ignored) { }
+        return out;
+    }
+
+    /** Every text in the versions list (labels, "Saved by …", summaries, Open/Download/Restore). */
+    public List<String> versionTexts() {
+        List<String> out = new ArrayList<>();
+        try {
+            WebElement rv = driver.findElement(byId("rvVersions"));
+            for (WebElement tv : rv.findElements(By.className("android.widget.TextView"))) {
+                String t = tv.getText();
+                if (t != null && !t.isBlank()) out.add(t);
+            }
+        } catch (WebDriverException ignored) { }
+        return out;
+    }
+
+    /**
+     * The action TextViews ("Open" / "Download" / "Restore") of the version row whose label is
+     * {@code label}. Rows have no ids, so the row is the band between this label and the next one.
+     */
+    public List<String> versionRowActions(int rowIndex) {
+        List<String> out = new ArrayList<>();
+        try {
+            List<WebElement> labels = versionLabelElements();
+            if (rowIndex >= labels.size()) return out;
+            int top = labels.get(rowIndex).getRect().getY();
+            int bottom = rowIndex + 1 < labels.size() ? labels.get(rowIndex + 1).getRect().getY() : Integer.MAX_VALUE;
+            WebElement rv = driver.findElement(byId("rvVersions"));
+            for (WebElement tv : rv.findElements(By.className("android.widget.TextView"))) {
+                int y = tv.getRect().getY();
+                String t = tv.getText();
+                if (y > top && y < bottom && t != null
+                        && (t.equals("Open") || t.equals("Download") || t.equals("Restore"))) out.add(t);
+            }
+        } catch (WebDriverException ignored) { }
+        return out;
+    }
+
+    public boolean tapVersionAction(int rowIndex, String action) {
+        try {
+            List<WebElement> labels = versionLabelElements();
+            if (rowIndex >= labels.size()) return false;
+            int top = labels.get(rowIndex).getRect().getY();
+            int bottom = rowIndex + 1 < labels.size() ? labels.get(rowIndex + 1).getRect().getY() : Integer.MAX_VALUE;
+            WebElement rv = driver.findElement(byId("rvVersions"));
+            for (WebElement tv : rv.findElements(By.className("android.widget.TextView"))) {
+                int y = tv.getRect().getY();
+                if (y > top && y < bottom && action.equals(tv.getText())) { tv.click(); return true; }
+            }
+        } catch (WebDriverException ignored) { }
+        return false;
+    }
+
+    private List<WebElement> versionLabelElements() {
+        List<WebElement> out = new ArrayList<>();
+        WebElement rv = driver.findElement(byId("rvVersions"));
+        for (WebElement tv : rv.findElements(By.className("android.widget.TextView"))) {
+            String t = tv.getText();
+            if (t != null && t.matches("^v\\d+.*")) out.add(tv);
+        }
+        return out;
+    }
+
+    /** Brings the versions list on screen (it sits below the actions and tags). */
+    public void scrollToVersions() {
+        for (int i = 0; i < 5 && !isVisible("rvVersions", Duration.ofSeconds(1)); i++) swipeUp();
+        scrollToId("rvVersions");
+    }
+
+    // ---------------- Share button = copy-link expiry (0c909b7fb) ----------------
+
+    /** File details Share → "Share Link Expiry" list (1 hour / 24 hours / 7 days). */
+    public List<String> openShareLinkExpiryOptions() {
+        List<String> out = new ArrayList<>();
+        if (!click("btnShare")) return out;
+        if (!textShown("Share Link Expiry", Duration.ofSeconds(6))) return out;
+        try {
+            for (WebElement e : driver.findElements(AppiumBy.id("android:id/text1"))) {
+                String t = e.getText();
+                if (t != null && !t.isBlank()) out.add(t);
+            }
+        } catch (WebDriverException ignored) { }
+        return out;
+    }
+
+    // ---------------- description / download (M02, M06) ----------------
+
+    public String description() {
+        scrollToId("tvDescription");
+        return text("tvDescription");
+    }
+
+    public String downloadButtonText() { return text("btnDownload"); }
+
+    // ---------------- tags (M03) ----------------
+
+    /** Tag chips (the "+ Add Tag" chip excluded). */
+    public List<String> tagChips() {
+        List<String> out = new ArrayList<>();
+        scrollToId("tagsContainer");
+        try {
+            WebElement c = driver.findElement(byId("tagsContainer"));
+            for (WebElement e : c.findElements(By.xpath(".//*"))) {
+                String t = e.getText();
+                if (t != null && !t.isBlank() && !t.startsWith("+") && !out.contains(t)) out.add(t);
+            }
+        } catch (WebDriverException ignored) { }
+        return out;
+    }
+
+    public boolean noTagsShown() { scrollToId("tvNoTags"); return isVisible("tvNoTags", Duration.ofSeconds(2)); }
+
+    public boolean tapAddTag() {
+        scrollToId("tagsContainer");
+        try {
+            driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiSelector().textStartsWith(\"+ Add Tag\")")).click();
+            sleep(1500);
+            return textShown("Add Tag", Duration.ofSeconds(6));
+        } catch (WebDriverException e) { return false; }
+    }
+
+    /** Add Tag → "+ Create New Tag" → type → Create. */
+    public boolean createTag(String name) {
+        if (!tapAddTag()) return false;
+        try {
+            driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiSelector().text(\"+ Create New Tag\")")).click();
+            sleep(1200);
+            WebElement field = driver.findElement(By.className("android.widget.EditText"));
+            field.click();
+            field.sendKeys(name);
+            driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiSelector().resourceId(\"android:id/button1\")")).click();
+            sleep(3000);
+            return true;
+        } catch (WebDriverException e) { return false; }
+    }
+
+    /** Add Tag → pick an existing tag by name. */
+    public boolean assignExistingTag(String name) {
+        if (!tapAddTag()) return false;
+        try {
+            driver.findElement(AppiumBy.androidUIAutomator("new UiSelector().text(\"" + name + "\")")).click();
+            sleep(3000);
+            return true;
+        } catch (WebDriverException e) {
+            try { driver.navigate().back(); } catch (WebDriverException ignored) { }
+            return false;
+        }
+    }
+
+    /**
+     * Removes a tag chip with its close icon. Material exposes the icon as a virtual child
+     * ("Remove …"); when it is not in the tree, the icon is tapped at the chip's right edge.
+     */
+    public boolean removeTag(String name) {
+        scrollToId("tagsContainer");
+        try {
+            List<WebElement> icons = driver.findElements(AppiumBy.xpath(
+                    "//*[contains(@content-desc,'Remove') and contains(@content-desc,'" + name + "')]"));
+            if (!icons.isEmpty()) { icons.get(0).click(); sleep(2500); return true; }
+            WebElement chip = driver.findElement(AppiumBy.androidUIAutomator("new UiSelector().text(\"" + name + "\")"));
+            org.openqa.selenium.Rectangle r = chip.getRect();
+            driver.executeScript("mobile: clickGesture", java.util.Map.of(
+                    "x", r.getX() + r.getWidth() - Math.max(18, r.getHeight() / 3), "y", r.getY() + r.getHeight() / 2));
+            sleep(2500);
+            return true;
+        } catch (WebDriverException e) { return false; }
+    }
+
+    // ---------------- Copy link card (M04) ----------------
+
+    /** Share → "Share Link Expiry" → pick {@code option}; the link appears in cardShareLink. */
+    public boolean makeCopyLink(String option) {
+        if (openShareLinkExpiryOptions().isEmpty()) return false;
+        try {
+            driver.findElement(AppiumBy.androidUIAutomator("new UiSelector().text(\"" + option + "\")")).click();
+        } catch (WebDriverException e) { return false; }
+        for (int i = 0; i < 20; i++) {
+            sleep(1000);
+            scrollToId("cardShareLink");
+            if (!text("tvShareLink").isBlank()) return true;
+        }
+        return false;
+    }
+
+    public String shareLink()       { scrollToId("cardShareLink"); return text("tvShareLink"); }
+    public String shareLinkExpiry() { scrollToId("cardShareLink"); return text("tvShareExpiry"); }
+    public boolean copyShareLink()  { scrollToId("btnCopyLink"); return click("btnCopyLink"); }
+
     // ---------------- comments section ----------------
 
     /** "Comments" or "Comments (N)" — the section header. */

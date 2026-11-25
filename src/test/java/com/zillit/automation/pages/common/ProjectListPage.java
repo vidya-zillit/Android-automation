@@ -1,5 +1,6 @@
 package com.zillit.automation.pages.common;
 
+import com.zillit.automation.core.Config;
 import io.appium.java_client.android.AndroidDriver;
 import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.WebElement;
@@ -35,6 +36,43 @@ public class ProjectListPage extends BasePage {
      * timing does.
      */
     public List<String> visibleProjectNames() {
+        List<String> names = readProjectNames();
+        String run = runProject();
+        if (run.isEmpty()) return names;
+        List<String> mine = only(names, run);
+        if (mine.isEmpty()) {
+            try {
+                search(run);
+            } catch (WebDriverException ignored) {
+                // No search field on this screen — the empty answer below is the safe one.
+            }
+            mine = only(readProjectNames(), run);
+        }
+        if (mine.isEmpty()) System.out.println(">>> run project \"" + run + "\" is not in the project list");
+        return mine;
+    }
+
+    /**
+     * The one project this run may use (zillit.runProject / ZILLIT_RUN_PROJECT), or "". The
+     * full sweep sets it to the project it has just created. While it is set, the list offers
+     * that project only, so a suite can never enter — and write into — a different one.
+     */
+    public static String runProject() {
+        return Config.get("zillit.runProject");
+    }
+
+    /** True when a row or a toolbar title names this project (the row's " - Admin" is ignored). */
+    public static boolean sameProject(String shown, String project) {
+        String t = shown.trim();
+        return t.equalsIgnoreCase(project.trim())
+                || t.replaceFirst("\\s+-\\s+\\S+$", "").trim().equalsIgnoreCase(project.trim());
+    }
+
+    private static List<String> only(List<String> names, String project) {
+        return names.stream().filter(n -> sameProject(n, project)).limit(1).collect(Collectors.toList());
+    }
+
+    private List<String> readProjectNames() {
         long deadline = System.currentTimeMillis() + PROJECTS_APPEAR.toMillis();
         while (true) {
             try {
@@ -104,6 +142,10 @@ public class ProjectListPage extends BasePage {
 
     /** Taps the row of the first project whose name contains the given text. */
     public boolean tapProject(String nameContains) {
+        // "contains" could also hit a shooting unit named after the run project.
+        if (!runProject().isEmpty() && sameProject(nameContains, runProject())) {
+            return tapProjectExact(runProject());
+        }
         for (WebElement label : driver.findElements(byId("projectNameText"))) {
             String name = label.getText();
             if (name != null && name.toLowerCase().contains(nameContains.toLowerCase())) {
@@ -167,12 +209,7 @@ public class ProjectListPage extends BasePage {
      * before.
      */
     private boolean matchesProject(String shown, String wantedLower) {
-        String t = shown.trim();
-        if (t.equalsIgnoreCase(wantedLower)) {
-            return true;
-        }
-        String stripped = t.replaceFirst("\\s+-\\s+\\S+$", "").trim();
-        return stripped.equalsIgnoreCase(wantedLower);
+        return sameProject(shown, wantedLower);
     }
 
     /** Project names currently listed — useful for diagnosing a failed pick. */

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.time.Duration;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -248,5 +249,132 @@ class CcChatMediaTest extends CcBaseTest {
         assertTrue(voice, "Group voice note should record + send");
         screenshot("cc-group-media");
         t.back();
+    }
+
+    // ====================================================== web-gap cases (C&C)
+
+    private CcChatThreadPage peerThread() {
+        CcChatThreadPage t = openPeerChat();
+        assumeTrue(t != null, "No 1-1 chat with " + PEER + " (the other test account) — skipping");
+        return t;
+    }
+
+    // [WEB CC-13]
+    @Test
+    @Order(12)
+    @DisplayName("[WEB CC-13] Media, Docs, Links opens from the thread header with Media / Docs / Links tabs")
+    void mediaDocsLinksOpens() {
+        CcChatThreadPage t = peerThread();
+        boolean sent = t.sendImageViaGallery();
+        System.out.println(">>> image sent before opening the library=" + sent);
+        if (!sent) recoverToThread(t);
+        assertTrue(t.openMediaLibrary(), "The thread's Media/Docs/Links button should open the library");
+        try {
+            // The toolbar and TabLayout render in caps (textAllCaps), so compare case-insensitively.
+            assertTrue("Media, Docs, Links".equalsIgnoreCase(t.libraryHeader()),
+                    "The library's title should read 'Media, Docs, Links'; got '" + t.libraryHeader() + "'");
+            List<String> tabs = t.libraryTabLabels().stream().map(String::toLowerCase).toList();
+            System.out.println(">>> library tabs=" + tabs + " items=" + t.libraryItemCount());
+            assertTrue(tabs.size() == 3 && tabs.get(0).startsWith("media")
+                            && tabs.get(1).startsWith("docs") && tabs.get(2).startsWith("links"),
+                    "The library should have the tabs Media, Docs, Links; got " + tabs);
+            if (sent) {
+                assertTrue(tabs.get(0).matches("media \\(([1-9]\\d*)\\)"),
+                        "After sending an image the Media tab should read 'Media (n)'; got '" + tabs.get(0) + "'");
+            }
+            for (String tab : new String[]{"Media", "Docs", "Links"}) {
+                assertTrue(t.tapLibraryTab(tab), "The " + tab + " tab should be tappable");
+                assertTrue(t.isLibraryOpen(), "The library should stay open on the " + tab + " tab");
+                String label = t.libraryTabLabels().stream()
+                        .filter(l -> l.toLowerCase().startsWith(tab.toLowerCase())).findFirst().orElse(tab);
+                boolean hasCount = label.matches(".*\\(\\d+\\)");
+                int items = t.libraryItemCount();
+                boolean empty = t.libraryEmptyShown();
+                System.out.println(">>> " + label + ": items=" + items + " empty=" + empty);
+                assertTrue(hasCount ? items > 0 : (items == 0 && empty),
+                        "The " + tab + " tab should list items when its label has a count, else show the empty view; label='"
+                                + label + "' items=" + items + " empty=" + empty);
+            }
+            screenshot("cc-media-docs-links");
+        } finally {
+            if (t.isLibraryOpen()) t.back();
+        }
+        assertTrue(t.isLoaded(Duration.ofSeconds(8)), "Back from the library should return to the thread");
+        t.back();
+    }
+
+    // [WEB CC-18]
+    @Test
+    @Order(13)
+    @DisplayName("[WEB CC-18] Two images picked together arrive as two image messages")
+    void sendTwoImagesAtOnce() {
+        CcChatThreadPage t = peerThread();
+        String marker = "ZL_AUTO cc 2img " + stamp();
+        t.sendMessage(marker);
+        assumeTrue(t.messageShown(marker, Duration.ofSeconds(15)), "Marker text did not post — skipping");
+        int picked = t.sendImagesViaGallery(2);
+        System.out.println(">>> picked+sent images=" + picked);
+        assumeTrue(picked == 2, "The gallery could not be driven or holds fewer than 2 photos — skipping");
+        int below = -1;
+        long deadline = System.currentTimeMillis() + 40_000;
+        while (System.currentTimeMillis() < deadline) {
+            below = t.countBelowMarker(marker, "srcImage");
+            if (below >= 2 || (below == -1 && t.imageBubbleCount() >= 2)) break;
+            sleep(1500);
+        }
+        System.out.println(">>> image bubbles after the marker=" + below + " (on screen " + t.imageBubbleCount() + ")");
+        screenshot("cc-two-images");
+        assertTrue(below >= 2 || (below == -1 && t.imageBubbleCount() >= 2),
+                "Both picked images should arrive as image messages after '" + marker + "'; found " + below);
+        assertTrue(t.waitMediaSent(Duration.ofSeconds(60)),
+                "Both image uploads should finish (no Retry / progress left)");
+        t.back();
+    }
+
+    // [WEB CC-20]
+    @Test
+    @Order(14)
+    @DisplayName("[WEB CC-20] Audio file from the system picker arrives as an audio message")
+    void sendAudioFile() {
+        // The audio picker (ACTION_GET_CONTENT audio/*) opens on Downloads and could not reach
+        // /sdcard/Music, so put a uniquely named copy of the fixture in Downloads.
+        try {
+            byte[] wav = java.nio.file.Files.readAllBytes(
+                    java.nio.file.Path.of("src/test/resources/fixtures/zl_test_audio.wav"));
+            driver.pushFile("/sdcard/Download/zl_cc_audio.wav", java.util.Base64.getEncoder().encode(wav));
+        } catch (Exception e) {
+            System.out.println(">>> could not stage zl_cc_audio.wav in Downloads: " + e.getMessage());
+        }
+        CcChatThreadPage t = peerThread();
+        String marker = "ZL_AUTO cc audio " + stamp();
+        t.sendMessage(marker);
+        assumeTrue(t.messageShown(marker, Duration.ofSeconds(15)), "Marker text did not post — skipping");
+        boolean picked;
+        try {
+            picked = t.sendAudioFile("zl_cc_audio");
+        } catch (RuntimeException e) {
+            picked = false;
+        }
+        assumeTrue(picked, "The system audio picker could not surface zl_cc_audio.wav — skipping");
+        int below = -1;
+        long deadline = System.currentTimeMillis() + 40_000;
+        while (System.currentTimeMillis() < deadline) {
+            below = t.countBelowMarker(marker, "audioProgressbar");
+            if (below >= 1 || below == -1) break;
+            sleep(1500);
+        }
+        System.out.println(">>> audio bubbles after the marker=" + below + " (on screen " + t.audioBubbleCount() + ")");
+        screenshot("cc-audio-file");
+        assertTrue(below >= 1 || (below == -1 && t.audioBubbleCount() >= 1),
+                "The picked audio file should arrive as an audio message after '" + marker + "'; found " + below);
+        assertTrue(t.waitMediaSent(Duration.ofSeconds(60)), "The audio upload should finish (no Retry / progress left)");
+        t.back();
+    }
+
+    private void recoverToThread(CcChatThreadPage t) {
+        for (int i = 0; i < 4 && !t.isLoaded(Duration.ofSeconds(2)); i++) {
+            try { driver.navigate().back(); } catch (Exception ignored) {}
+            sleep(700);
+        }
     }
 }

@@ -285,6 +285,49 @@ public class ScheduleDistPage extends VisiblePage {
         return true;
     }
 
+    /**
+     * Types {@code query} into the Pages search one character at a time, {@code gapMs} apart —
+     * the way a fast typist does it, so each keystroke fires its own text change and the 700ms
+     * debounce sees a burst (web gap SCH-02). Does NOT wait for the search to settle.
+     *
+     * <p>Whether an element {@code sendKeys} appends or replaces differs between Appium
+     * versions, so the first two keystrokes decide: if the box then reads the two-character
+     * prefix, keys append; otherwise each step sets the growing prefix instead.
+     */
+    public boolean typePagesSearchSlowly(String query, long gapMs) {
+        WebElement box = pagesSearchBox();
+        if (box == null || query.isEmpty()) return false;
+        try {
+            box.click();
+            box.clear();
+            pause(gapMs);
+            box.sendKeys(query.substring(0, 1));
+            pause(gapMs);
+            if (query.length() == 1) return true;
+            box.sendKeys(query.substring(1, 2));
+            pause(gapMs);
+            boolean appends = query.substring(0, 2).equals(text(box));
+            if (!appends) box.sendKeys(query.substring(0, 2));
+            for (int i = 3; i <= query.length(); i++) {
+                box.sendKeys(appends ? query.substring(i - 1, i) : query.substring(0, i));
+                pause(gapMs);
+            }
+            return query.equals(text(box));
+        } catch (WebDriverException e) { return false; }
+    }
+
+    private WebElement pagesSearchBox() {
+        try {
+            List<WebElement> roots = onScreen("searchIncluded");
+            if (!roots.isEmpty()) {
+                List<WebElement> in = roots.get(0).findElements(byId("search_widget_edit_textvw"));
+                if (!in.isEmpty()) return in.get(0);
+            }
+            List<WebElement> any = onScreen("search_widget_edit_textvw");
+            return any.isEmpty() ? null : any.get(0);
+        } catch (WebDriverException e) { return null; }
+    }
+
     public String pagesSearchHint() {
         List<WebElement> any = onScreen("search_widget_edit_textvw");
         if (any.isEmpty()) return null;

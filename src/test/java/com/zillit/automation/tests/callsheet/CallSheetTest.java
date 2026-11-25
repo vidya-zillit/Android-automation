@@ -94,6 +94,9 @@ class CallSheetTest extends BaseTest {
         HomeChatPage p = new HomeChatPage(driver);
         assertTrue(p.isHistoryButtonVisible(),
                 "The call-sheet History button (userHistoryBtn) should be visible");
+        // [WEB CS #1] the Call Sheet tab shows the composer too, not only History.
+        assertTrue(p.isInputBarVisible() || p.isNoRightsBannerVisible(),
+                "The call-sheet unit should show the composer (etMessage) or the no-rights banner");
         screenshot("callsheet-home");
     }
 
@@ -207,6 +210,135 @@ class CallSheetTest extends BaseTest {
                 "The delete-confirmation dialog (Yes) should appear and be clickable");
         sleep(1500);
         screenshot("callsheet-deleted");
+    }
+
+    // ---------------- [WEB CS-M1] TEXT messages on the Call Sheet unit ----------------
+    //
+    // The composer is registered for every unit (Home.kt:405-408); on Call Sheet only the mic
+    // is hidden and the picker is document-only. No case had ever posted, edited, replied to
+    // or deleted a TEXT message here (AllUnitsMediaTest assumed "document-only").
+    // Web #2 #3 #4 #5 #6 #7. Every row is ZL_AUTO-prefixed and deleted in CS-M1f.
+
+    private final String csTs = HomeChatPage.letterStamp();   // digit-free: see letterStamp()
+    private final String csPost = "ZL_AUTO cs-post " + csTs;
+    private final String csEdited = csPost + " EDITED";
+    private final String csReply = "ZL_AUTO cs-reply " + csTs;
+    private final String csEmoji = "ZL_AUTO cs-emoji " + csTs + " \uD83C\uDFAC\uD83D\uDD25\u2728\uD83D\uDC4D";
+    private boolean csPosted;
+
+    private HomeChatPage composer() {
+        HomeChatPage p = new HomeChatPage(driver);
+        assumeTrue(p.isInputBarVisible(), "No composer on call sheet (no posting rights) — skipping");
+        return p;
+    }
+
+    @Test
+    @Order(20)
+    // [WEB CS-M1 #2]
+    @DisplayName("[WEB CS-M1] TEXT: a typed message posts on the Call Sheet unit and the composer clears")
+    void textPosts() {
+        HomeChatPage p = composer();
+        p.sendMessage(csPost);
+        csPosted = true;
+        assertTrue(p.waitMessageSent(csPost, Duration.ofSeconds(30)),
+                "The call-sheet text should reach the server — it is " + p.sendStateOf(csPost));
+        assertTrue(p.composerText().isEmpty(), "The composer should be empty after Send, has '" + p.composerText() + "'");
+    }
+
+    @Test
+    @Order(21)
+    // [WEB CS-M1 #3]
+    @DisplayName("[WEB CS-M1] TEXT options: Reply / Edit / Delete; no Forward, Share or Publish to Doc Distribution")
+    void textOptions() {
+        HomeChatPage p = composer();
+        assumeTrue(csPosted && p.messageShown(csPost, Duration.ofSeconds(5)), "The call-sheet text was not posted");
+        assumeTrue(p.longPressMessage(csPost), "Long-press on the call-sheet text failed");
+        List<String> opts = p.menuOptions();
+        System.out.println(">>> call-sheet TEXT options: " + opts);
+        try {
+            for (String want : List.of("Reply", "Edit", "Delete")) {
+                assertTrue(opts.stream().anyMatch(o -> o.equalsIgnoreCase(want)), "Call-sheet text should offer " + want + ": " + opts);
+            }
+            assertTrue(opts.stream().noneMatch(o -> o.equalsIgnoreCase("Forward")), "Forward must be hidden on call sheet: " + opts);
+            assertTrue(opts.stream().noneMatch(o -> o.equalsIgnoreCase("Share")), "Share must be hidden on call sheet: " + opts);
+            assertTrue(opts.stream().noneMatch(o -> o.toLowerCase().contains("doc distribution")),
+                    "Publish to Doc Distribution is for documents only (Home.kt isShowDistributeToDD): " + opts);
+        } finally {
+            p.closeMenu();
+        }
+    }
+
+    @Test
+    @Order(22)
+    // [WEB CS-M1 #4]
+    @DisplayName("[WEB CS-M1] TEXT edit: Update shows the new text marked Edited")
+    void textEdit() {
+        HomeChatPage p = composer();
+        assumeTrue(csPosted && p.messageShown(csPost, Duration.ofSeconds(5)), "The call-sheet text was not posted");
+        assumeTrue(p.longPressMessage(csPost), "Long-press failed");
+        assertTrue(p.tapMenuOption("Edit"), "Edit should be offered");
+        assertTrue(p.isEditDialogOpen(Duration.ofSeconds(6)), "The edit dialog should open");
+        p.setEditDialogTextNoBack(csEdited);
+        p.saveEditDialog();
+        assertTrue(p.messageShown(csEdited, Duration.ofSeconds(15)), "The edited call-sheet text should show");
+        sleep(1500);
+        assertTrue(p.rowTime(csEdited).startsWith("Edited"),
+                "The edited row should be marked Edited, tvMsgTime='" + p.rowTime(csEdited) + "'");
+    }
+
+    @Test
+    @Order(23)
+    // [WEB CS-M1 #5]
+    @DisplayName("[WEB CS-M1] TEXT reply: reply bar quotes the row, paperclip and mic hidden, reply nests under it")
+    void textReply() {
+        HomeChatPage p = composer();
+        assumeTrue(p.messageShown(csEdited, Duration.ofSeconds(5)), "The edited call-sheet text is not there");
+        assumeTrue(p.longPressMessage(csEdited), "Long-press failed");
+        assertTrue(p.tapMenuOption("Reply"), "Reply should be offered");
+        try {
+            assertTrue(p.replyBarShown(Duration.ofSeconds(5)), "The reply bar should open");
+            assertTrue(p.replyBarQuote().contains(csPost), "The reply bar should quote the row: '" + p.replyBarQuote() + "'");
+            assertTrue(!p.isAttachmentVisible(), "The paperclip must be hidden while replying");
+            assertTrue(!p.isRecordButtonVisible(), "The mic must be hidden while replying");
+            p.sendMessage(csReply);
+            sleep(5000);
+            assertTrue(p.replyUnderRow(csEdited, csReply), "The reply should nest under the call-sheet row");
+        } finally {
+            p.cancelReplyPreview();
+        }
+    }
+
+    @Test
+    @Order(24)
+    // [WEB CS-M1 #7]
+    @DisplayName("[WEB CS-M1] TEXT emoji: a message with four emoji posts them all")
+    void textEmoji() {
+        HomeChatPage p = composer();
+        p.sendMessage(csEmoji);
+        assertTrue(p.waitMessageSent("ZL_AUTO cs-emoji " + csTs, Duration.ofSeconds(30)),
+                "The emoji text should post — it is " + p.sendStateOf("ZL_AUTO cs-emoji " + csTs));
+        String row = p.rowMessage("ZL_AUTO cs-emoji " + csTs);
+        for (String e : new String[]{"\uD83C\uDFAC", "\uD83D\uDD25", "\u2728", "\uD83D\uDC4D"}) {
+            assertTrue(row.contains(e), "The row should contain " + e + ", got '" + row + "'");
+        }
+    }
+
+    @Test
+    @Order(25)
+    // [WEB CS-M1 #6] (strengthens web #6: the row must actually disappear)
+    @DisplayName("[WEB CS-M1] TEXT delete: the row is gone after Delete → Yes")
+    void textDelete() {
+        HomeChatPage p = composer();
+        String target = p.messageShown(csEdited, Duration.ofSeconds(3)) ? csEdited : csPost;
+        assumeTrue(p.messageShown(target, Duration.ofSeconds(3)), "No call-sheet text to delete");
+        assumeTrue(p.longPressMessage(target), "Long-press failed");
+        assertTrue(p.tapMenuOption("Delete"), "Delete should be offered");
+        p.tapDeleteActionBar(Duration.ofSeconds(6));
+        assertTrue(confirmYesDialog(Duration.ofSeconds(8)), "The delete confirmation (Yes) should appear");
+        sleep(3000);
+        assertTrue(!p.messageShown(target, Duration.ofSeconds(2)), "The deleted call-sheet text must be gone");
+        // cleanup of the emoji row
+        p.deleteOwnMessage("ZL_AUTO cs-emoji " + csTs);
     }
 
     private void sleep(long ms) {

@@ -139,7 +139,25 @@ public class DocDistComposerPage extends BasePage {
     public boolean hasEmptyUploadCta()  { return isVisible("dd_empty_upload", Duration.ofSeconds(2)); }
     public boolean hasEmptyLibraryCta() { return isVisible("dd_empty_library", Duration.ofSeconds(2)); }
 
+    /**
+     * Scrolls the compose stage until the attachment rows are in the tree. The list sits
+     * below the subject and the rich-text editor, so on a phone it is off-screen — and an
+     * off-screen RecyclerView row is simply absent, which read as "no attachments".
+     */
+    public void revealAttachments() {
+        for (String target : new String[]{"dd_remove", "dd_attachments_recycler"}) {
+            try {
+                driver.findElement(AppiumBy.androidUIAutomator(
+                        "new UiScrollable(new UiSelector().scrollable(true).instance(0))"
+                                + ".setMaxSearchSwipes(6).scrollIntoView(new UiSelector().resourceId(\""
+                                + appPackage() + ":id/" + target + "\"))"));
+                return;
+            } catch (WebDriverException ignored) { }
+        }
+    }
+
     public int attachmentCount() {
+        revealAttachments();
         try {
             return driver.findElements(AppiumBy.xpath(
                     "//*[@resource-id='" + appPackage() + ":id/dd_attachments_recycler']"
@@ -148,6 +166,7 @@ public class DocDistComposerPage extends BasePage {
     }
 
     public List<String> attachmentNames() {
+        revealAttachments();
         try {
             return driver.findElements(AppiumBy.xpath(
                             "//*[@resource-id='" + appPackage() + ":id/dd_attachments_recycler']"
@@ -213,6 +232,37 @@ public class DocDistComposerPage extends BasePage {
 
     /** The send-in-flight overlay (trap 3.5 — its absence is NOT proof of a send). */
     public boolean busyOverlayShown() { return isVisible("dd_busy_overlay", Duration.ofSeconds(2)); }
+
+    /** The activity toolbar's heading: "Compose email" or "Distribute folder" (DD-28). */
+    public String headerTitle() { return textOf("headerText"); }
+
+    /**
+     * Answers the "Keep this email as a draft?" question with DISCARD (the neutral
+     * button, {@code android:id/button3}), so a case never leaves a QA draft behind.
+     * Returns true when the question was on screen and was answered.
+     */
+    public boolean discardDraftIfAsked(Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                List<WebElement> b = driver.findElements(AppiumBy.androidUIAutomator(
+                        "new UiSelector().resourceId(\"android:id/button3\")"));
+                if (!b.isEmpty()) { b.get(0).click(); sleep(800); return true; }
+            } catch (WebDriverException ignored) { }
+            sleep(300);
+        }
+        return false;
+    }
+
+    /** Cancel (or Back) out of the composer, discarding any draft. */
+    public void leaveDiscarding() {
+        if (isPreviewStage(Duration.ofMillis(500))) { tapEdit(); sleep(600); }
+        if (!tapCancel()) {
+            try { driver.navigate().back(); } catch (WebDriverException ignored) { }
+        }
+        sleep(800);
+        discardDraftIfAsked(Duration.ofSeconds(3));
+    }
 
     // ---------------- helpers ----------------
 

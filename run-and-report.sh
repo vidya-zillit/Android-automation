@@ -53,7 +53,10 @@ elif [[ "${1:-}" == "--home" ]]; then
                 --tests '*.CallSheetTest'
                 --tests '*.RegressionStressTest'
                 --tests '*.AllUnitsMediaTest'
-                --tests '*.CalendarTest')
+                --tests '*.HomeWebGapTest'
+                --tests '*.CalendarTest'
+                --tests '*.CalendarRecurringScopeTest'
+                --tests '*.CalendarWebGapTest')
 elif [[ "${1:-}" == "--call-sheet-upload" ]]; then
   # ZL-21154 upload-mode sheet (Continuation / New / Replace) on the Call Sheet unit.
   # Its own flag rather than part of --home: every case drives a full picker round-trip to
@@ -64,7 +67,9 @@ elif [[ "${1:-}" == "--call-sheet-upload" ]]; then
 elif [[ "${1:-}" == "--calendar" ]]; then
   # CALENDAR ONLY — its own fresh session, nothing to do with chat. Full field
   # coverage, all pickers, and CRUD (create / view / update / delete + recurring).
-  GRADLE_ARGS+=(--tests '*.CalendarTest')
+  GRADLE_ARGS+=(--tests '*.CalendarTest'
+                --tests '*.CalendarRecurringScopeTest'
+                --tests '*.CalendarWebGapTest')
 elif [[ "${1:-}" == "--chat" ]]; then
   # CHAT ONLY — every chat suite, no calendar. Sending, options, media, stress.
   GRADLE_ARGS+=(--tests '*.HomeChatTest'
@@ -74,7 +79,8 @@ elif [[ "${1:-}" == "--chat" ]]; then
                 --tests '*.ChatOptionsTest'
                 --tests '*.CallSheetTest'
                 --tests '*.RegressionStressTest'
-                --tests '*.AllUnitsMediaTest')
+                --tests '*.AllUnitsMediaTest'
+                --tests '*.HomeWebGapTest')
 elif [[ "${1:-}" == "--email" ]]; then
   # EMAIL ONLY — its own fresh session. Landing/list, folder drawer, compose
   # (To/Cc/Bcc + subject + body + rich-text + attach + send) with validation,
@@ -129,6 +135,46 @@ elif [[ "${1:-}" == "--continuity" ]]; then
   # pushes to /sdcard/Pictures and touches to the top. Adding is asynchronous (upload,
   # then a background create, then a socket), so the add cases wait up to 150s for a row.
   GRADLE_ARGS+=(--tests '*.ContinuityTest')
+elif [[ "${1:-}" == "--call-sheet-creation" ]]; then
+  # CALL SHEET CREATION — Tools → "Call Sheet Creation" (ProjectDetailActivity), NOT the
+  # Home "Call Sheet" chat unit (that is --home / --call-sheet-upload). Creator side on
+  # one device: tabs, template picker, the editor's native parts (header, sections,
+  # approvers, overflow, name and discard dialogs), Drafts actions, Send for Comments /
+  # Signature, the admin Permission tab, and a sweep of every ZL_AUTO_CS_ sheet.
+  # Needs the project's approver set (Vidya Pixel on ZL-Android-Automation).
+  # With ZILLIT_RECEIVER_UDID set (the approver's device, Pixel), also runs the two-device
+  # approval round CallSheetApprovalTest; without it that class skips.
+  GRADLE_ARGS+=(--tests '*.CallSheetCreationTest' --tests '*.CallSheetApprovalTest')
+elif [[ "${1:-}" == "--production-report" ]]; then
+  # PRODUCTION REPORT CREATION — Tools → "Production Report Creation"
+  # (ProductionReportDashboardActivity; the tile opens the chat instead unless remote config
+  # enables report templates for the project). Creator side on one device: dashboard,
+  # template picker + "No Call Sheet Found", the editor (Crew Call / Unit Wrap, approvers,
+  # overflow, name/discard dialogs), Drafts actions, "Missing Call Times", Send for Signature,
+  # Sent / Reminder, and a sweep of every ZL_AUTO_PR_ report.
+  # With ZILLIT_RECEIVER_UDID set, also the two-device approval round ProductionReportApprovalTest.
+  GRADLE_ARGS+=(--tests '*.ProductionReportTest' --tests '*.ProductionReportApprovalTest')
+elif [[ "${1:-}" == "--schedule-dod" ]]; then
+  # SCHEDULE D.O.D. — Tools → "Schedule D.O.D." (DodActivity): folders and files, upload
+  # (Document picker, name, colour), card menus, View / Download / counts, History, search,
+  # QA DOD-01…05 re-checks, and a sweep of every ZL_AUTO upload. Fixture: zl_test_doc.pdf.
+  GRADLE_ARGS+=(--tests '*.ScheduleDodTest')
+elif [[ "${1:-}" == "--chat-doc-editor" ]]; then
+  # CHAT DOCUMENT → EDITOR — opening an Office document (docx/xlsx) from each chat opens the
+  # app's own editor read-only ("View only", no app Edit button) and one Back returns to the
+  # chat: Bulletin, Call Sheet, Info, Confidential Info, Production Report chat, Forms
+  # discussion, C&C 1:1 and group. A PDF in Bulletin is the negative control (another app).
+  GRADLE_ARGS+=(--tests '*.ChatDocumentEditorTest')
+elif [[ "${1:-}" == "--e-signature" ]]; then
+  # Z-E-SIGNATURE — Tools → "Z-E-Signature" (DocSignMainActivity): drafts / sent / received /
+  # completed lists, upload a document (zl_test_doc.pdf), envelope composer, saved signatures,
+  # templates, row menus, and a sweep of every ZL_AUTO envelope.
+  GRADLE_ARGS+=(--tests '*.ESignatureTest')
+elif [[ "${1:-}" == "--crew-dood" ]]; then
+  # CREW DOOD — Tools → "Crew DOOD" (CrewDoodActivity): crew grid and calendar, days-off
+  # editor, filters, detail, export (skips without a matching deal memo), and a sweep of
+  # everything ZL_AUTO_ it made.
+  GRADLE_ARGS+=(--tests '*.CrewDoodTest')
 elif [[ "${1:-}" == "--schedule-dist" ]]; then
   # SCHEDULE DISTRIBUTION — the Tools tile reads "Schedule Full & One Line" (server label;
   # identifier schedule_distribution_tool). Covers the three tabs, the Full and One Line
@@ -220,6 +266,12 @@ elif [[ "${1:-}" == "--map-crud-full" ]]; then
 elif [[ "${1:-}" == "--map-directions" ]]; then
   # DIRECTIONS + SHARE — both hand off to other apps, so they run last.
   GRADLE_ARGS+=(--tests '*.MapDirectionsShareTest')
+elif [[ "${1:-}" == "--map-location-flow" ]]; then
+  # LOCATION TOOL → MAP, end to end: a ZL_AUTO_ shoot location (pin inside a Map city,
+  # City = that city) is created in Selects, moved to Shortlist and Final, and read back
+  # on the Map at each stage. WRITES to both modules; deletes the location and any city
+  # it had to add.
+  GRADLE_ARGS+=(--tests '*.MapLocationFlowTest')
 elif [[ "${1:-}" == "--map-all" ]]; then
   # EVERYTHING map-related — but ONE APPIUM SESSION PER SUITE, not one session for all
   # ten. Handing every class to a single Gradle run is what this branch used to do, and
@@ -234,7 +286,7 @@ elif [[ "${1:-}" == "--map-all" ]]; then
   MAP_SUITES=(MapModuleTest MapLocationPinsTest LocationToolTest MapCityCrudTest
               MapZoneCrudTest MapPinBoundaryTest MapTypeManagerTest MapLocationCrudTest
               MapDirectionsShareTest MapGuardsTest MapCrudLifecycleTest
-              MapCityMultiTest)
+              MapCityMultiTest MapLocationFlowTest MapWebGapTest MapZoneGuardTest)
   ACC="build/allresults"
   rm -rf "$ACC"; mkdir -p "$ACC"
   TEST_EXIT=0
@@ -421,7 +473,8 @@ elif [[ "${1:-}" == "--doc-dist-all" ]]; then
                 --tests '*.DocDistGridViewTest'
                 --tests '*.DocDistPublishTypesTest'
                 --tests '*.DocDistNestedFoldersTest'
-                --tests '*.DocDistRightsTest')
+                --tests '*.DocDistRightsTest'
+                --tests '*.DocDistWebGapTest')
 elif [[ "${1:-}" == "--doc-dist-everything" ]]; then
   # Literally every Document Distribution suite, including the real send and the
   # regression suite that toggles the network.
@@ -483,7 +536,9 @@ elif [[ "${1:-}" == "--settings" ]]; then
                 --tests '*.AppPreferencesTest'
                 --tests '*.LinkedDeviceTest'
                 --tests '*.InviteUsersTest'
-                --tests '*.ZillitHelpTest')
+                --tests '*.ZillitHelpTest'
+                --tests '*.PermissionGridTest'
+                --tests '*.AdminSettingsWebGapTest')
 elif [[ "${1:-}" == "--manual-media" ]]; then
   # Interactive: YOU pick Video/Location/Contact on the device and reach the
   # send screen; automation sends + verifies. Set ZILLIT_PICK_WAIT for a longer
@@ -493,13 +548,48 @@ elif [[ "${1:-}" == "--two-device" ]]; then
   # Cross-device, two-user: every message type is RECEIVED on the 2nd device,
   # edits update on the receiver, deletes disappear on the receiver.
   GRADLE_ARGS+=(--tests '*.TwoUserChatTest')
+elif [[ "${1:-}" == "--casting" ]]; then
+  # CASTING — "Casting (Main Cast)" and "Casting(Background Cast)": tabs, filters, the form's
+  # validation, create/edit, moves Selects → Shortlist → Final, report, delete. ~50 min.
+  GRADLE_ARGS+=(--tests '*.CastingTest')
+elif [[ "${1:-}" == "--costume" ]]; then
+  # COSTUME — "Costume (Main Cast)" and "Costume (Background Cast)" (the Wardrobe tools, not
+  # Costumes & Set Sync). ~70 min for both; COSTUME_TOOL=MAIN|BACKGROUND runs one.
+  GRADLE_ARGS+=(--tests '*.CostumeTest')
+elif [[ "${1:-}" == "--location-full" ]]; then
+  # LOCATION TOOL, everything on one device: the read-only smoke plus the full write suite.
+  GRADLE_ARGS+=(--tests '*.LocationToolTest'
+                --tests '*.LocationToolFullTest')
+elif [[ "${1:-}" == "--notifications" ]]; then
+  # NOTIFICATIONS — the list on first open and where its rows lead (NOTIF-01/02).
+  GRADLE_ARGS+=(--tests '*.NotificationsTest')
+elif [[ "${1:-}" == "--box-cleanup" ]]; then
+  # Delete this project's leftover Box Schedule fixtures (opt-in: it removes data).
+  GRADLE_ARGS+=(--tests '*.BoxCleanupTest')
+elif [[ "${1:-}" == "--two-device-all" ]]; then
+  # EVERY TWO-DEVICE SUITE, one Gradle run each, one combined report. Two devices, two
+  # different users, the same project:
+  #   ZILLIT_UDID=emulator-5554 ZILLIT_RECEIVER_UDID=<phone> ./run-ui.sh --two-device-all
+  if [[ -z "${ZILLIT_UDID:-}" || -z "${ZILLIT_RECEIVER_UDID:-}" || "$ZILLIT_UDID" == "${ZILLIT_RECEIVER_UDID:-}" ]]; then
+    echo "✗ --two-device-all needs two different devices: ZILLIT_UDID (creator) and ZILLIT_RECEIVER_UDID (second user)."
+    exit 2
+  fi
+  export ZILLIT_SENDER_UDID="${ZILLIT_SENDER_UDID:-$ZILLIT_UDID}"
+  RUN_ALL=1
+  TWO_DEVICE_ALL=1
 elif [[ "${1:-}" == "--all" ]]; then
   # FULL BUILD SWEEP — every module, one after another (Home/Bulletin → Calendar →
   # Email → C&C → Tools), each run SEPARATELY so a degraded emulator on one module
   # can't kill the rest, then ONE combined HTML report for the developer.
+  # It starts by creating a project and selecting it (you enter the email OTP); every later
+  # module then runs in THAT project. If it cannot be created the sweep stops. The logged-out
+  # suites (create-form validation, join) clear the app's data, so they stay in --no-e2e.
   RUN_ALL=1
+  CREATE_PROJECT_FIRST=1
+  rm -f build/run-project.txt
+  unset ZILLIT_RUN_PROJECT
 elif [[ "${1:-}" == "--all-in-project" ]]; then
-  # Same sweep as --all but SKIPS "Project create / join / list" (needs a manual
+  # Same sweep as --all but SKIPS "Create and select project" (needs a manual
   # OTP, so it can't run unattended) — Home/Bulletin, Calendar, Email, C&C, Tools,
   # each isolated, one combined report. Needs an already logged-in project.
   RUN_ALL=1
@@ -512,7 +602,7 @@ elif [[ "${1:-}" == -* ]]; then
   echo "  Available: --no-e2e --flow --sweep --home --call-sheet-upload --calendar --chat"
   echo "             --email --cc --tools"
   echo "             --recce --recce-pagination --drive --drive-upload --drive-share"
-  echo "             --map --map-pins --location --map-crud --map-directions --map-all"
+  echo "             --map --map-pins --location --map-crud --map-directions --map-location-flow --map-all"
   echo "             --drive-shared --drive-editor --drive-editor-probe --drive-view"
   echo "             --drive-organise --drive-comments --drive-requests --drive-activity"
   echo "             --drive-settings --drive-folder-share --drive-collab --drive-e2e
@@ -521,7 +611,8 @@ elif [[ "${1:-}" == -* ]]; then
              --doc-dist-publish --doc-dist-rights --doc-dist-regression --doc-dist-send
              --doc-dist-grid --doc-dist-nested --doc-dist-publish-types --doc-dist-verify --doc-dist-all --doc-dist-everything --doc-dist-cleanup"
   echo "             --drive-two-device --drive-all --admin-settings --manual-media"
-  echo "             --sides --continuity --schedule-dist --two-device --all --all-in-project"
+  echo "             --sides --continuity --schedule-dist --call-sheet-creation --production-report --schedule-dod --crew-dood --e-signature --chat-doc-editor --two-device --two-device-all --all --all-in-project"
+  echo "             --casting --costume --location-full --notifications --box --box-cleanup --external-users --settings --map-cities --map-cleanup --map-crud-full --only <Class>"
   echo "  (no option at all = the full suite, including the manual-OTP E2E)"
   exit 2
 fi
@@ -542,9 +633,20 @@ ADB="$ANDROID_SDK/platform-tools/adb"
 [[ -x "$ADB" ]] || echo "⚠ adb not found (looked in $ANDROID_SDK/platform-tools and on PATH)" \
                         "— device prep and app relaunch will be skipped."
 FX=src/test/resources/fixtures
-# QA flavour — matches zillit.appPackage in config/config.properties. A merge
-# briefly switched this to .dev, which mis-targeted pm grant and relaunch_app.
-PKG="${ZILLIT_APP_PACKAGE:-com.zillit.zillitapp.qa}"
+# DEV BUILD ONLY. This used to default to .qa while config/config.properties said .dev, so
+# a run without ZILLIT_FLAVOR drove the tests on dev but granted permissions to, and opened,
+# the QA app before every module. Anything but dev is refused rather than half-honoured.
+DEV_PKG="com.zillit.zillitapp.dev"
+case "$(printf '%s' "${ZILLIT_FLAVOR:-dev}" | tr '[:upper:]' '[:lower:]')" in
+  dev|develop) ;;
+  *) echo "✗ ZILLIT_FLAVOR=$ZILLIT_FLAVOR — this project automates the DEV build only ($DEV_PKG)."; exit 2 ;;
+esac
+PKG="${ZILLIT_APP_PACKAGE:-$DEV_PKG}"
+if [[ "$PKG" != "$DEV_PKG" ]]; then
+  echo "✗ ZILLIT_APP_PACKAGE=$PKG — this project automates the DEV build only ($DEV_PKG)."
+  exit 2
+fi
+export ZILLIT_APP_PACKAGE="$PKG"
 
 prep_device() {  # $1 = adb device serial (may be empty for the only device)
   local flag=""
@@ -664,7 +766,7 @@ prep_device() {  # $1 = adb device serial (may be empty for the only device)
 }
 
 if [[ -x "$ADB" && -f "$FX/zl_test_image.jpg" ]]; then
-  if [[ "${1:-}" == "--two-device" ]]; then
+  if [[ "${1:-}" == "--two-device" || "${1:-}" == "--two-device-all" ]]; then
     # Prep BOTH the sender and receiver devices.
     prep_device "${ZILLIT_SENDER_UDID:-${ZILLIT_UDID:-}}"
     [[ -n "${ZILLIT_RECEIVER_UDID:-}" ]] && prep_device "$ZILLIT_RECEIVER_UDID"
@@ -722,7 +824,9 @@ UDID="${ZILLIT_UDID:-emulator-5554}"
 # Relaunch the app to the foreground (a cold Appium session fails otherwise —
 # the launcher activity is SplashActivity, and monkey is flaky at foregrounding).
 relaunch_app() {
-  $ADB -s "$UDID" shell am force-stop "$PKG" >/dev/null 2>&1
+  # Emulators only: on a physical phone a cold start raises Zillit's fingerprint/PIN app
+  # lock, which a run cannot clear. There the app is just brought to the front.
+  [[ "$UDID" == emulator-* ]] && $ADB -s "$UDID" shell am force-stop "$PKG" >/dev/null 2>&1
   $ADB -s "$UDID" shell am start-activity -n "$PKG/com.zillit.zillitapp.splash.SplashActivity" >/dev/null 2>&1
   sleep 7
 }
@@ -793,23 +897,56 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
   # the way through every module. (LoginFlowTest is NOT included: it needs a manual
   # OTP, so it can't run unattended — do the OTP login once before starting --all.)
   MODULES=(
-    "Project create / join / list::CreateProjectValidationTest CreateProjectSubTypeTest JoinProjectTest ProjectListTest ProjectFlowE2ETest"
+    "Create and select project::CreateAndSelectProjectTest"
     "Home / Bulletin chat::HomeChatTest PostingRightsTest MediaPreviewTest MediaSystemPickerTest ChatOptionsTest CallSheetTest RegressionStressTest AllUnitsMediaTest"
+    "Home · web gap cases::HomeWebGapTest"
     "Call Sheet upload mode::CallSheetUploadModeTest"
     "Calendar::CalendarTest"
+    "Calendar · web gap cases::CalendarRecurringScopeTest CalendarWebGapTest"
     "Email::EmailTest EmailDrawerTest EmailExtrasTest EmailActionsTest EmailCalendarTest"
     "C&C (Chat & Calling)::CcGroupCreateTest CcGroupChatTest CcGroupManageTest CcDirectChatTest CcChatMediaTest CcCallTest CcCallTabTest CcContactsTest"
     "Tools::ConfidentialInfoTest InfoTest CateringTest ExternalUserTest RecceTest DriveTest ToolsManagementTest"
     "Sides::SidesTest"
     "Continuity::ContinuityTest"
+    "Call Sheet Creation::CallSheetCreationTest CallSheetApprovalTest"
+    "Production Report Creation::ProductionReportTest ProductionReportApprovalTest"
+    "Schedule D.O.D.::ScheduleDodTest"
+    "Crew DOOD::CrewDoodTest"
+    "Z-E-Signature::ESignatureTest"
+    "Chat documents → editor::ChatDocumentEditorTest"
+    "Casting::CastingTest"
+    "Costume::CostumeTest"
+    "Location tool::LocationToolFullTest"
+    "Notifications::NotificationsTest"
+    "Document Distribution::DocDistributionTest DocDistFoldersTest DocDistFilesTest DocDistComposerTest DocDistPresetsTest DocDistTemplatesTest DocDistContactsTest DocDistHistoryTest DocDistWatermarkTest DocDistPublishTest DocDistGridViewTest DocDistPublishTypesTest DocDistNestedFoldersTest DocDistRightsTest DocDistWebGapTest"
+    "Drive::DriveUploadTest DriveShareTest DriveEditorTest DriveViewTest DriveOrganiseTest DriveCommentsTest DriveRequestFilesTest DriveActivityTest DriveSettingsTest"
     "Schedule Distribution::ScheduleDistTest"
     "Production Diary / Box Schedule::BoxShellTest BoxTypeTest BoxScheduleCrudTest BoxConflictTest BoxEventNoteTest BoxProductionScheduleTest BoxScheduleEditTest BoxCrossViewTest BoxEventLifecycleTest"
-    "Map & Location::MapModuleTest MapLocationPinsTest LocationToolTest MapCityCrudTest MapZoneCrudTest MapPinBoundaryTest MapTypeManagerTest MapLocationCrudTest MapDirectionsShareTest MapGuardsTest MapCrudLifecycleTest MapCityMultiTest"
+    "Map & Location::MapModuleTest MapLocationPinsTest LocationToolTest MapCityCrudTest MapZoneCrudTest MapPinBoundaryTest MapTypeManagerTest MapLocationCrudTest MapDirectionsShareTest MapGuardsTest MapCrudLifecycleTest MapCityMultiTest MapLocationFlowTest MapWebGapTest MapZoneGuardTest"
     "Settings / Admin Settings::DepartmentListingOrderTest AdminSettingsGroupsTest CompanyDetailsTest CreateAdditionalShootingUnitTest CreateNewDepartmentTest CreateNewDesignationTest CreateRemoteShootingUnitTest CreateUpdateHomeUnitTest CustomizationOfToolsTest EditProjectNameTest ManageToolGroupsTest PreApprovedUsersTest ApproveNewUserRequestTest SosReceiversTest UserManagementTest WatermarkLogoTest DeleteProjectTest"
-    "Settings (tab)::EditMyProfileTest AppPreferencesTest LinkedDeviceTest InviteUsersTest ZillitHelpTest"
+    "Settings (tab)::EditMyProfileTest AppPreferencesTest LinkedDeviceTest InviteUsersTest ZillitHelpTest PermissionGridTest AdminSettingsWebGapTest"
   )
+  if [[ "${TWO_DEVICE_ALL:-0}" == "1" ]]; then
+    MODULES=(
+      "Home · two devices::TwoUserChatTest"
+      "Calendar invites · two devices::CalendarInviteTest"
+      "C&C · two devices::CcGroupChatTest"
+      "Info / Confidential Info · two devices::InfoTwoUserTest"
+      "Catering · two devices::CateringTwoUserTest"
+      "Call Sheet approval · two devices::CallSheetApprovalTest"
+      "Production Report approval · two devices::ProductionReportApprovalTest"
+      "Casting · two devices::CastingTwoUserTest"
+      "Costume · two devices::CostumeTwoUserTest"
+      "Location tool · two devices::LocationToolTwoUserTest"
+      "Schedule Distribution · two devices::ScheduleDistTwoUserTest"
+      "Box history · two devices::BoxHistoryTwoUserTest"
+      "Drive · folder share::DriveFolderShareTest"
+      "Drive · two-device journey::DriveTwoDeviceE2ETest"
+      "Drive · collaborative edit::DriveCollabEditTest"
+    )
+  fi
   if [[ "${SKIP_PROJECT_MODULE:-0}" == "1" ]]; then
-    MODULES=("${MODULES[@]:1}")  # drop "Project create / join / list"
+    MODULES=("${MODULES[@]:1}")  # drop "Create and select project"
   fi
   # Modules whose suites each need their OWN Appium session, instead of sharing one
   # session for the whole module.
@@ -823,7 +960,7 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
   #
   # Costs one extra gradle startup per suite. Add a label here only with a run to justify
   # it — this is not the default for good reason.
-  PER_SUITE_LABELS=("Map & Location" "Production Diary / Box Schedule")
+  PER_SUITE_LABELS=("Map & Location" "Production Diary / Box Schedule" "Document Distribution" "Drive")
   TEST_EXIT=0
   for entry in "${MODULES[@]}"; do
     label="${entry%%::*}"; classes="${entry##*::}"
@@ -853,6 +990,16 @@ if [[ "${RUN_ALL:-0}" == "1" ]]; then
     # Accumulate this module's JUnit XMLs (one file per test class, no name clashes).
     if ls build/test-results/test/*.xml >/dev/null 2>&1; then
       cp -f build/test-results/test/*.xml "$ACC"/ 2>/dev/null
+    fi
+    if [[ "${CREATE_PROJECT_FIRST:-0}" == "1" && "$label" == "Create and select project" ]]; then
+      if [[ -s build/run-project.txt ]]; then
+        export ZILLIT_RUN_PROJECT="$(cat build/run-project.txt)"
+        echo "▶ Every module from here runs in project: $ZILLIT_RUN_PROJECT"
+      else
+        echo "✗ The project was not created and selected — stopping, so nothing runs in another project."
+        TEST_EXIT=1
+        break
+      fi
     fi
     echo "▶ $label done — $(ls "$ACC"/*.xml 2>/dev/null | wc -l | tr -d ' ') result files so far."
   done

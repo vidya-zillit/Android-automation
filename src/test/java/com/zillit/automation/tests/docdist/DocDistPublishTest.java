@@ -702,10 +702,38 @@ class DocDistPublishTest extends DocDistBaseTest {
                 "Cancelling returns to the library, not out of the module");
     }
 
+    // ==================== N-15 · WEB L52 / DD-14 ====================
+
+    /**
+     * [WEB L52, L143] Sheet DD-14: Publish on one file read "Publish documents · 1 documents"
+     * and the destination heading said "Publish in any one of the module below".
+     */
+    @Test
+    @Order(13)
+    @DisplayName("N-15 [WEB DD-14]: one file reads '1 document', and the heading 'Publish in one of the modules below'")
+    void singularWording() {
+        DocDistLibraryPage lib = enterWorkFolderWithFixture();
+        DocDistPublishSheet sheet = new DocDistPublishSheet(driver);
+        assumeTrue(openPublishSheet(lib, sheet), sheetSkipReason());
+        try {
+            String title = sheet.title();
+            boolean newHeading = sheet.textShown("Publish in one of the modules below", Duration.ofSeconds(3));
+            boolean oldHeading = sheet.textShown("any one of the module", Duration.ofSeconds(1));
+            System.out.println(">>> N-15 title='" + title + "' newHeading=" + newHeading + " oldHeading=" + oldHeading);
+            screenshot("pub-n15");
+            assertTrue(title.contains("1 document") && !title.contains("1 documents"),
+                    "[DD-14] One file should read '1 document', got '" + title + "'");
+            assertTrue(newHeading && !oldHeading,
+                    "[DD-14] The heading should read 'Publish in one of the modules below *'");
+        } finally {
+            closeSheet(sheet);
+        }
+    }
+
     // ==================== CLEANUP ====================
 
     @Test
-    @Order(12)
+    @Order(20)
     @DisplayName("CLEANUP: the QA publish folder and its fixture are removed")
     void cleanup() {
         DocDistLibraryPage lib = new DocDistLibraryPage(driver);

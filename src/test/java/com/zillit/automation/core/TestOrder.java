@@ -52,6 +52,8 @@ public final class TestOrder {
     public static final int PROJECT_JOIN        = 1;
     public static final int PROJECT_VALIDATION  = 2;
     public static final int PROJECT_SUBTYPE     = 3;
+    /** First step of the full sweep: create a project, select it, leave the app inside it. */
+    public static final int PROJECT_CREATE_AND_SELECT = 4;
     public static final int PROJECT_CREATE_E2E  = 9;
 
     // 10–18 · project list ---------------------------------------------------
@@ -378,6 +380,87 @@ public final class TestOrder {
      * card menu, edit, forward to All Department, distribute, download, delete per level,
      * the All Department department list, and a sweep of everything marked ZLAUTO.
      */
+    /** Schedule D.O.D. — reserved 2026-11-23 for the parallel module sessions. */
+    public static final int SCHEDULE_DOD                 = 171;
+    /** Supporting Artistes / Extras (SA Portal). */
+    public static final int SA_EXTRAS                    = 172;
+    /** Costumes &amp; Set Sync. */
+    public static final int COSTUMES_SET_SYNC            = 173;
+    /** Z-E-Signature. */
+    public static final int E_SIGNATURE                  = 174;
     public static final int CONTINUITY                   = 175;
-    // free: 171–174, 176–189
+    /** Crew DOOD. */
+    public static final int CREW_DOOD                    = 176;
+    /**
+     * Call Sheet Creation, creator side on one device: tabs, template picker, the editor's
+     * native parts, Drafts actions, Send for Comments / Signature, Permission tab, sweep.
+     */
+    public static final int CALLSHEET_CREATION           = 180;
+    /** Call Sheet Creation approval round across two devices (creator + approver). */
+    public static final int CALLSHEET_APPROVAL           = 181;
+    /** Production Report Creation, creator side on one device (same workflow as Call Sheet). */
+    public static final int PRODUCTION_REPORT            = 185;
+    /** Production Report approval round across two devices (creator + approver). */
+    public static final int PRODUCTION_REPORT_APPROVAL   = 186;
+    /**
+     * Cross-module chat check: an Office document message opens the app's own editor in VIEW
+     * mode, in every chat (Home units, C&amp;C, Info, Catering, Production Report chat, …). Not in
+     * 19–29 with the Home suites because that band is full; it touches many modules anyway.
+     */
+    public static final int CHAT_DOCUMENT_EDITOR         = 177;
+    /**
+     * Map ← Location tool, end to end: a ZL_AUTO_ shoot location is created in Selects with
+     * a pin inside a Map city, moved to Shortlist and then Final, and read back on the Map
+     * at each stage (L-12…L-14, L-19). Here, not in the 70s, because the Map band is full;
+     * it WRITES to both modules and removes everything it made.
+     */
+    public static final int MAP_LOCATION_FLOW            = 179;
+    // free: 178, 182–184, 187–189
+
+    // 190–224 · web-report gap suites (2026-11-23) · VIDYA -----------------------
+    // One block per module group: 190–194 small modules, 195–199 Doc Distribution,
+    // 200–204 Calendar/Email, 205–209 Home, 210–214 Info/CI, 215–219 Catering/Settings,
+    // 220–224 Map.
+    /** Notifications list and push routing (NOTIF-01 admin screens for non-admins, NOTIF-02). */
+    public static final int NOTIFICATIONS                = 190;
+    /** Schedule Full &amp; One Line across two devices (SCH-03 badge). */
+    public static final int SCHEDULE_DIST_TWO_USER       = 192;
+    /** Production Diary / Box History across two users (BOX-02). */
+    public static final int BOX_HISTORY_TWO_USER         = 193;
+    /** Document Distribution web-report gap cases (DD-23, DD-11, moves, …). */
+    public static final int DOCDIST_WEB_GAP              = 195;
+    /** Calendar: edit a recurring event — this / following / all. */
+    public static final int CALENDAR_RECURRING_SCOPE     = 200;
+    /** Calendar web-report gap cases. */
+    public static final int CALENDAR_WEB_GAP             = 201;
+    /** Calendar invitees accept / decline across two devices. */
+    public static final int CALENDAR_INVITE              = 202;
+    /** Home unit chats: web-report gap cases. */
+    public static final int HOME_WEB_GAP                 = 205;
+    /** Info / Confidential Info across two devices (rights, live updates). */
+    public static final int INFO_TWO_USER                = 210;
+    /** Viewing &amp; Posting Rights Grid (Settings web gaps). */
+    public static final int PERMISSION_GRID              = 215;
+    /** Admin Settings web-report gap cases. */
+    public static final int ADMIN_SETTINGS_WEB_GAP       = 216;
+    /** Catering across two devices: crew member (emulator) and caterer (Pixel). */
+    public static final int CATERING_TWO_USER            = 217;
+    /** Map web-report gap cases. */
+    public static final int MAP_WEB_GAP                  = 220;
+    /** Map zone guards (blank radius, double tap). */
+    public static final int MAP_ZONE_GUARDS              = 221;
+
+    // 225–239 · Location / Casting / Costume tools (2026-11-24) · VIDYA ------------
+    /** Location tool (Selects / Shortlist / Final, episodes, cities, details, rights). */
+    public static final int LOCATION_TOOL_FULL           = 225;
+    /** Location tool across two devices. */
+    public static final int LOCATION_TOOL_TWO_USER       = 226;
+    /** Casting (Main Cast) and Casting (Background Cast). */
+    public static final int CASTING                      = 230;
+    /** Casting across two devices. */
+    public static final int CASTING_TWO_USER             = 231;
+    /** Costume (Main Cast) and Costume (Background Cast) — the Wardrobe tools. */
+    public static final int COSTUME                      = 235;
+    /** Costume across two devices. */
+    public static final int COSTUME_TWO_USER             = 236;
 }

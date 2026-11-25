@@ -1,5 +1,6 @@
 package com.zillit.automation.tests.email;
 
+import com.zillit.automation.core.TestEmails;
 import com.zillit.automation.core.BaseTest;
 import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.common.BottomNavPage;
@@ -75,12 +76,15 @@ class EmailDrawerTest extends BaseTest {
         EmailPage e = email();
         assumeTrue(e.openDrawer(), "Could not open the drawer");
         assumeTrue(e.tapDrawerCalendar(), "Calendar nav item not present");
-        boolean opened = new CalendarPage(driver).isCalendarLoaded()
-                || new EmailPage(driver).textShown("Calendar", Duration.ofSeconds(8));
-        assertTrue(opened, "The email Calendar screen should open");
+        // [WEB EMAIL W3] the drawer opens the NEW calendar (EmailCalendarActivity hosts
+        // CalendarFragment) — require its FAB/grid, not just any "Calendar" text on screen.
+        boolean opened = new CalendarPage(driver).isCalendarLoaded();
+        assertTrue(opened, "[W3] The email Calendar screen (month grid + FAB) should open");
         screenshot("email-calendar");
         driver.navigate().back();
+        boolean back = new EmailPage(driver).isComposeFabVisible();
         recoverToEmailList();
+        assertTrue(back, "[W3] Back from the email Calendar should return to the mail list (fab_compose)");
     }
 
     // ============================================================ Contacts
@@ -111,7 +115,7 @@ class EmailDrawerTest extends BaseTest {
         c.tapSave();
         assertTrue(c.isFormStillOpen(), "Saving with no email should be blocked");
         c.setFirstName("QA Contact " + (System.currentTimeMillis() % 100000));
-        c.setEmail("qa.contact@zillit.com");
+        c.setEmail(TestEmails.recipient());
         c.tapSave();
         assertTrue(c.waitFormClosed(Duration.ofSeconds(20)) || c.isLoaded(Duration.ofSeconds(5)),
                 "A valid contact (with email) should save and return to the list");

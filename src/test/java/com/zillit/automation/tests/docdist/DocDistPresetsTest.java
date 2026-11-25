@@ -494,7 +494,15 @@ class DocDistPresetsTest extends DocDistBaseTest {
             // shows "All contacts" when the address book is non-empty.
             assertTrue(presets.chooseListReopening(presetName, 4),
                     "'" + presetName + "' should be offered in the composer's list chooser");
-            sleep(2500);
+            sleep(1200);
+            // The chooser is now multi-choice (several lists at once): ticking a list adds
+            // its people, and Done closes the dialog so the chips can be read.
+            try {
+                var done = driver.findElements(io.appium.java_client.AppiumBy.androidUIAutomator(
+                        "new UiSelector().resourceId(\"android:id/button1\")"));
+                if (!done.isEmpty()) done.get(0).click();
+            } catch (Exception ignored) { }
+            sleep(1500);
 
             int after = composer.chipCount("dd_to_chips");
             List<String> chips = composer.chipTexts("dd_to_chips");
@@ -508,17 +516,268 @@ class DocDistPresetsTest extends DocDistBaseTest {
                     "The added chip should be this suite's recipient (chips render the NAME "
                             + "when there is one, so both carry '" + TOKEN + "'), got " + chips);
         } finally {
-            // Cancel discards the draft outright — goBack() → popBackStack, no confirm in
-            // this build. Send is never touched.
-            composer.tapCancel();
+            // Applying a list dirties the composer, which now asks "Keep this email as a
+            // draft?" — Discard, so no QA draft is left behind. Send is never touched.
+            composer.leaveDiscarding();
             backToLibrary();
         }
+    }
+
+    // ==================== WEB gap cases (2026-11-23) ====================
+
+    /**
+     * [WEB L217] Sheet DD-16: leaving a distribution list with unsaved members dropped
+     * them silently. Now the close icon asks "Unsaved changes"; Cancel keeps editing,
+     * Discard closes without creating the list.
+     */
+    @Test
+    @Order(11)
+    @DisplayName("G-11 [WEB DD-16]: leaving a list with unsaved members asks first; Discard creates nothing")
+    void leavingWithUnsavedMembersAsks() {
+        String name = PRESET + "_U";
+        DocDistPresetsPage presets = openLists();
+        try {
+            openEditorFromNew(presets);
+            assertTrue(presets.setName(name), "Could not name the list");
+            assertTrue(presets.addRecipient(EMAIL, CONTACT, "QA"), "Could not add a member");
+            assumeTrue(presets.recipientCount() == 1, "The member row did not appear");
+
+            assumeTrue(presets.tapToolbarClose() || presets.tapCancel(), "Could not tap the editor's close");
+            boolean asked = presets.unsavedPromptShown(Duration.ofSeconds(5));
+            System.out.println(">>> G-11 unsaved prompt shown=" + asked);
+            screenshot("ddp-g11-prompt");
+            assertTrue(asked, "[DD-16] Closing a list with an unsaved member must ask first; the editor "
+                    + (presets.editorClosed(Duration.ofSeconds(1)) ? "closed silently" : "stayed with no prompt"));
+
+            assertTrue(presets.answerUnsavedPrompt("Cancel", Duration.ofSeconds(2)), "Could not tap Cancel");
+            assertTrue(presets.editorOpen(Duration.ofSeconds(4)), "Cancel should keep the editor open");
+            assertEquals(1, presets.recipientCount(), "Cancel should keep the unsaved member");
+
+            assumeTrue(presets.tapToolbarClose() || presets.tapCancel(), "Could not tap close again");
+            assertTrue(presets.answerUnsavedPrompt("Discard", Duration.ofSeconds(5)), "Could not tap Discard");
+            assertTrue(presets.editorClosed(Duration.ofSeconds(6)), "Discard should close the editor");
+        } finally {
+            presets.forceCloseEditor();
+        }
+        try {
+            sleep(1500);
+            assertFalse(presets.hasList(name), "Discard must not create the list '" + name + "'");
+        } finally {
+            backToLibrary();
+        }
+    }
+
+    /**
+     * [WEB L223] Sheet DD-19: a second list could be saved with an existing name. Now Save
+     * fails with "A list with this name already exists." and the editor stays open.
+     */
+    @Test
+    @Order(12)
+    @DisplayName("G-12 [WEB DD-19]: a second list with the same name is refused")
+    void duplicateListNameRefused() {
+        assumeTrue(created, "G-6 must create the list first");
+        DocDistPresetsPage presets = openLists();
+        try {
+            assumeTrue(presets.waitForList(presetName, Duration.ofSeconds(30)), "The list is missing");
+            openEditorFromNew(presets);
+            assertTrue(presets.setName(presetName.toLowerCase()), "Could not type the duplicate name");
+            assertTrue(presets.tapSave(), "Could not tap Save");
+            boolean error = presets.textShown("already exists", Duration.ofSeconds(8));
+            boolean stillOpen = !presets.editorClosed(Duration.ofSeconds(2));
+            System.out.println(">>> G-12 error=" + error + " editorStillOpen=" + stillOpen);
+            screenshot("ddp-g12");
+            assertTrue(error, "[DD-19] Saving a list whose name is taken should say 'A list with this name "
+                    + "already exists.'");
+            assertTrue(stillOpen, "[DD-19] The editor should stay open after the refused save");
+        } finally {
+            presets.forceCloseEditor();
+        }
+        try {
+            sleep(1000);
+            long copies = presets.allListNamesScrolled().stream()
+                    .filter(n -> n.equalsIgnoreCase(presetName)).count();
+            assertEquals(1, copies, "[DD-19] Exactly one list should carry the name " + presetName);
+        } finally {
+            backToLibrary();
+        }
+    }
+
+    /** [WEB L229] Sheet DD-14: a one-member list read "1 people". */
+    @Test
+    @Order(13)
+    @DisplayName("G-13 [WEB DD-14]: a one-member list reads singular ('1 recipient')")
+    void oneMemberReadsOnePerson() {
+        assumeTrue(created, "G-6 must create the list first");
+        DocDistPresetsPage presets = openLists();
+        try {
+            assumeTrue(presets.waitForList(presetName, Duration.ofSeconds(30)), "The list is missing");
+            String count = presets.countTextFor(presetName);
+            System.out.println(">>> G-13 count line of " + presetName + " = '" + count + "'");
+            // Custom lists read "N recipient(s)" (dd_footer_summary_recipients); the smart
+            // row reads "N person/people". Either way one member must be singular.
+            assertTrue(count.matches("^1 (person|recipient)\\b.*"),
+                    "[DD-14] A list with one member should read '1 recipient' / '1 person', got '" + count + "'");
+        } finally {
+            backToLibrary();
+        }
+    }
+
+    /**
+     * [WEB L343] CSV import into a list: valid rows added, invalid and duplicate rows
+     * flagged. G-3 only proved the button exists. The fixture is written to the device
+     * by this case (Appium pushFile) with two good rows, one invalid address and one
+     * repeat; only the two good rows may be added. The list is saved and then deleted.
+     */
+    @Test
+    @Order(14)
+    @DisplayName("G-15 [WEB L343]: CSV import adds the 2 good rows of 4; the invalid and the repeat are flagged")
+    void csvImportAddsOnlyGoodRows() {
+        String file = "zl_dd_import.csv";
+        String good1 = "qacsv1" + SUFFIX + "@example.com";
+        String good2 = "qacsv2" + SUFFIX + "@example.com";
+        String csv = "name,email,job\n"
+                + "QA Csv One," + good1 + ",QA\n"
+                + "QA Csv Two," + good2 + ",QA\n"
+                + "QA Csv Bad,not-an-email,QA\n"
+                + "QA Csv Repeat," + good1 + ",QA\n";
+        try {
+            // pushFile(String, byte[]) takes BASE64 data, not raw bytes.
+            driver.pushFile("/sdcard/Download/" + file, java.util.Base64.getEncoder()
+                    .encode(csv.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            assumeTrue(false, "Could not write the CSV fixture to the device: " + e.getMessage());
+        }
+        String name = PRESET + "_CSV";
+        boolean saved = false;
+        DocDistPresetsPage presets = openLists();
+        try {
+            openEditorFromNew(presets);
+            assertTrue(presets.setName(name), "Could not name the list");
+            assumeTrue(presets.hasImportCsvButton() && clickAppId("dd_import_csv"), "No Import CSV button");
+            assumeTrue(presets.textShown("Choose CSV file", Duration.ofSeconds(8)), "The CSV import sheet did not open");
+            assumeTrue(clickAppId("dd_choose_file"), "Could not tap 'Choose CSV file'");
+            com.zillit.automation.pages.common.SystemFilePickerPage picker =
+                    new com.zillit.automation.pages.common.SystemFilePickerPage(driver);
+            assumeTrue(picker.isOpen(Duration.ofSeconds(20)), "The system picker did not open");
+            boolean picked = picker.pickFile(file, Duration.ofSeconds(45));
+            if (!picked) picker.cancel();
+            assumeTrue(picked, "The picker could not reach " + file);
+            picker.confirmIfWaiting();
+
+            boolean summary = presets.textShown("Rows:", Duration.ofSeconds(20));
+            String text = "";
+            try { text = driver.findElement(byAppId("dd_summary")).getText(); } catch (Exception ignored) { }
+            System.out.println(">>> G-15 summary='" + text + "'");
+            screenshot("ddp-g15-summary");
+            assertTrue(summary, "The import sheet should summarise the parsed file");
+            assertEquals("Rows: 4 · Ready: 2 · Duplicates: 1 · Invalid: 1", text.trim(),
+                    "Two good rows, one repeat and one invalid address");
+            assertTrue(presets.textShown("Add 2 contacts", Duration.ofSeconds(3)),
+                    "The add button should read 'Add 2 contacts'");
+            driver.findElement(io.appium.java_client.AppiumBy.androidUIAutomator(
+                    "new UiSelector().text(\"Add 2 contacts\")")).click();
+            sleep(1500);
+
+            List<String> members = presets.recipientEmails();
+            System.out.println(">>> G-15 members after import = " + members);
+            assertEquals(2, members.size(), "Exactly the two good rows should be added, got " + members);
+            assertTrue(members.stream().anyMatch(m -> m.equalsIgnoreCase(good1))
+                    && members.stream().anyMatch(m -> m.equalsIgnoreCase(good2)), "Both good addresses expected");
+            saved = presets.saveAndWaitClosed(Duration.ofSeconds(25));
+            assertTrue(saved, "The list with the imported members should save");
+            assertTrue(presets.waitForList(name, Duration.ofSeconds(45)), "The saved list should be listed");
+            String count = presets.countTextFor(name);
+            assertTrue(count.startsWith("2 "), "The list should hold 2 people, count line '" + count + "'");
+        } finally {
+            presets.forceCloseEditor();
+            if (presets.waitForList(name, Duration.ofSeconds(saved ? 10 : 2)) && presets.tapDelete(name)) {
+                ConfirmPopupPage confirm = presets.confirmPopup();
+                if (confirm.isShown(Duration.ofSeconds(8)) && confirm.isFrameworkDialog()) {
+                    confirm.accept(Duration.ofSeconds(5));
+                    presets.waitForListGone(name, Duration.ofSeconds(30));
+                } else {
+                    confirm.clearIfBlocking();
+                }
+            }
+            backToLibrary();
+        }
+    }
+
+    /**
+     * [WEB L337] A list row's own CSV download ({@code dd_export}, "Export list as CSV").
+     * Saves through the system picker, waits for the app's "Saved <file>" confirmation,
+     * then reads the file back from Downloads to check the header and the member.
+     */
+    @Test
+    @Order(15)
+    @DisplayName("G-14 [WEB L337]: Export list as CSV saves the members")
+    void exportListAsCsv() {
+        assumeTrue(created, "G-6 must create the list first");
+        DocDistPresetsPage presets = openLists();
+        com.zillit.automation.pages.docdist.DocDistAddressBookPage saf =
+                new com.zillit.automation.pages.docdist.DocDistAddressBookPage(driver);
+        String saved = "";
+        try {
+            assumeTrue(presets.waitForList(presetName, Duration.ofSeconds(30)), "The list is missing");
+            assertTrue(presets.hasExportFor(presetName), "The list row should carry its Export CSV button");
+            assumeTrue(clickRowExport(presetName), "Could not tap the row's export");
+            ConfirmPopupPage gate = presets.confirmPopup();
+            if (gate.isShown(Duration.ofSeconds(2)) && !gate.isFrameworkDialog()) {
+                String t = gate.text();
+                gate.cancel(Duration.ofSeconds(3));
+                assumeTrue(false, "Export hit the rights dialog: '" + t + "'");
+            }
+            assumeTrue(saf.isSystemPickerOpen(Duration.ofSeconds(25)), "The save picker did not open");
+            assumeTrue(saf.saveInSystemPicker(), "Could not commit the save");
+            long deadline = System.currentTimeMillis() + 20000;
+            while (System.currentTimeMillis() < deadline && saved.isEmpty()) {
+                try {
+                    for (var e : driver.findElements(io.appium.java_client.AppiumBy.androidUIAutomator(
+                            "new UiSelector().textStartsWith(\"Saved \")"))) {
+                        String t = e.getText();
+                        if (t != null && t.endsWith(".csv")) { saved = t.substring(6).trim(); break; }
+                    }
+                } catch (Exception ignored) { }
+            }
+        } finally {
+            saf.cancelSystemPicker();
+        }
+        System.out.println(">>> G-14 saved file = '" + saved + "'");
+        screenshot("ddp-g14");
+        try {
+            assertFalse(saved.isEmpty(), "The app should confirm 'Saved <file>.csv' after the export");
+            String path = "/sdcard/Download/" + saved;
+            byte[] bytes = null;
+            try { bytes = driver.pullFile(path); } catch (Exception e) {
+                System.out.println(">>> G-14 could not read " + path + " back: " + e.getMessage());
+            }
+            if (bytes != null) {
+                String csv = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+                System.out.println(">>> G-14 csv head='" + csv.substring(0, Math.min(120, csv.length())).replace("\n", "\\n") + "'");
+                assertTrue(csv.toLowerCase().contains("email"), "The CSV should carry a header row");
+                assertTrue(csv.contains(EMAIL), "The CSV should list the member " + EMAIL);
+                try { driver.executeScript("mobile: deleteFile", java.util.Map.of("remotePath", path)); }
+                catch (Exception ignored) { }
+            }
+        } finally {
+            backToLibrary();
+        }
+    }
+
+    private boolean clickRowExport(String name) {
+        try {
+            driver.findElement(io.appium.java_client.AppiumBy.xpath(
+                    "//*[@resource-id='" + appPackage + ":id/dd_row'][.//*[@text='" + name + "']]"
+                            + "//*[@resource-id='" + appPackage + ":id/dd_export']")).click();
+            sleep(800);
+            return true;
+        } catch (Exception e) { return false; }
     }
 
     // ==================== G-8 / CLEANUP ====================
 
     @Test
-    @Order(10)
+    @Order(20)
     @DisplayName("G-8 / CLEANUP: deleting the list asks to confirm, and the row disappears")
     void deletePreset() {
         assumeTrue(created, "Nothing to delete — G-6 must run first");

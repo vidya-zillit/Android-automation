@@ -177,6 +177,91 @@ public class MapLocationFormPage extends BasePage {
         catch (Exception e) { return false; }
     }
 
+    // ---------------- web-gap helpers ----------------
+
+    public String descriptionValue() { return text("etDescription"); }
+    public String saveLabel()        { scrollToId("btnSave"); return text("btnSave"); }
+
+    /**
+     * Picks {@code typeName} from the actvType dropdown — a real item click.
+     *
+     * <p>Typing alone sets the text but never fires {@code setOnItemClickListener}, and
+     * that listener is what rebuilds {@code chipGroupSubtypes}
+     * ({@code LocationFormFragment:348-359}). So subtypes only appear after an item tap.
+     * Dropdown rows have no id we rely on; they are matched on the exact name, excluding
+     * the field itself.
+     */
+    public boolean pickTypeFromDropdown(String typeName) {
+        // 1) open the full list (click shows the dropdown), look for the row;
+        // 2) type a filter, look again; 3) scroll the popup list, look again.
+        scrollFormTo("actvType");
+        WebElement field = lastWithId("actvType");
+        if (field == null) return false;
+        try { field.click(); } catch (Exception ignored) { }
+        pause(1200);
+        if (tapDropdownRow(typeName)) return true;
+        if (!fill("actvType", typeName)) return false;
+        pause(1500);
+        if (tapDropdownRow(typeName)) return true;
+        // Keyboard route: with the filter typed, DOWN highlights the first match and ENTER
+        // picks it — the same onItemClick a tap fires.
+        try {
+            driver.pressKey(new io.appium.java_client.android.nativekey.KeyEvent(
+                    io.appium.java_client.android.nativekey.AndroidKey.DPAD_DOWN));
+            pause(400);
+            driver.pressKey(new io.appium.java_client.android.nativekey.KeyEvent(
+                    io.appium.java_client.android.nativekey.AndroidKey.ENTER));
+            pause(1200);
+            if (typeName.equals(String.valueOf(text("actvType")).trim()) && subtypesShown()) return true;
+        } catch (Exception ignored) { }
+        for (int i = 0; i < 4; i++) {
+            try {
+                List<WebElement> lists = driver.findElements(AppiumBy.className("android.widget.ListView"));
+                if (lists.isEmpty()) break;
+                org.openqa.selenium.Rectangle r = lists.get(lists.size() - 1).getRect();
+                int x = r.getX() + r.getWidth() / 2;
+                swipeVertically(x, r.getY() + (int) (r.getHeight() * 0.8), r.getY() + (int) (r.getHeight() * 0.25));
+                pause(700);
+            } catch (Exception ignored) { }
+            if (tapDropdownRow(typeName)) return true;
+        }
+        return false;
+    }
+
+    private boolean tapDropdownRow(String typeName) {
+        try {
+            List<WebElement> rows = driver.findElements(AppiumBy.xpath(
+                    "//*[@text=" + literal(typeName) + " and not(@resource-id='"
+                            + appPackage() + ":id/actvType')]"));
+            if (rows.isEmpty()) return false;
+            rows.get(rows.size() - 1).click();
+            pause(1200);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** Two taps on Save in one gesture — the double-submit case. */
+    public boolean doubleTapSave() {
+        scrollToId("btnSave");
+        WebElement b = lastWithId("btnSave");
+        if (b == null) return false;
+        try {
+            driver.executeScript("mobile: doubleClickGesture",
+                    java.util.Map.of("elementId", ((org.openqa.selenium.remote.RemoteWebElement) b).getId()));
+            return true;
+        } catch (Exception e) {
+            try { b.click(); b.click(); return true; } catch (Exception ex) { return false; }
+        }
+    }
+
+    private static String literal(String s) {
+        if (!s.contains("'")) return "'" + s + "'";
+        if (!s.contains("\"")) return "\"" + s + "\"";
+        return "concat('" + s.replace("'", "',\"'\",'") + "')";
+    }
+
     // ---------------- helpers ----------------
 
     private String text(String id) {

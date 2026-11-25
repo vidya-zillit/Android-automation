@@ -33,7 +33,7 @@ Six behaviours fall out of that design, and each needs covering:
 |---|---|
 | Only **Shortlisted** and **Final** cross over — Selects never do | `LocationPinStatus.tagFor()` returns null for anything else |
 | The wire status may be `published`, `final` **or** `finalized` — all three mean Final | same function |
-| The overlay is **project-wide**, not city-scoped | `visibleLocationPins()`; the endpoint carries no city reference |
+| Overlay pins are **filed by position** under a Map city (the toggle's "(n)" stays project-wide) | `visibleLocationPins()` → `LocationPinCities.pinsForCity()` (development, Nov 2026) |
 | Overlay pins are **read-only** on the Map | `canMutate = postingAccess && !isFromLocationTool` |
 | The overlay defaults to **ON** and survives app kill | `MapPrefs.showLocationPins`, default `true`, SharedPreferences |
 | The toggle only appears with **Location-tool view access** | `canViewLocationTool` gates `btnLocationPins` visibility |
@@ -106,7 +106,7 @@ This is the heart of the request.
 | **L-16** | Read-only: no Delete | Same card shows **no** `btnDelete` |
 | **L-17** | View and Directions remain | `btnView` and `btnDirections` are present and work on an overlay card |
 | **L-18** | Marker not draggable | An overlay marker cannot be dragged, even with posting rights (`draggable(canPost && !isFromLocationTool)`) |
-| **L-19** | Project-wide, not city-scoped | A pin filed under city B is still drawn while city A is selected (pins with no city are always shown) |
+| **L-19** | Filed by position, count project-wide | *Changed on `development`:* `LocationPinCities.pinsForCity()` files an overlay pin under the Map city whose circle contains it (nearest centre wins; a pin inside no city's circle shows under every city). So a pin inside city A is **not** drawn while city B is selected — but the toggle's "(n)" is `locationPins.size`, project-wide, and does not change with the city. The typed **City** text plays no part: `toPinnedLocation()` drops it |
 | **L-20** | Pins without coordinates | A shoot location with no lat/lng, or exactly `0,0`, is skipped — `isDrawable` is false |
 | **L-21** | Unnamed pin | A pin with a blank `file_name` is labelled **"Unnamed"** |
 | **L-22** | Share text differs | Sharing an overlay pin uses the Location-tool wording, not the Map's own |
@@ -243,20 +243,22 @@ Form is `fragment_location_form.xml`, reached from pin mode or from `btnAddLocat
 
 ## 5. Location tool — its own screens
 
-The Location tool tile is **not currently enabled** on `ZL-Android-Automation`; these cases
-skip until it is switched on via Tools → "Click here to select tools".
+The Location tool tile **is enabled** on `ZL-Android-Automation` (checked 2026-11-23, Tools →
+group "LOCATION"). The project is a **television** project, so each tab groups by episode:
+the tab lists "Episode No : 1", and the location rows — with their Move / Delete menu —
+are on `LocationListingPage` one level down ("Location Name : …").
 
 | # | Case | Expected |
 |---|------|----------|
 | LT-01 | Open Tools → Location | `LocationPage` opens with header "Location" |
-| LT-02 | Three tabs in order | **Select** · **Shortlist** · **Final** |
+| LT-02 | Three tabs in order | **Selects** · **Shortlist** · **Final** |
 | LT-03 | Tab badges | Unread counts render on each tab |
 | LT-04 | Folder listing | Each tab shows its folders / scenes; empty tabs show an empty state |
 | LT-05 | Open a folder | `LocationListingPage` with `search`, `recScene` |
 | LT-06 | Search | Filters within the current tab |
-| LT-07 | Long-press → Move To Shortlist | `move_shortlisted` offered from Select |
-| LT-08 | Move Select → Shortlist | Item leaves Select, appears in Shortlist |
-| LT-09 | Move Shortlist → Final | Item leaves Shortlist, appears in Final |
+| LT-07 | Row menu → Move To Shortlist | `ivArrow` → `folder_options`: Move To Shortlist / Move To Final / Delete on a Selects row |
+| LT-08 | Move Selects → Shortlist | Appears in Shortlist. **Observed:** Selects keeps its copy — the move promotes, it does not remove |
+| LT-09 | Move Shortlist → Final | Appears in Final. **Observed:** Shortlist keeps its copy (the map-pins endpoint collapses it, see L-25) |
 | LT-10 | Multi-select move | `deleteMoveRl` with `btnMoveTo` / `btnCancel` / `btnDelete` |
 | LT-11 | Location detail | `LocationDetailPage` — images, description, scene no. |
 | LT-12 | Filter icon | `filterIv` opens the filter sheet |
@@ -282,13 +284,28 @@ per-suite breakdown and the gap list):
 - `MapModuleTest` — M-01…M-03, M-05, plus C-01, C-22, C-24, R-03, F-01, F-04, F-09, F-13,
   F-14, M-07, V-01, V-05 (this sheet's M-24…M-26 are filed under V- and F- there)
 - `MapLocationPinsTest` — L-01…L-03, L-05…L-11, L-15…L-17, L-19
-- `LocationToolTest` — LT-01, LT-02, LT-02b, LT-04, LT-12, LT-13 (LT-03, LT-05…LT-11 are
-  the move flows, still manual)
+- `LocationToolTest` — LT-01, LT-02, LT-02b, LT-04, LT-12, LT-13
+- `MapLocationFlowTest` (`--map-location-flow`, also in `--map-all`; `TestOrder.MAP_LOCATION_FLOW`
+  = 179) — the Location tool → Map round trip, **10/10 passing on 2026-11-23**
+  (emulator-5554, Zillit_32539-dev, `development` cc3dc2a96):
+  - LF-01 a Map city containing the device's GPS fix exists — added from the city panel's
+    "Add Current City" card when missing (San Francisco), deleted again at the end
+  - LF-02 a `ZL_AUTO_Shoot <n>` location is created in **Selects**: "Search / pick on map"
+    (current location) fills Address + City, City = the Map city, scene 901, episode 1,
+    a Link attachment (create refuses an entry with no media/link)
+  - **L-12** while in Selects nothing is drawn for that city (overlay ON, verified by tint)
+  - LT-08 / LT-09 Move To Shortlist / Move To Final via the row menu on the episode listing
+  - **L-13** Shortlisted → exactly one card "Shortlisted Shoot Location"; toggle count +1
+  - L-13b the card shows the saved address (which names the city); no Edit / Delete
+  - **L-14** Final → re-tagged "Finalized Shoot Location", drawn **once** (count still +1),
+    although Shortlist keeps its copy — covers L-25 in practice
+  - **L-19** (as now built) absent under the other city (Mountain View); count unchanged
+  - LF-99 cleanup: the location is deleted from all three tabs, the added city deleted
 
 Deliberately **not** automated, with reasons:
 
-- **L-12…L-14, X-01…X-03** need a location moved between Location-tool tabs, which writes
-  to the project's backend. They are written up above and left manual until the Location
-  tool is enabled and we agree on a disposable fixture.
-- **L-23, L-25** need a failing endpoint and a duplicate-stage row — server-side fixtures.
+- **X-02, X-03** (move back to Selects; overlay OFF isolation) — not written yet. Note that a
+  move keeps the source copy, so X-02 as worded ("moving back removes the pin") needs the
+  product's intended semantics confirmed first.
+- **L-23** needs a failing endpoint — a server-side fixture.
 - **M-14** needs a second, view-only account.

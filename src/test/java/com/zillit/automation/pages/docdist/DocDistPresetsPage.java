@@ -590,9 +590,53 @@ public class DocDistPresetsPage extends BasePage {
     /** Closes the editor however it can — for try/finally unwinding, never for a case. */
     public void forceCloseEditor() {
         for (int i = 0; i < 4 && !editorClosed(Duration.ofMillis(600)); i++) {
-            if (tapCancel()) { sleep(350); continue; }
+            // DD-16: an editor with unsaved changes now asks "Unsaved changes" first.
+            // Unwinding means DISCARD (never "Save changes").
+            if (answerUnsavedPrompt("Discard", Duration.ofMillis(800))) { sleep(500); continue; }
+            if (tapCancel()) {
+                sleep(500);
+                answerUnsavedPrompt("Discard", Duration.ofSeconds(2));
+                continue;
+            }
             try { driver.navigate().back(); Thread.sleep(350); } catch (Exception e) { return; }
         }
+    }
+
+    /**
+     * DD-16's "Unsaved changes — Do you want to save changes?" prompt (a framework
+     * dialog: Cancel · Discard · Save changes). True while it is on screen.
+     */
+    public boolean unsavedPromptShown(Duration timeout) {
+        return textShown("Do you want to save changes?", timeout)
+                || textShown("Unsaved changes", Duration.ofMillis(300));
+    }
+
+    /** Taps a button of the unsaved-changes prompt by its label; false when not shown. */
+    public boolean answerUnsavedPrompt(String label, Duration timeout) {
+        if (!unsavedPromptShown(timeout)) return false;
+        try {
+            driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiSelector().className(\"android.widget.Button\").text(\"" + label + "\")")).click();
+            sleep(600);
+            return true;
+        } catch (WebDriverException e) {
+            try {
+                driver.findElement(AppiumBy.androidUIAutomator(
+                        "new UiSelector().className(\"android.widget.Button\").textMatches(\"(?i)" + label + "\")")).click();
+                sleep(600);
+                return true;
+            } catch (WebDriverException ignored) { return false; }
+        }
+    }
+
+    /** Taps the editor's toolbar navigation (close) icon. */
+    public boolean tapToolbarClose() {
+        try {
+            driver.findElement(AppiumBy.xpath("//*[@resource-id='" + appPackage()
+                    + ":id/dd_toolbar']/android.widget.ImageButton")).click();
+            sleep(500);
+            return true;
+        } catch (WebDriverException e) { return false; }
     }
 
     // ---------------- the composer's "Pick a list" chooser ----------------

@@ -12,6 +12,9 @@ import java.time.Duration;
 
 public final class DriverFactory {
 
+    /** The only build this project automates. */
+    private static final String DEV_PACKAGE = "com.zillit.zillitapp.dev";
+
     private DriverFactory() {
     }
 
@@ -84,6 +87,11 @@ public final class DriverFactory {
         // Prefer launching an already-installed package (no reinstall) when one is
         // named; fall back to installing the APK.
         if (Config.has("zillit.appPackage")) {
+            // Dev only — also covers a test started straight from the IDE, past the run scripts.
+            if (!DEV_PACKAGE.equals(Config.get("zillit.appPackage"))) {
+                throw new IllegalStateException("zillit.appPackage is " + Config.get("zillit.appPackage")
+                        + " — only the dev build (" + DEV_PACKAGE + ") may be automated.");
+            }
             options.setAppPackage(Config.get("zillit.appPackage"))
                     .setAppActivity(Config.get("zillit.appActivity"))
                     .setAppWaitActivity("*");

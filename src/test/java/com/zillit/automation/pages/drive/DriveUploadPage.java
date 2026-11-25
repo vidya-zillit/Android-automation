@@ -78,21 +78,17 @@ public class DriveUploadPage extends BasePage {
      */
     public boolean pickFileNamed(String fileName, Duration timeout) {
         long deadline = System.currentTimeMillis() + timeout.toMillis();
-        boolean browsed = false;
+        int step = 0;
         while (System.currentTimeMillis() < deadline) {
-            if (tapText(fileName)) return true;
-
-            // The picker opens on RECENT, which only lists recently-touched files — an
-            // adb-pushed fixture usually is NOT there, and every Drive fixture lives in
-            // /sdcard/Download. So browse to Downloads immediately after the first miss
-            // rather than halfway through the budget: waiting burned most of the timeout
-            // on scrollIntoView calls against the Recent grid, and the pick then timed
-            // out with the file plainly on screen.
-            if (!browsed) {
-                browsed = true;
-                openDownloadsRoot();
-                continue;
-            }
+            if (tapPickerTitle(fileName)) return true;
+            // The picker opens on RECENT, which rarely lists an adb-pushed fixture. In order:
+            //   1. the picker's own SEARCH — finds the file wherever it is, one screen;
+            //   2. the Downloads root (where every Drive fixture lives);
+            //   3. scrolling whatever list is showing.
+            // Search came first after build 32539's picker kept opening on Recent and the
+            // roots drawer tap silently missed, which skipped every upload-dependent case.
+            if (step == 0) { step++; searchPicker(fileName); continue; }
+            if (step == 1) { step++; openDownloadsRoot(); continue; }
             try {
                 driver.findElement(AppiumBy.androidUIAutomator(
                         "new UiScrollable(new UiSelector().scrollable(true))"
@@ -101,6 +97,39 @@ public class DriveUploadPage extends BasePage {
             sleep(700);
         }
         return false;
+    }
+
+    /** Taps a picker ROW title equal to the name — never the search box holding the same text. */
+    private boolean tapPickerTitle(String fileName) {
+        try {
+            for (WebElement e : driver.findElements(AppiumBy.androidUIAutomator(
+                    "new UiSelector().text(\"" + fileName + "\")"))) {
+                String cls = e.getAttribute("className");
+                if (cls != null && (cls.contains("EditText") || cls.contains("AutoComplete"))) continue;
+                e.click();
+                return true;
+            }
+        } catch (WebDriverException ignored) { }
+        return false;
+    }
+
+    /** DocumentsUI search: the toolbar's Search action, type the name, submit. */
+    private void searchPicker(String fileName) {
+        try {
+            // The toolbar Search action: by description, else by DocumentsUI's own id (the
+            // description is missing when the picker opens scrolled, e.g. in Documents).
+            List<WebElement> s1 = driver.findElements(AppiumBy.accessibilityId("Search"));
+            if (s1.isEmpty()) s1 = driver.findElements(AppiumBy.id("com.google.android.documentsui:id/option_menu_search"));
+            if (s1.isEmpty()) return;
+            s1.get(0).click();
+            sleep(1000);
+            WebElement box = driver.findElement(AppiumBy.androidUIAutomator(
+                    "new UiSelector().className(\"android.widget.AutoCompleteTextView\")"));
+            box.sendKeys(fileName.contains(".") ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName);
+            driver.pressKey(new io.appium.java_client.android.nativekey.KeyEvent(
+                    io.appium.java_client.android.nativekey.AndroidKey.ENTER));
+            sleep(2500);
+        } catch (WebDriverException ignored) { }
     }
 
     /** Opens the picker's roots drawer and selects Downloads. */
@@ -160,6 +189,112 @@ public class DriveUploadPage extends BasePage {
     }
 
     public boolean upload() { return click("btnUpload"); }
+
+    /**
+     * Renames a staged file before upload — the staging sheet lists each file as an EditText
+     * holding its name. Used to upload a fixture under a run-unique {@code QA_} name, so a test
+     * can edit and delete its own copy instead of the shared fixture.
+     */
+    public boolean renameStaged(String currentName, String newName) {
+        try {
+            for (WebElement e : driver.findElements(org.openqa.selenium.By.className("android.widget.EditText"))) {
+                String t = e.getText();
+                if (t != null && t.trim().equals(currentName)) {
+                    e.clear();
+                    e.sendKeys(newName);
+                    hideKeyboardIfShown();
+                    sleep(500);
+                    return true;
+                }
+            }
+        } catch (WebDriverException ignored) { }
+        return false;
+    }
+
+    /** Whole pipeline, uploading {@code fileName} from the picker under {@code uploadAs}. */
+    /** Which step the last {@link #uploadFileAs} stopped at (printed by the callers' skip reasons). */
+    public static volatile String lastUploadProblem = "";
+
+    public boolean uploadFileAs(String source, String fileName, String uploadAs) {
+        lastUploadProblem = "";
+        if (!isSourceSheetOpen()) return problem("the upload source sheet did not open");
+        if (!chooseSource(source)) return problem("no '" + source + "' source");
+        if (!isSystemPickerOpen(Duration.ofSeconds(20))) return problem("the system picker did not open");
+        if (!pickFileNamed(fileName, Duration.ofSeconds(45))) return problem(fileName + " not found in the picker");
+        // Some types go straight to staging without the caption preview — accept either.
+        boolean preview = false, staging = false;
+        long deadline = System.currentTimeMillis() + 20000;
+        while (System.currentTimeMillis() < deadline && !preview && !staging) {
+            preview = isVisible("sendBtn", Duration.ofSeconds(1));
+            staging = !preview && isVisible("btnUpload", Duration.ofSeconds(1));
+        }
+        if (!preview && !staging) return problem("neither the preview nor the staging sheet opened after picking");
+        if (preview && !sendFromPreview()) return problem("preview Send failed");
+        if (!isStagingOpen(Duration.ofSeconds(20))) return problem("the staging sheet did not open");
+        if (!renameStaged(fileName, uploadAs)) return problem("the staged name field for " + fileName + " was not found");
+        return upload() || problem("Upload tap failed");
+    }
+
+    private static boolean problem(String why) {
+        lastUploadProblem = why;
+        System.out.println(">>> upload stopped: " + why);
+        return false;
+    }
+
+    /**
+     * Staging "File Permissions" → Specific Users → tick {@code user} → set their level
+     * ("View" / "Download" / "Edit", the row Spinner UploadStagingBottomSheet builds).
+     */
+    public boolean grantSpecificUser(String user, String level) {
+        try {
+            if (!chooseSpecificUsers()) return false;
+            sleep(1200);
+            WebElement search = driver.findElement(byId("etSearchMembers"));
+            search.click(); search.clear(); search.sendKeys(user);
+            hideKeyboardIfShown();
+            sleep(2500);
+            List<WebElement> boxes = driver.findElements(AppiumBy.xpath("//*[@resource-id='" + appPackage()
+                    + ":id/rvMembers']//android.widget.CheckBox"));
+            if (boxes.isEmpty()) return false;
+            boxes.get(0).click();
+            sleep(1500);
+            List<WebElement> spinners = driver.findElements(AppiumBy.xpath("//*[@resource-id='" + appPackage()
+                    + ":id/rvMembers']//android.widget.Spinner"));
+            if (spinners.isEmpty()) return false;
+            spinners.get(0).click();
+            sleep(1000);
+            driver.findElement(AppiumBy.androidUIAutomator("new UiSelector().text(\"" + level + "\")")).click();
+            sleep(1000);
+            return true;
+        } catch (WebDriverException e) { return false; }
+    }
+
+    // ---------------- upload progress sheet (cdc957a23: pause / resume) ----------------
+
+    /** The "Uploading N file(s)…" snackbar's View action opens UploadProgressBottomSheet. */
+    public boolean openProgressSheet(Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            if (click("snackbar_action")) { sleep(1200); return true; }
+            sleep(300);
+        }
+        return false;
+    }
+
+    public boolean hasPauseResume() { return isVisible("btnPauseResume", Duration.ofSeconds(3)); }
+
+    /** content-desc of the first row's pause/resume button: "Pause" or "Resume". */
+    public String pauseResumeLabel() {
+        try { return driver.findElement(byId("btnPauseResume")).getAttribute("content-desc"); }
+        catch (WebDriverException e) { return ""; }
+    }
+
+    public boolean tapPauseResume() { return click("btnPauseResume"); }
+
+    /** The first row's status ("Uploading 37%", "Paused 45%", "Queued", "Finishing…", "Failed: …"). */
+    public String progressStatus() { return text("tvStatus"); }
+
+    public boolean cancelProgressRow() { return click("btnAction"); }
     public boolean cancelStaging() { return click("btnCancel"); }
 
     /** The post-upload snackbar ("Uploading N file(s) to Drive…"). */
@@ -175,10 +310,29 @@ public class DriveUploadPage extends BasePage {
 
     /** "N folders · M files · size" summary on the folder-upload staging sheet. */
     public String folderSummary() {
+        // tvTreeSummary (bottom_sheet_upload_folder_staging.xml) first; the text match
+        // is the fallback for builds that predate the id.
+        String byIdText = text("tvTreeSummary");
+        if (byIdText != null && !byIdText.isBlank()) return byIdText;
         try {
             return driver.findElement(AppiumBy.androidUIAutomator(
                     "new UiSelector().textContains(\"folders\")")).getText();
         } catch (WebDriverException e) { return ""; }
+    }
+
+    /**
+     * Renames the top folder of a folder upload ("Folder name", {@code etFolderName},
+     * pre-filled with the picked folder's name — UploadFolderStagingBottomSheet
+     * setupFolderNameField). Lets a run upload the same fixture tree under a unique name.
+     */
+    public boolean setFolderUploadName(String name) {
+        try {
+            WebElement el = driver.findElement(byId("etFolderName"));
+            el.clear();
+            el.sendKeys(name);
+            hideKeyboard();
+            return name.equals(el.getText());
+        } catch (WebDriverException e) { return false; }
     }
 
     /**

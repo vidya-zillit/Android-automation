@@ -1,6 +1,7 @@
 package com.zillit.automation.tests.adminsettings;
 
 import com.zillit.automation.core.BaseTest;
+import com.zillit.automation.core.ReasonLogger;
 import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.common.BottomNavPage;
 import com.zillit.automation.pages.adminsettings.CustomizationOfToolsPage;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.time.Duration;
 import java.util.List;
@@ -31,6 +33,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * {@link TestOrder#CUSTOMIZATION_OF_TOOLS_ALL} and ends by re-enabling every
  * tool, restoring the project to an all-enabled baseline.
  */
+@ExtendWith(ReasonLogger.class)
 @Order(TestOrder.CUSTOMIZATION_OF_TOOLS_ALL)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class CustomizationOfToolsTest extends BaseTest {
@@ -409,6 +412,30 @@ class CustomizationOfToolsTest extends BaseTest {
         // Finish where the flow began. Leaving the session on the Tools tab is what
         // stopped the @AfterAll restore from finding its way back to Customization.
         returnToAdminSettings();
+    }
+
+    // [WEB TOOLS-01]
+    @Test
+    @Order(7)
+    @DisplayName("Test Case 7: Customization of tools is listed A to Z ignoring case (\"Account Hub\" above \"AD Dashboard\")")
+    void listIsCaseInsensitiveAlphabetical() {
+        // Read-only and standalone: run it alone with --only 'CustomizationOfToolsTest.listIsCaseInsensitiveAlphabetical'
+        // so the destructive cases above are not needed.
+        CustomizationOfToolsPage page = customization();
+        List<String> shown = page.allToolNamesScrolled();
+        System.out.println(">>> customization order (" + shown.size() + "): " + shown);
+        assumeTrue(shown.size() >= 2, "Fewer than two tools listed");
+        List<String> expected = new java.util.ArrayList<>(shown);
+        expected.sort(String.CASE_INSENSITIVE_ORDER);
+        int hub = shown.indexOf("Account Hub"), ad = shown.indexOf("AD Dashboard");
+        if (hub >= 0 && ad >= 0) {
+            assertTrue(hub < ad, "TOOLS-01: \"AD Dashboard\" (" + ad + ") is listed above \"Account Hub\" (" + hub
+                    + ") — ToolsEnableDisablePage.kt:130 sorts with case-sensitive sortBy { it.title }");
+        }
+        assertTrue(shown.equals(expected),
+                "TOOLS-01: Customization of tools is not in case-insensitive A-Z order.\n shown:    " + shown
+                        + "\n expected: " + expected);
+        try { driver.navigate().back(); } catch (Exception ignored) { }
     }
 
     private void sleep(long ms) {

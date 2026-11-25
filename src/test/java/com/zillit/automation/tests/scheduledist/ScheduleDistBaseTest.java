@@ -4,6 +4,7 @@ import com.zillit.automation.core.BaseTest;
 import com.zillit.automation.pages.common.BottomNavPage;
 import com.zillit.automation.pages.common.ProjectListPage;
 import com.zillit.automation.pages.scheduledist.ScheduleDistPage;
+import com.zillit.automation.pages.scheduledist.ScheduleUploadPage;
 import com.zillit.automation.pages.common.ToolsPage;
 import io.appium.java_client.AppiumBy;
 import org.junit.jupiter.api.AfterAll;
@@ -31,8 +32,76 @@ abstract class ScheduleDistBaseTest extends BaseTest {
     /** The Tools tile's label on the automation project — server-supplied, NOT "Schedule Distribution". */
     static final String TOOL = ScheduleDistPage.TOOL_TILE;
 
+    /** Full file name, not a prefix: the picker matches on "contains" (see SidesTest.SCRIPT_PDF). */
+    static final String PDF = "zl_test_doc.pdf";
+    static final Duration UPLOAD_WAIT = Duration.ofSeconds(120);
+
     @Override protected boolean requiresLoggedOutStart() { return false; }
     @Override protected boolean relaunchBetweenTests()   { return false; }
+
+    // ─────────────────────────── shared upload / folder steps ───────────────────────────
+
+    ScheduleDistPage tab(String name) {
+        openSchedule();
+        ScheduleDistPage page = new ScheduleDistPage(driver);
+        if (!page.isSelected(name)) assumeTrue(page.openTab(name), "Tab " + name + " could not be tapped");
+        page.waitLoaded(Duration.ofSeconds(30));
+        return page;
+    }
+
+    /** The upload button → the picker. */
+    ScheduleUploadPage startUpload(String tabName) {
+        ScheduleDistPage page = tab(tabName);
+        assumeTrue(page.uploadShown(), "No upload button on " + tabName + ": this user cannot upload");
+        assumeTrue(page.tapUpload(), "The upload button could not be tapped");
+        if (page.messageShown("You do not have Posting Rights", Duration.ofSeconds(3))) {
+            assumeTrue(false, "Upload is shown but refused: admin without the posting flag (finding 3)");
+        }
+        ScheduleUploadPage up = new ScheduleUploadPage(driver);
+        assumeTrue(up.pickerShown(Duration.ofSeconds(10)), "The picker did not open");
+        return up;
+    }
+
+    /** The upload button → picker → the PDF fixture → the form. */
+    ScheduleUploadPage openForm(String tabName) {
+        ScheduleUploadPage up = startUpload(tabName);
+        boolean ok = up.pickPdf(PDF, () -> waitAndDismissPermissions(Duration.ofSeconds(4)));
+        if (!ok) backToTabs();
+        assumeTrue(ok, "Could not pick " + PDF + " in the system picker. The runner pushes it to"
+                + " /sdcard/Documents; on screen: " + whereAreWe());
+        return up;
+    }
+
+    boolean uploadPage(String sceneNo, String pageNo, String colour, String type) {
+        ScheduleUploadPage up = openForm(ScheduleDistPage.TAB_PAGES);
+        up.setField(ScheduleUploadPage.SCENE, sceneNo);
+        boolean colourSet = up.chooseDropdown(ScheduleUploadPage.COLOUR, colour);
+        boolean typeSet = up.chooseDropdown(ScheduleUploadPage.TYPE, type);
+        if (!colourSet || !typeSet) {
+            up.leaveForm();
+            backToTabs();
+            assumeTrue(false, "The " + (colourSet ? "type" : "colour") + " dropdown could not be set to \""
+                    + (colourSet ? type : colour) + "\" — not uploading a page that would be missing it");
+        }
+        up.setField(ScheduleUploadPage.PAGE_NO, pageNo);
+        if (up.fieldShown(ScheduleUploadPage.EPISODE)) up.setField(ScheduleUploadPage.EPISODE, "1");
+        up.submit();
+        boolean closed = up.waitFormClosed(UPLOAD_WAIT);
+        if (!closed) { up.leaveForm(); }
+        backToTabs();
+        return closed;
+    }
+
+    ScheduleDistPage openFolder(String sceneNo) {
+        ScheduleDistPage page = tab(ScheduleDistPage.TAB_PAGES);
+        page.searchPages(sceneNo);
+        boolean opened = page.openFolder("Scene No. " + sceneNo);
+        if (!opened) page.searchPages("");
+        assumeTrue(opened, "The folder for scene " + sceneNo + " is not on the Pages tab");
+        ScheduleDistPage inside = new ScheduleDistPage(driver);
+        inside.waitLoaded(Duration.ofSeconds(30));
+        return inside;
+    }
 
     // ─────────────────────────── navigation ───────────────────────────
 

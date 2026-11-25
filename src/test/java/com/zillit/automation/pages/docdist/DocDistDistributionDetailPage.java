@@ -238,6 +238,22 @@ public class DocDistDistributionDetailPage extends BasePage {
         }
     }
 
+    /** Replaces the Save-as-list prompt's pre-filled name. */
+    public boolean setSaveListName(String name) {
+        try {
+            WebElement f = driver.findElement(By.className("android.widget.EditText"));
+            f.click();
+            f.clear();
+            f.sendKeys(name);
+            return name.equals(f.getText());
+        } catch (WebDriverException e) { return false; }
+    }
+
+    /** Confirms the Save-as-list prompt — this CREATES a distribution list. */
+    public boolean confirmSaveListPrompt() {
+        return confirmPopup().accept(Duration.ofSeconds(5));
+    }
+
     /** Backs out of the Save-as-list prompt WITHOUT creating anything. */
     public boolean cancelSaveListPrompt() {
         return confirmPopup().cancel(Duration.ofSeconds(5));

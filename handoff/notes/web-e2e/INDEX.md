@@ -1,0 +1,50 @@
+# Web E2E report, split by module
+
+- Account Hub: 1931 tests, 0 sheet bugs → account-hub.md
+- App boot: 3 tests, 0 sheet bugs → app-boot.md
+- Box Schedule: 0 tests, 3 sheet bugs → box-schedule.md
+- Breakup Stills: 0 tests, 0 sheet bugs → breakup-stills.md
+- Budget Builder: 0 tests, 0 sheet bugs → budget-builder.md
+- Budget tool: 0 tests, 0 sheet bugs → budget-tool.md
+- C&C: 34 tests, 3 sheet bugs → candc.md
+- Calendar: 140 tests, 36 sheet bugs → calendar.md
+- Call Sheet: 9 tests, 3 sheet bugs → call-sheet.md
+- Calling: 0 tests, 0 sheet bugs → calling.md
+- Catering: 148 tests, 5 sheet bugs → catering.md
+- Chat (C&C, unit chats): 0 tests, 0 sheet bugs → chat-candc-unit-chats.md
+- Confidential Info: 125 tests, 31 sheet bugs → confidential-info.md
+- Continuity Script Supervision: 0 tests, 0 sheet bugs → continuity-script-supervision.md
+- Costume & Sync: 0 tests, 35 sheet bugs → costume-and-sync.md
+- Costumes & Set Sync: 0 tests, 0 sheet bugs → costumes-and-set-sync.md
+- Crew DOOD: 0 tests, 0 sheet bugs → crew-dood.md
+- Crew List: 0 tests, 2 sheet bugs → crew-list.md
+- Document Distribution: 101 tests, 36 sheet bugs → document-distribution.md
+- Drive: 326 tests, 3 sheet bugs → drive.md
+- E-Signature: 15 tests, 2 sheet bugs → e-signature.md
+- Email: 10 tests, 3 sheet bugs → email.md
+- External Users: 0 tests, 2 sheet bugs → external-users.md
+- Film Tools: 0 tests, 0 sheet bugs → film-tools.md
+- Forms & Signatures: 0 tests, 0 sheet bugs → forms-and-signatures.md
+- Home: 165 tests, 34 sheet bugs → home.md
+- Info: 131 tests, 32 sheet bugs → info.md
+- Legacy Deal Memo & NDA: 0 tests, 0 sheet bugs → legacy-deal-memo-and-nda.md
+- Legacy Purchase Orders: 0 tests, 0 sheet bugs → legacy-purchase-orders.md
+- Login & Projects: 5 tests, 0 sheet bugs → login-and-projects.md
+- Map: 220 tests, 3 sheet bugs → map.md
+- Notifications: 0 tests, 2 sheet bugs → notifications.md
+- Onboarding: 0 tests, 1 sheet bugs → onboarding.md
+- Permission Grid: 0 tests, 0 sheet bugs → permission-grid.md
+- Personal File Cabinet: 0 tests, 0 sheet bugs → personal-file-cabinet.md
+- Production Report: 13 tests, 6 sheet bugs → production-report.md
+- Recce: 0 tests, 5 sheet bugs → recce.md
+- SOS: 0 tests, 21 sheet bugs → sos.md
+- Schedule DOD: 0 tests, 1 sheet bugs → schedule-dod.md
+- Schedule Full & One Line: 0 tests, 4 sheet bugs → schedule-full-and-one-line.md
+- Script Pages: 0 tests, 4 sheet bugs → script-pages.md
+- Settings: 36 tests, 3 sheet bugs → settings.md
+- Sides: 0 tests, 0 sheet bugs → sides.md
+- Tasks: 0 tests, 4 sheet bugs → tasks.md
+- Tool Windows: 1 tests, 0 sheet bugs → tool-windows.md
+- Tools page: 9 tests, 0 sheet bugs → tools-page.md
+- Tools/Admin: 0 tests, 2 sheet bugs → tools-admin.md
+- Transportation: 164 tests, 84 sheet bugs → transportation.md

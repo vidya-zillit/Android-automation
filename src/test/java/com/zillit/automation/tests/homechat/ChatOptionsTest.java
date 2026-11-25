@@ -170,10 +170,17 @@ class ChatOptionsTest extends BaseTest {
     void readByOption() {
         HomeChatPage home = openMenuOnFreshText("qa-read-" + (System.currentTimeMillis() % 1000000));
         assumeTrue(home.tapMenuOption("Read By User"), "Read By User option not present");
-        // A read-by list/sheet opens; the chat input should no longer be focus.
-        boolean opened = home.textShown("Read", Duration.ofSeconds(6))
-                || !home.isInputBarVisible();
-        assertTrue(opened, "Read By User should open a read-receipt view");
+        // Strengthened (web gap "Other observations"): "input bar gone" passed without the
+        // screen opening. Require the read-receipt page itself (ReadByUserPage / readByRv).
+        boolean opened = false;
+        long end = System.currentTimeMillis() + 8000;
+        while (!opened && System.currentTimeMillis() < end) {
+            opened = home.activityName().contains("ReadByUser")
+                    || !driver.findElements(byAppId("readByRv")).isEmpty()
+                    || !driver.findElements(byAppId("search_widget_edit_textvw")).isEmpty();
+            if (!opened) sleep(500);
+        }
+        assertTrue(opened, "Read By User should open the read-receipt page (ReadByUserPage), activity=" + home.activityName());
         screenshot("chat-readby");
         driver.navigate().back();
         ensureInChat();
@@ -185,9 +192,15 @@ class ChatOptionsTest extends BaseTest {
     void forwardOption() {
         HomeChatPage home = openMenuOnFreshText("qa-fwd-" + (System.currentTimeMillis() % 1000000));
         assumeTrue(home.tapMenuOption("Forward"), "Forward option not present");
-        boolean navigated = !home.isInputBarVisible()
-                || home.textShown("Forward", Duration.ofSeconds(6));
-        assertTrue(navigated, "Forward should open a forward/target-picker screen");
+        // Strengthened: confirm "Are you sure you want to forward?" and require ForwardPage.
+        home.confirmPopup().acceptIfShown(Duration.ofSeconds(8));
+        boolean navigated = false;
+        long end = System.currentTimeMillis() + 8000;
+        while (!navigated && System.currentTimeMillis() < end) {
+            navigated = home.activityName().contains("ForwardPage")
+                    || home.textShown("Select Tab to Forward", Duration.ofMillis(500));
+        }
+        assertTrue(navigated, "Forward → Yes should open ForwardPage ('Select Tab to Forward'), activity=" + home.activityName());
         screenshot("chat-forward");
         driver.navigate().back();
         ensureInChat();
@@ -218,10 +231,23 @@ class ChatOptionsTest extends BaseTest {
     void shareOption() {
         HomeChatPage home = openMenuOnFreshText("qa-share-" + (System.currentTimeMillis() % 1000000));
         assumeTrue(home.tapMenuOption("Share"), "Share option not present");
-        // Share leaves the chat (system share chooser or an in-app share screen).
-        boolean shared = !home.isInputBarVisible()
-                || home.textShown("Share", Duration.ofSeconds(6));
-        assertTrue(shared, "Share should open a share sheet / screen");
+        // [WEB #97] strengthened: Share enters selection mode with an action-bar "Share"
+        // (Home.kt:2532-2595); tapping it must hand the message to the system share sheet.
+        home.confirmPopup().acceptIfShown(Duration.ofSeconds(4));
+        boolean bar = !driver.findElements(io.appium.java_client.AppiumBy.androidUIAutomator(
+                "new UiSelector().resourceIdMatches(\".*tvAction\").textMatches(\"(?i)share\")")).isEmpty();
+        assertTrue(bar, "Share should enter selection mode with an action-bar 'Share'");
+        driver.findElement(io.appium.java_client.AppiumBy.androidUIAutomator(
+                "new UiSelector().resourceIdMatches(\".*tvAction\").textMatches(\"(?i)share\")")).click();
+        home.confirmPopup().acceptIfShown(Duration.ofSeconds(4));
+        boolean chooser = false;
+        long end = System.currentTimeMillis() + 8000;
+        while (!chooser && System.currentTimeMillis() < end) {
+            String pk = home.safeCurrentPackage();
+            chooser = pk != null && !pk.equals(appPackage);
+            if (!chooser) sleep(500);
+        }
+        assertTrue(chooser, "The action-bar Share should open the system share sheet (still in " + home.safeCurrentPackage() + ")");
         screenshot("chat-share");
         driver.navigate().back();
         ensureInChat();

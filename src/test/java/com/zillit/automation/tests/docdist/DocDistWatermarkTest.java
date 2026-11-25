@@ -1,5 +1,6 @@
 package com.zillit.automation.tests.docdist;
 
+import com.zillit.automation.core.TestEmails;
 import com.zillit.automation.core.TestOrder;
 import com.zillit.automation.pages.docdist.DocDistComposerPage;
 import com.zillit.automation.pages.docdist.DocDistLibraryPage;
@@ -110,7 +111,7 @@ class DocDistWatermarkTest extends DocDistBaseTest {
      * <p>{@code example.com} keeps the address undeliverable (RFC 2606 reserves the whole
      * domain) while passing the validator, since {@code com} IS in the bundled list.
      */
-    private static final String RECIPIENT = "qa.watermark@example.com";
+    private static final String RECIPIENT = TestEmails.recipient();
 
     /** Set once the fixture has been proven to exist in the work folder. */
     private static boolean seeded;
@@ -735,10 +736,91 @@ class DocDistWatermarkTest extends DocDistBaseTest {
         }
     }
 
+    // ==================== M-13 · WEB L143 / DD-22 ====================
+
+    /**
+     * [WEB L143] Sheet DD-22: the single-document "Download with watermark" sheet said the
+     * change "applies to this send only" — there is no send on that screen.
+     */
+    @Test
+    @Order(11)
+    @DisplayName("M-13 [WEB DD-22]: the download sheet's note says 'this download only', not 'this send only'")
+    void downloadSheetNoteSaysDownload() {
+        DocDistLibraryPage lib = enterWorkFolderWithFixture();
+        DocDistWatermarkPage wm = new DocDistWatermarkPage(driver);
+        boolean menu = lib.waitForItem(DOC, Duration.ofSeconds(15)) && lib.openRowMenu(DOC);
+        System.out.println(">>> M-13 row menu opened=" + menu + " rows=" + lib.itemNames());
+        assumeTrue(menu, "Could not open the file's ⋮ menu");
+        sleep(1200);
+        boolean tapped = lib.tapMenuItem(DocDistWatermarkPage.MENU_WATERMARK);
+        System.out.println(">>> M-13 Watermark tapped=" + tapped);
+        assumeTrue(tapped, "Could not tap Watermark");
+        try {
+            boolean open = wm.isDownloadSheetOpen(Duration.ofSeconds(15));
+            System.out.println(">>> M-13 download sheet open=" + open);
+            assumeTrue(open, "The watermark download sheet did not open");
+            String note = wm.projectNote(Duration.ofSeconds(10));
+            System.out.println(">>> M-13 note='" + note + "'");
+            screenshot("wm-m13-note");
+            assumeTrue(!note.isBlank(), "The project-settings note never appeared (project watermark "
+                    + "settings not loaded)");
+            assertFalse(note.contains("send only"), "[DD-22] The download sheet must not say 'this send only': '"
+                    + note + "'");
+            assertTrue(note.contains("download only"), "[DD-22] The download sheet should say 'this download only': '"
+                    + note + "'");
+        } finally {
+            wm.tapSheetCancel();
+            sleep(1000);
+        }
+    }
+
+    // ==================== M-14 · WEB L150 / DD-33 ====================
+
+    /**
+     * [WEB L150] Sheet DD-33: "Watermark PDF and download" with a .docx ticked. Only
+     * PDFs/images can be stamped; the batch must leave the docx out and say so.
+     */
+    @Test
+    @Order(12)
+    @DisplayName("M-14 [WEB DD-33]: a ticked .docx is left off the watermark batch and named as skipped")
+    void batchSkipsDocx() {
+        String docx = "zl_dd_word.docx";
+        DocDistLibraryPage lib = enterWorkFolderWithFixture();
+        DocDistWatermarkPage wm = new DocDistWatermarkPage(driver);
+        if (!lib.waitForItem(docx, Duration.ofSeconds(8))) {
+            assumeTrue(lib.hasUpload(), "Upload not offered — cannot add the docx");
+            assumeTrue(uploadFixtureIntoOpenFolder(docx), "The docx upload did not complete");
+            assumeTrue(lib.waitForItem(docx, Duration.ofSeconds(60)), "The docx never appeared");
+        }
+        try {
+            assumeTrue(lib.selectRow(DOC) && lib.selectRow(docx), "Could not tick the PDF and the docx");
+            assumeTrue(lib.openSelectionActions(), "Could not open the selection menu");
+            sleep(1200);
+            assumeTrue(lib.tapMenuItem(DocDistWatermarkPage.MENU_WATERMARK_DOWNLOAD), "No 'Watermark PDF and download'");
+            if (lib.confirmPopup().isShown(Duration.ofSeconds(3))) {
+                String t = lib.confirmPopup().text();
+                lib.confirmPopup().cancel(Duration.ofSeconds(3));
+                assumeTrue(false, "Blocked by the rights dialog: '" + t + "'");
+            }
+            String snack = lib.waitSnackbarText(Duration.ofSeconds(8));
+            assumeTrue(wm.isBatchOpen(Duration.ofSeconds(20)), "The batch screen did not open");
+            List<String> chips = wm.fileChips();
+            System.out.println(">>> M-14 snackbar='" + snack + "' chips=" + chips);
+            screenshot("wm-m14");
+            assertTrue(chips.stream().anyMatch(c -> c.contains(DOC)), "The PDF should be in the batch, got " + chips);
+            boolean docxChipped = chips.stream().anyMatch(c -> c.contains(docx));
+            boolean namedSkipped = snack.contains(docx) && snack.toLowerCase().contains("skipped");
+            assertFalse(docxChipped, "[DD-33] The .docx cannot be stamped and must be left out of the batch, chips=" + chips);
+            assertTrue(namedSkipped, "[DD-33] The batch should say the .docx was skipped, snackbar='" + snack + "'");
+        } finally {
+            leaveBatchScreen();
+        }
+    }
+
     // ==================== CLEANUP ====================
 
     @Test
-    @Order(10)
+    @Order(20)
     @DisplayName("CLEANUP: the QA watermark folder and its fixture are removed")
     void cleanup() {
         DocDistLibraryPage lib = new DocDistLibraryPage(driver);

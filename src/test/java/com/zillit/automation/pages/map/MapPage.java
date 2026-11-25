@@ -117,7 +117,9 @@ public class MapPage extends BasePage {
      */
     public boolean openCityPanel() {
         if (cityPanelShown(Duration.ofSeconds(1))) return true;
-        if (!clickIfPresent("btnCities")) return false;
+        // clickToolbar, not clickIfPresent: once the strip has been scrolled (to reach
+        // Filter or View All) the Cities chip is off its left edge and absent.
+        if (!clickToolbar("btnCities")) return false;
         return cityPanelShown(Duration.ofSeconds(8));
     }
 
@@ -351,7 +353,22 @@ public class MapPage extends BasePage {
                 sleep(600);
                 if (displayed(id)) return true;
             }
-            return false;
+            // Last resort: UiAutomator's own scrollGesture on the strip element. Measured
+            // 2026-11-24 on emulator-5560: three fresh Maps in a row, six swipes each, and the
+            // strip stopped at [btnPin, btnViewAll, btnZoneList] with btnTypes never shown
+            // (a long active-zone name widens btnZoneList). scrollGesture scrolls by the
+            // view's own extent and reports whether more is left.
+            for (String dir : new String[]{"right", "left"}) {
+                for (int i = 0; i < 6; i++) {
+                    Object more = driver.executeScript("mobile: scrollGesture", java.util.Map.of(
+                            "elementId", ((org.openqa.selenium.remote.RemoteWebElement) strip).getId(),
+                            "direction", dir, "percent", 0.75));
+                    sleep(500);
+                    if (displayed(id)) return true;
+                    if (Boolean.FALSE.equals(more)) break;
+                }
+            }
+            return displayed(id);
         } catch (Exception e) {
             return false;
         }
@@ -683,10 +700,45 @@ public class MapPage extends BasePage {
     public boolean overlayActive() {
         try {
             WebElement b = driver.findElement(byId("btnLocationPins"));
-            String sel = b.getAttribute("selected");
-            if (sel != null) return Boolean.parseBoolean(sel);
+            // MapFragment.updateLocationPinsButton() never calls setSelected(), so this
+            // attribute is always "false" — reading it as the state made every caller
+            // believe the overlay was OFF and "restore" it by switching it off.
+            if (Boolean.parseBoolean(b.getAttribute("selected"))) return true;
         } catch (Exception ignored) { }
+        Boolean tint = overlayTintActive();
+        if (tint != null) return tint;
         return overlayPinCount() >= 0;
+    }
+
+    /**
+     * The overlay's state as the user sees it: ON paints the toggle
+     * {@code map_active_button_bg} (#E74C3C, red) with white text; OFF leaves the tonal
+     * button's pale default. Read from a screenshot of the button, because the state is
+     * carried ONLY by tint — the label is identical ("Shoot Locations") when the overlay
+     * is OFF and when it is ON with nothing to draw.
+     *
+     * @return null when the button could not be captured
+     */
+    public Boolean overlayTintActive() {
+        try {
+            WebElement b = driver.findElement(byId("btnLocationPins"));
+            byte[] png = b.getScreenshotAs(org.openqa.selenium.OutputType.BYTES);
+            java.awt.image.BufferedImage img =
+                    javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(png));
+            if (img == null) return null;
+            long red = 0, total = 0;
+            for (int y = 0; y < img.getHeight(); y += 2) {
+                for (int x = 0; x < img.getWidth(); x += 2) {
+                    int rgb = img.getRGB(x, y);
+                    int r = (rgb >> 16) & 0xff, g = (rgb >> 8) & 0xff, bl = rgb & 0xff;
+                    total++;
+                    if (r > 180 && g < 120 && bl < 110) red++;
+                }
+            }
+            return total > 0 && red * 100 / total >= 20;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public boolean toggleOverlay() {
@@ -736,6 +788,100 @@ public class MapPage extends BasePage {
             if (t.contains(LABEL_SHORTLISTED) || t.contains(LABEL_FINAL)) return true;
         }
         return false;
+    }
+
+    /**
+     * One card of the bottom location panel ({@code item_carousel_card.xml}), read with its
+     * own buttons. {@code rvCarousel} and {@code rvLocationList} share CarouselCardAdapter,
+     * which hides Edit and Delete on Location-tool (overlay) cards.
+     */
+    public static final class PanelCard {
+        public final String name;
+        public final String type;
+        public final boolean edit;
+        public final boolean delete;
+        public final boolean view;
+        public final boolean directions;
+        /** {@code tvAddress} — for an overlay card, the Location tool entry's address. */
+        public final String address;
+        /** {@code tvCoords}, "lat, lng" to three places. */
+        public final String coords;
+
+        PanelCard(String name, String type, boolean edit, boolean delete, boolean view, boolean directions) {
+            this(name, type, edit, delete, view, directions, null, null);
+        }
+
+        PanelCard(String name, String type, boolean edit, boolean delete, boolean view,
+                  boolean directions, String address, String coords) {
+            this.name = name;
+            this.type = type;
+            this.edit = edit;
+            this.delete = delete;
+            this.view = view;
+            this.directions = directions;
+            this.address = address;
+            this.coords = coords;
+        }
+
+        /** Overlay cards carry the spelled-out stage label ("Shortlisted/Finalized Shoot Location"). */
+        public boolean isOverlay() {
+            return type != null && (type.contains(LABEL_SHORTLISTED) || type.contains(LABEL_FINAL));
+        }
+
+        @Override public String toString() {
+            return name + " [" + type + "] edit=" + edit + " delete=" + delete
+                    + " view=" + view + " directions=" + directions;
+        }
+    }
+
+    /**
+     * Opens the bottom panel in full-list mode. {@code btnLocationPill} cycles
+     * pill → carousel → list (MapFragment.bottomPanelMode 0 → 1 → 2).
+     */
+    public boolean openPanelList() {
+        for (int i = 0; i < 3; i++) {
+            if (displayed("rvLocationList")) return true;
+            if (!togglePanelMode()) return false;
+            sleep(1200);
+        }
+        return displayed("rvLocationList");
+    }
+
+    /** Every card in the panel list, following it past the fold. */
+    public List<PanelCard> panelListCards() {
+        return readWholeList("rvLocationList", "tvName", this::panelCardsOnScreen,
+                c -> c.name + "|" + c.type);
+    }
+
+    /**
+     * Cards fully on screen. A card whose button row is clipped would read its buttons as
+     * absent, so a card only counts once {@code btnShare} (always visible) is in the tree.
+     */
+    private List<PanelCard> panelCardsOnScreen() {
+        List<PanelCard> out = new ArrayList<>();
+        try {
+            for (WebElement card : driver.findElements(AppiumBy.xpath(
+                    "//*[@resource-id='" + appPackage() + ":id/rvLocationList']/*"))) {
+                if (card.findElements(byId("btnShare")).isEmpty()) continue;
+                List<WebElement> name = card.findElements(byId("tvName"));
+                if (name.isEmpty()) continue;
+                List<WebElement> type = card.findElements(byId("tvType"));
+                List<WebElement> addr = card.findElements(byId("tvAddress"));
+                List<WebElement> coords = card.findElements(byId("tvCoords"));
+                out.add(new PanelCard(
+                        name.get(0).getText(),
+                        type.isEmpty() ? null : type.get(0).getText(),
+                        !card.findElements(byId("btnEdit")).isEmpty(),
+                        !card.findElements(byId("btnDelete")).isEmpty(),
+                        !card.findElements(byId("btnView")).isEmpty(),
+                        !card.findElements(byId("btnDirections")).isEmpty(),
+                        addr.isEmpty() ? null : addr.get(0).getText(),
+                        coords.isEmpty() ? null : coords.get(0).getText()));
+            }
+        } catch (Exception ignored) {
+            // The tree changed under us; whatever was read so far stands.
+        }
+        return out;
     }
 
     public boolean openViewAll() {
@@ -1088,6 +1234,144 @@ public class MapPage extends BasePage {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    // ---------------- filter dialog + toolbar labels (web-gap cases) ----------------
+    //
+    // dialog_filter_type.xml: rvFilterTypes (rows item_filter_type: tvTypeName, tvCount),
+    // btnApply "Apply (n)", btnReset, tvClearAll, btnClose (MapFragment.toggleFilter).
+
+    /**
+     * A saved location's MARKER, found through Google Maps' accessibility node for it.
+     *
+     * <p>Markers are canvas-drawn, but the Maps SDK exposes one virtual accessibility view
+     * per (unclustered) marker whose content-desc carries the marker title — the location
+     * name ({@code LocationClusterRenderer}: {@code .title(item.title)}). A marker folded
+     * into a cluster has no node of its own, so the map is zoomed in around its centre a
+     * few times until the node appears.
+     */
+    public WebElement markerFor(String name) {
+        for (int zoom = 0; zoom < 5; zoom++) {
+            try {
+                List<WebElement> m = driver.findElements(AppiumBy.xpath(
+                        "//*[@resource-id='" + appPackage() + ":id/map']//*[contains(@content-desc,"
+                                + xpathQuote(name) + ")]"));
+                if (m.isEmpty()) {
+                    m = driver.findElements(AppiumBy.xpath("//*[contains(@content-desc," + xpathQuote(name) + ")]"));
+                }
+                for (WebElement e : m) {
+                    try { if (e.isDisplayed()) return e; } catch (Exception ignored) { }
+                }
+            } catch (Exception ignored) { }
+            if (zoom == 4) break;
+            try {
+                WebElement mapView = driver.findElement(byId("map"));
+                org.openqa.selenium.Rectangle r = mapView.getRect();
+                int x = r.getX() + r.getWidth() / 2, y = r.getY() + r.getHeight() / 2;
+                driver.executeScript("mobile: doubleClickGesture", java.util.Map.of("x", x, "y", y));
+                sleep(1800);
+            } catch (Exception ignored) { }
+        }
+        return null;
+    }
+
+    /** Closes the IME only when it is stably up (BACK then goes to the IME, not the screen). */
+    public boolean closeKeyboard() { return closeKeyboardIfStablyShown(); }
+
+    /** A real finger tap at the centre of an element's bounds (not an accessibility click). */
+    public void tapElementCentre(WebElement e) {
+        org.openqa.selenium.Rectangle r = e.getRect();
+        tapAt(r.getX() + r.getWidth() / 2, r.getY() + r.getHeight() / 2);
+    }
+
+    /** Long-presses an element and drags it {@code dx},{@code dy} pixels — a marker move. */
+    public boolean longPressDrag(WebElement e, int dx, int dy) {
+        try {
+            org.openqa.selenium.Rectangle r = e.getRect();
+            int x = r.getX() + r.getWidth() / 2, y = r.getY() + r.getHeight() / 2;
+            org.openqa.selenium.interactions.PointerInput f =
+                    new org.openqa.selenium.interactions.PointerInput(
+                            org.openqa.selenium.interactions.PointerInput.Kind.TOUCH, "finger");
+            org.openqa.selenium.interactions.Sequence s =
+                    new org.openqa.selenium.interactions.Sequence(f, 1);
+            s.addAction(f.createPointerMove(Duration.ZERO,
+                    org.openqa.selenium.interactions.PointerInput.Origin.viewport(), x, y));
+            s.addAction(f.createPointerDown(0));
+            s.addAction(new org.openqa.selenium.interactions.Pause(f, Duration.ofMillis(900)));
+            for (int i = 1; i <= 8; i++) {
+                s.addAction(f.createPointerMove(Duration.ofMillis(120),
+                        org.openqa.selenium.interactions.PointerInput.Origin.viewport(),
+                        x + dx * i / 8, y + dy * i / 8));
+            }
+            s.addAction(f.createPointerUp(0));
+            driver.perform(List.of(s));
+            sleep(1500);
+            return true;
+        } catch (Exception ex) {
+            return false;
+        }
+    }
+
+    private static String xpathQuote(String s) {
+        if (!s.contains("'")) return "'" + s + "'";
+        if (!s.contains("\"")) return "\"" + s + "\"";
+        return "concat('" + s.replace("'", "',\"'\",'") + "')";
+    }
+
+    /** A toolbar chip's label, scrolling the strip to it first. Null when it is not there. */
+    public String toolbarLabel(String id) {
+        if (!displayed(id)) scrollToolbarTo(id);
+        return text(id);
+    }
+
+    /** "Filter" with no filter active, "Filter (n)" with n types applied. */
+    public String filterButtonLabel() { return toolbarLabel("btnFilter"); }
+
+    /** The count printed on one filter row, or null when the row is not in the dialog. */
+    public Integer filterChipCount(String label) {
+        List<String> labels = filterTypeLabels();
+        List<String> counts = filterTypeCounts();
+        for (int i = 0; i < labels.size() && i < counts.size(); i++) {
+            if (label.equals(labels.get(i))) {
+                try { return Integer.parseInt(counts.get(i).trim()); }
+                catch (NumberFormatException e) { return null; }
+            }
+        }
+        return null;
+    }
+
+    /** Every filter row as label → count, read across the whole dialog list. */
+    public java.util.Map<String, Integer> filterChipCounts() {
+        java.util.Map<String, Integer> out = new java.util.LinkedHashMap<>();
+        for (int pass = 0; pass < 6; pass++) {
+            List<String> labels = filterTypeLabels();
+            List<String> counts = filterTypeCounts();
+            int before = out.size();
+            for (int i = 0; i < labels.size() && i < counts.size(); i++) {
+                try { out.putIfAbsent(labels.get(i), Integer.parseInt(counts.get(i).trim())); }
+                catch (NumberFormatException ignored) { }
+            }
+            if (pass > 0 && out.size() == before) break;
+            if (!scrollList("rvFilterTypes", true)) break;
+        }
+        return out;
+    }
+
+    public String filterApplyLabel() { return text("btnApply"); }
+    public boolean applyFilterDialog() { return clickIfPresent("btnApply"); }
+    public boolean resetFilterDialog() { return clickIfPresent("btnReset"); }
+    public boolean closeFilterDialog() { return clickIfPresent("btnClose"); }
+
+    /**
+     * Scrolls the filter dialog's list until the row {@code label} is on screen.
+     * Rows past the fold are not in the accessibility tree.
+     */
+    public boolean revealFilterRow(String label) {
+        for (int pass = 0; pass < 6; pass++) {
+            if (filterTypeLabels().contains(label)) return true;
+            if (!scrollList("rvFilterTypes", true)) return false;
+        }
+        return filterTypeLabels().contains(label);
     }
 
     private boolean present(String id) {

@@ -83,6 +83,40 @@ public class CcGroupInfoPage extends BasePage {
         }
     }
 
+    /** Long-presses the member row whose name contains {@code name}. */
+    public boolean longPressMemberNamed(String name) {
+        try {
+            WebElement label;
+            try {
+                label = driver.findElement(AppiumBy.androidUIAutomator(
+                        "new UiScrollable(new UiSelector().scrollable(true))"
+                                + ".scrollIntoView(new UiSelector().resourceIdMatches(\".*:id/userNameTv\").textContains(\""
+                                + name + "\"))"));
+            } catch (WebDriverException notScrollable) {
+                label = driver.findElement(AppiumBy.androidUIAutomator(
+                        "new UiSelector().resourceIdMatches(\".*:id/userNameTv\").textContains(\"" + name + "\")"));
+            }
+            var r = label.getRect();
+            w3cLongPress(r.getX() + r.getWidth() / 2, r.getY() + r.getHeight() / 2, 1000);
+            sleep(700);
+            return true;
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    /** Rows carrying the admin badge (adminHeader). */
+    public int adminCount() {
+        try { return driver.findElements(byId("adminHeader")).size(); }
+        catch (WebDriverException e) { return 0; }
+    }
+
+    public boolean isLeaveVisible() {
+        if (isVisible("leaveButton", Duration.ofSeconds(3))) return true;
+        scrollToId("leaveButton");
+        return isVisible("leaveButton", Duration.ofSeconds(3));
+    }
+
     /** After a member long-press, the option dropdown shows Remove / make admin / etc. */
     public boolean isMemberMenuOpen(Duration timeout) {
         return textShown("Remove", timeout) || textShown("admin", timeout);
@@ -111,6 +145,7 @@ public class CcGroupInfoPage extends BasePage {
     }
 
     public boolean tapLeave() {
+        scrollToId("leaveButton");
         try { driver.findElement(byId("leaveButton")).click(); return true; }
         catch (WebDriverException e) { return false; }
     }

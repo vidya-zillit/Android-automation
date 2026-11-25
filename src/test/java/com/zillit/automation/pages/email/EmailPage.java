@@ -31,8 +31,16 @@ public class EmailPage extends BasePage {
 
     /** The email list screen is up (list, empty view, or the compose FAB). */
     public boolean isLoaded(Duration timeout) {
-        return isVisible("fab_compose", timeout)
-                || isVisible("rv_emails", Duration.ofSeconds(3))
+        if (isVisible("fab_compose", timeout)) return true;
+        // The email DETAIL screen reuses the id rv_emails for its message trail (seen
+        // 2026-11-23: detail of "QA EMAIL …" with rv_emails + bottom_bar + btn_reply_selector).
+        // Counting it as "the list" made recoverToEmailList() stop on the detail screen, so
+        // every later case found no Search/Compose and skipped or timed out.
+        if (!driver.findElements(byId("btn_reply_selector")).isEmpty()
+                || !driver.findElements(byId("bottom_bar")).isEmpty()) {
+            return false;
+        }
+        return isVisible("rv_emails", Duration.ofSeconds(3))
                 || isVisible("empty_view", Duration.ofSeconds(3));
     }
 
@@ -119,6 +127,16 @@ public class EmailPage extends BasePage {
             return driver.findElements(byId("tv_subject")).size();
         } catch (WebDriverException e) {
             return 0;
+        }
+    }
+
+    /** Subjects of the email rows currently rendered (tv_subject). */
+    public List<String> subjects() {
+        try {
+            return driver.findElements(byId("tv_subject")).stream()
+                    .map(WebElement::getText).map(t -> t == null ? "" : t.trim()).toList();
+        } catch (WebDriverException e) {
+            return List.of();
         }
     }
 
@@ -538,6 +556,19 @@ public class EmailPage extends BasePage {
         }
     }
 
+    /** Taps the AlertDialog's positive button (android:id/button1). */
+    public boolean confirmPositiveButton(Duration timeout) {
+        try {
+            new org.openqa.selenium.support.ui.WebDriverWait(driver, timeout)
+                    .until(org.openqa.selenium.support.ui.ExpectedConditions.elementToBeClickable(
+                            AppiumBy.id("android:id/button1"))).click();
+            sleep(1500);
+            return true;
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
     /** Confirms a dialog by its positive button text (Delete / Empty / Clear / Yes). */
     public boolean confirmDialog(Duration timeout, String... labels) {
         long deadline = System.currentTimeMillis() + timeout.toMillis();
@@ -553,6 +584,112 @@ public class EmailPage extends BasePage {
             sleep(300);
         }
         return false;
+    }
+
+    // ---------------- web-gap helpers ----------------
+
+    /** The signed-in mailbox address shown at the top of the drawer (tv_user_email); "" if absent. */
+    public String drawerUserEmail() {
+        if (!openDrawer() || !isDrawerOpen(Duration.ofSeconds(3))) return "";
+        String t = "";
+        try {
+            t = driver.findElement(byId("tv_user_email")).getText();
+        } catch (WebDriverException ignored) {
+        }
+        driver.navigate().back();
+        sleep(600);
+        return t == null ? "" : t.trim();
+    }
+
+    /** Pull-to-refresh on the list (swipe_refresh), then waits for it to settle. */
+    public void pullToRefresh() {
+        try {
+            WebElement list = driver.findElement(byId("swipe_refresh"));
+            var r = list.getRect();
+            int x = r.getX() + r.getWidth() / 2;
+            var finger = new org.openqa.selenium.interactions.PointerInput(
+                    org.openqa.selenium.interactions.PointerInput.Kind.TOUCH, "finger");
+            var seq = new org.openqa.selenium.interactions.Sequence(finger, 1);
+            seq.addAction(finger.createPointerMove(Duration.ZERO,
+                    org.openqa.selenium.interactions.PointerInput.Origin.viewport(), x, r.getY() + 60));
+            seq.addAction(finger.createPointerDown(0));
+            seq.addAction(finger.createPointerMove(Duration.ofMillis(600),
+                    org.openqa.selenium.interactions.PointerInput.Origin.viewport(), x, r.getY() + Math.min(900, r.getHeight())));
+            seq.addAction(finger.createPointerUp(0));
+            driver.perform(java.util.Collections.singletonList(seq));
+            sleep(2500);
+        } catch (WebDriverException ignored) {
+        }
+    }
+
+    /** Waits for a row whose tv_subject contains the text, pulling to refresh between looks. */
+    public boolean waitRowWithRefresh(String subject, Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            if (subjects().stream().anyMatch(s -> s.contains(subject))) return true;
+            pullToRefresh();
+        }
+        return false;
+    }
+
+    /** Whether the row with this subject shows its unread_dot (null if the row is not on screen). */
+    public Boolean unreadDotFor(String subject) {
+        for (WebElement row : driver.findElements(byId("tv_subject"))) {
+            try {
+                if (!row.getText().contains(subject)) continue;
+                Band band = bandOfAnchor("tv_subject", row);
+                return elementIn(band, "unread_dot") != null;
+            } catch (WebDriverException ignored) {
+            }
+        }
+        return null;
+    }
+
+    /** Long-presses the row whose subject contains the text; true when selection mode starts. */
+    public boolean longPressRow(String subject) {
+        for (WebElement row : driver.findElements(byId("tv_subject"))) {
+            try {
+                if (!row.getText().contains(subject)) continue;
+                var r = row.getRect();
+                int x = r.getX() + r.getWidth() / 2, y = r.getY() + r.getHeight() / 2;
+                var finger = new org.openqa.selenium.interactions.PointerInput(
+                        org.openqa.selenium.interactions.PointerInput.Kind.TOUCH, "finger");
+                var seq = new org.openqa.selenium.interactions.Sequence(finger, 1);
+                seq.addAction(finger.createPointerMove(Duration.ZERO,
+                        org.openqa.selenium.interactions.PointerInput.Origin.viewport(), x, y));
+                seq.addAction(finger.createPointerDown(0));
+                seq.addAction(finger.createPointerMove(Duration.ofMillis(1000),
+                        org.openqa.selenium.interactions.PointerInput.Origin.viewport(), x, y));
+                seq.addAction(finger.createPointerUp(0));
+                driver.perform(java.util.Collections.singletonList(seq));
+                sleep(800);
+                return isSelectionMode();
+            } catch (WebDriverException ignored) {
+            }
+        }
+        return false;
+    }
+
+    /** Unread count shown next to a drawer folder (tv_unread_count in that row); "" if none. */
+    public String drawerUnreadCount(String folder) {
+        if (!openDrawer() || !isDrawerOpen(Duration.ofSeconds(3))) return "";
+        String out = "";
+        for (WebElement name : driver.findElements(byId("tv_folder_name"))) {
+            try {
+                if (!folder.equalsIgnoreCase(name.getText())) continue;
+                Band band = bandOfAnchor("tv_folder_name", name);
+                String t = textIn(band, "tv_unread_count");
+                out = t == null ? "" : t;
+            } catch (WebDriverException ignored) {
+            }
+        }
+        driver.navigate().back();
+        sleep(600);
+        return out;
+    }
+
+    public boolean isListEmptyView(Duration timeout) {
+        return isVisible("empty_view", timeout);
     }
 
     // ---------------- helpers ----------------

@@ -180,6 +180,54 @@ public class InviteUsersPage extends BasePage {
         }
     }
 
+    // ---------------- share sheet (web gap S-M7) ----------------
+
+    /**
+     * Taps the code block. {@code ShareProjectCodeActivity} answers with {@code shareText(...)},
+     * i.e. the Android chooser titled "Share Via" carrying the invitation and the code. Nothing
+     * is shared unless a target is picked; callers back out of the chooser.
+     */
+    public boolean tapCode() {
+        try {
+            driver.findElement(byId("invite_code_view")).click();
+            sleep(2000);
+            return true;
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
+    /** The package now in front (the chooser is "android" or the intent resolver), or "". */
+    public String foregroundPackage() {
+        try {
+            String p = driver.getCurrentPackage();
+            return p == null ? "" : p;
+        } catch (WebDriverException e) {
+            return "";
+        }
+    }
+
+    /** True once a foreign share chooser is in front of the app. */
+    public boolean shareChooserOpen(String appPackage, Duration timeout) {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (true) {
+            String p = foregroundPackage();
+            if (!p.isEmpty() && !p.equals(appPackage)) return true;
+            if (System.currentTimeMillis() >= deadline) return false;
+            sleep(400);
+        }
+    }
+
+    /** Any text on the chooser containing {@code needle} (the OS text preview, when it shows one). */
+    public boolean chooserShowsText(String needle) {
+        try {
+            return !driver.findElements(AppiumBy.androidUIAutomator(
+                    "new UiSelector().textContains(\"" + needle + "\")")).isEmpty();
+        } catch (WebDriverException e) {
+            return false;
+        }
+    }
+
     private String textOf(String id) {
         try {
             List<WebElement> found = driver.findElements(byId(id));

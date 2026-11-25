@@ -1,0 +1,6 @@
+- [Zillit automation local env](zillit-automation-local-env.md) — dev build only (QA refused), one suite per session, app source is available
+- [Location tool enabled](zillit-location-tool-deferred.md) — enabled since 2026-11-23; TV episode grouping, overlay filed by city position
+- [Wire new modules into the runner](wire-new-modules-into-runner.md) — not done until it has a .run entry the user can see in Android Studio
+- [Device run stability](zillit-device-run-stability.md) — adb mDNS crash (ADB_MDNS=0), orphaned Appium sessions, no uiautomator dump mid-run
+- [Two-device roles](zillit-two-device-roles.md) — Pixel 7 approves, emulator creates (Call Sheet / Production Report)
+- [Handoff 2026-11-24](handoff-2026-11-24.md) — full state in repo HANDOFF.md; nothing committed

@@ -1,7 +1,9 @@
 package com.zillit.automation.tests.drive;
 
+import com.zillit.automation.core.TestEmails;
 import com.zillit.automation.core.BaseTest;
 import com.zillit.automation.core.TestOrder;
+import com.zillit.automation.core.ReasonLogger;
 import com.zillit.automation.pages.common.BottomNavPage;
 import com.zillit.automation.pages.drive.CreateFolderSheet;
 import com.zillit.automation.pages.drive.DriveFolderPage;
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.openqa.selenium.WebDriverException;
 
@@ -38,6 +41,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * appears in neither the page source nor a uiautomator dump. Rejection is therefore
  * asserted as "the form is still showing and no request was created" (trap 3.2).
  */
+@ExtendWith(ReasonLogger.class)
 @Order(TestOrder.DRIVE_REQUESTS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class DriveRequestFilesTest extends BaseTest {
@@ -49,7 +53,7 @@ class DriveRequestFilesTest extends BaseTest {
     private static final String REQ_MAIN  = "QA Request " + STAMP;
     private static final String REQ_COPY  = "QA Request copy " + STAMP;
     private static final String REQ_RESET = "QA Request reset " + STAMP;
-    private static final String RECIPIENT = "qa.recipient@example.com";
+    private static final String RECIPIENT = TestEmails.recipient();
 
     private boolean insideProject;
 
@@ -92,7 +96,7 @@ class DriveRequestFilesTest extends BaseTest {
             if (!tools.isLoaded(Duration.ofSeconds(15))) { sleep(2000); continue; }
             tools.searchTools("Drive");
             sleep(2000);
-            if (tools.isModuleListed("Drive", Duration.ofSeconds(6)) && tools.openModule("Drive")) {
+            if (tools.isModuleListed("Drive", Duration.ofSeconds(6)) && tools.openModuleContaining("Drive")) {
                 // 40s, not 20s: on a loaded emulator Drive's first open takes longer than
                 // that, and the retry then pressed Tools again — cancelling a launch that
                 // was about to succeed, over and over.
@@ -484,6 +488,28 @@ class DriveRequestFilesTest extends BaseTest {
         // folders piling up on a shared project, and it looked green for a whole run.
         assertFalse(folders.stream().anyMatch(n -> n.equalsIgnoreCase(FOLDER)),
                 "The QA folder should be gone after cleanup. Got: " + folders);
+    }
+
+    // WEB GAP (web-e2e/gaps/drive.md M29, L1562): recipients are lower-cased and de-duplicated.
+    // Only the project's own test address is used (TestEmails), typed twice in different case.
+    @Test
+    @Order(11)
+    @DisplayName("[WEB L1562] S-12: the same recipient typed twice in different case is kept ONCE, in lower case")
+    void gRecipientNormalised() {
+        DriveRequestFilesPage req = openRequestSheet();
+        assumeTrue(req.setTitle("QA Request norm " + STAMP), "title");
+        String upper = RECIPIENT.toUpperCase();
+        req.addRecipient(upper);
+        req.addRecipient(RECIPIENT);
+        List<String> chips = req.recipientChips();
+        System.out.println(">>> recipient chips = " + chips);
+        long matches = chips.stream().filter(c -> c.equalsIgnoreCase(RECIPIENT)).count();
+        try {
+            assertTrue(matches == 1, "The address should be listed once: " + chips);
+            assertTrue(chips.contains(RECIPIENT), "…and in lower case: " + chips);
+        } finally {
+            req.close();
+        }
     }
 
     private void sleep(long ms) {

@@ -261,6 +261,31 @@ case will skip with a message that sounds like the feature is missing.
 Reading it straight after the tap returns an empty list and the case skips with "No type
 could be chosen" — which reads like the project has no types, when it has five.
 
+## Web gap cases (2026-11-23)
+
+The web E2E sheet's three Production Diary bugs (`BOX-01..03`, gap file `box-schedule.md`).
+The planned `BoxViewsTest` was never written, so the single-device cases joined
+`BoxCrossViewTest` (they compare views and lay down their own fixtures); BOX-02 needs a second
+user and has its own class. Each assertion message names its bug id.
+
+| # | Web id | Case | Expected | Last result |
+|---|---|---|---|---|
+| FL-10 | BOX-01 | `BoxCrossViewTest.searchAgreesAcrossViews`: an event `ZL AUTO evt-search <n>`; search `zzqqnomatch` in the Calendar, then the List; then search the event's title | No-match: the Calendar draws nothing, the List carries the same text and shows its empty state, which should read **No Results** (today: "No schedule days yet"). Match: the Calendar draws the event on its day **and the List lists it** — `ListFragment.filterDays` matches a day only on title/type/dates, never its events, so this is expected to fail today | **FAIL — reproduces BOX-01** 2026-11-24 (emulator-5560 07:53): searching the event's own title draws it on its day in the Calendar, while the List shows its empty state; and a no-match search's empty state reads "No schedule days yet / Click \"Add Schedule\"…" instead of No Results. The no-match Calendar, the shared search text in both directions all passed. Cleanup removed the fixture and 4 leftovers |
+| HS-09 | BOX-03 | `BoxCrossViewTest.historyShowsScheduleDates`: a Prep schedule on the 10th–12th of next month (form label checked), then removed, then drawer → History, read to the end (the log is not newest-first) | Today's ADDED · Schedule card for Prep says "3 day(s)"; the REMOVED card's title names the schedule's own range, "Prep · Dec 10 – Dec 12". The ADDED card carries no dates, so the range is read from the REMOVED card | **FAIL — reproduces BOX-03** 2026-11-24, twice (emulator-5558 06:28, emulator-5554 07:08; IST +05:30): the REMOVED card reads "Prep · Dec 9 – Dec 11" for a Dec 10–12 schedule, one day early (XV's Dec 16 Prep likewise shows as "Dec 15"); the ADDED card's "3 day(s)" is right |
+| HS-08 | BOX-02 | **Two users** (`BoxHistoryTwoUserTest`, `TestOrder.BOX_HISTORY_TWO_USER` = 193): A saves a **Personal** note `ZL AUTO personal <n>`; A's History lists it (control); B's History is read to the end | No card in B's History carries the note's title | **Not run — blocked: Pixel app-locked** (2026-11-24). Compiled; the one attempt (01:56) died at session start (instrumentation could not be initialized), nothing exercised |
+
+Found while adding these: an element-scoped `./ancestor::` XPath matches nothing under
+UiAutomator2 (it searches the element's own subtree), so `BoxCalendarPage.typesByDay/titlesOn`
+read every day as empty. They now file pills and events by position; XV-02 passes again
+(2026-11-24). XV-03..06 still fail on the same run — Week/Day readers and the By Schedule
+blocks are not touched here. `BoxListPage.siblingText` and `BoxInviteePage` use the same XPath
+and are suspect. `BoxCreateEventPage.distributeToSelf` now goes through the current invitee
+screen (Self tab → Select Me → Done) and `chooseMeetInPerson()` sets the now-required Call Type.
+
+Cleanup: FL-10 deletes its event (by search, else from the unfiltered list — the search cannot
+find it, which is BOX-01 itself); HS-09 removes its Prep days (whole schedule); HS-08 deletes the
+note on A. Anything left is named `ZL AUTO` for CU-03.
+
 ## Automation plan
 
 Six suites, in this order, because each one needs what the one before it makes:

@@ -3,6 +3,7 @@ package com.zillit.automation.tests.cc;
 import com.zillit.automation.core.TestOrder;
 
 import com.zillit.automation.pages.cc.CcChatThreadPage;
+import com.zillit.automation.pages.cc.CcLandingPage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -182,5 +183,152 @@ class CcGroupChatTest extends CcBaseTest {
         assertTrue(gone, "The deleted message should no longer be visible");
         screenshot("cc-group-delete");
         t.back();
+    }
+
+    // ====================================================== web-gap cases (C&C)
+
+    /** System port for device B's UiAutomator2 (others: 8200-8300 range is taken by other suites). */
+    private static final int B_PORT = 8340;
+
+    // [WEB CC-15]
+    @Test
+    @Order(20)
+    @DisplayName("[WEB CC-15] Two devices: a group message from A appears live on B, and B's reply live on A")
+    void groupMessageArrivesLive() {
+        String bUdid = firstNonBlank(com.zillit.automation.core.Config.get("zillit.receiver.udid"),
+                System.getenv("ZILLIT_RECEIVER_UDID"));
+        assumeTrue(bUdid != null, "Needs ZILLIT_RECEIVER_UDID (device of " + PEER + ") — skipping");
+        String name = "ZL AUTO live " + stamp();
+        Boolean made = createPeerGroup(name);
+        assumeTrue(made != null, "Could not set up a group with " + PEER + " — skipping");
+        assertTrue(made, "Creating '" + name + "' should save");
+        io.appium.java_client.android.AndroidDriver b = null;
+        try {
+            b = com.zillit.automation.core.DriverFactory.create(bUdid, B_PORT);
+            assumeTrue(enterCcOn(b), "Device B could not open C&C — skipping");
+            CcLandingPage pb = new CcLandingPage(b);
+            boolean bLists = waitGroupOn(b, pb, name, Duration.ofSeconds(40));
+            assumeTrue(bLists, "B does not list '" + name + "' — B is probably in another project; skipping");
+            pb.typeInlineSearch(name);
+            assumeTrue(pb.openRow(name, Duration.ofSeconds(8)), "B could not open the group");
+            hideKeyboardOn(b);
+            CcChatThreadPage tb = new CcChatThreadPage(b);
+            assumeTrue(tb.isLoaded(Duration.ofSeconds(15)), "B's group thread did not open");
+
+            CcChatThreadPage ta = openGroupNamed(name);
+            assumeTrue(ta != null, "A could not open the group");
+            String m1 = "[e2e] realtime A " + stamp();
+            ta.sendMessage(m1);
+            assertTrue(ta.messageShown(m1, Duration.ofSeconds(15)), "A should see its own message");
+            assertTrue(tb.messageShown(m1, Duration.ofSeconds(20)),
+                    "B should receive '" + m1 + "' live (no back / reopen) within 20 s");
+
+            String m2 = "[e2e] realtime B " + stamp();
+            tb.sendMessage(m2);
+            assertTrue(tb.messageShown(m2, Duration.ofSeconds(15)), "B should see its own message");
+            assertTrue(ta.messageShown(m2, Duration.ofSeconds(20)),
+                    "A should receive '" + m2 + "' live (no back / reopen) within 20 s");
+            screenshot("cc-group-realtime");
+        } finally {
+            if (b != null) {
+                sweepLeftGroupsOn(b);
+                try { b.quit(); } catch (Exception ignored) {}
+            }
+            deleteGroupQuietly(name);
+        }
+    }
+
+    /** Device B: wait for the app, enter the first project, tap the C&C tab. */
+    private boolean enterCcOn(io.appium.java_client.android.AndroidDriver d) {
+        try {
+            long deadline = System.currentTimeMillis() + 90_000;
+            while (System.currentTimeMillis() < deadline) {
+                clickTextOn(d, "(?i)(allow|while using the app|not now|skip)");
+                if (presentOn(d, "bottomNavigation") || presentOn(d, "projectListRecyclerView")) break;
+                sleep(800);
+            }
+            if (presentOn(d, "projectListRecyclerView")) {
+                com.zillit.automation.pages.common.ProjectListPage list =
+                        new com.zillit.automation.pages.common.ProjectListPage(d);
+                List<String> names = list.visibleProjectNames();
+                if (names.isEmpty() || !list.tapProject(names.get(0))) return false;
+            }
+            if (!new com.zillit.automation.pages.common.BottomNavPage(d).waitUntilLoaded(Duration.ofSeconds(60))) return false;
+            for (var it : d.findElement(io.appium.java_client.AppiumBy.id(appPackage + ":id/bottomNavigation"))
+                    .findElements(io.appium.java_client.AppiumBy.id(appPackage + ":id/menuText"))) {
+                String txt = it.getText();
+                if (txt != null && txt.contains("C&C")) { it.click(); break; }
+            }
+            sleep(1500);
+            clickTextOn(d, "(?i)(allow|while using the app)");
+            return new CcLandingPage(d).isLoaded(Duration.ofSeconds(30));
+        } catch (org.openqa.selenium.WebDriverException e) {
+            System.out.println(">>> enterCcOn failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean waitGroupOn(io.appium.java_client.android.AndroidDriver d, CcLandingPage p, String name, Duration t) {
+        long deadline = System.currentTimeMillis() + t.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            p.tapChip("Groups");
+            sleep(1500);
+            p.typeInlineSearch(name);
+            hideKeyboardOn(d);
+            if (p.hasRowNamed(name)) return true;
+            p.tapChip("All");
+            sleep(1500);
+        }
+        return false;
+    }
+
+    /**
+     * Device B ({@link #PEER}) deletes the "ZL AUTO ren …" groups that
+     * CcGroupManageTest.renamePromoteLeave leaves behind (A left them, B is their admin).
+     */
+    private void sweepLeftGroupsOn(io.appium.java_client.android.AndroidDriver d) {
+        try {
+            for (int i = 0; i < 4 && !new CcLandingPage(d).isLoaded(Duration.ofSeconds(1)); i++) {
+                d.navigate().back();
+                sleep(800);
+            }
+            CcLandingPage p = new CcLandingPage(d);
+            for (int round = 0; round < 10; round++) {
+                p.tapChip("Groups");
+                sleep(1200);
+                p.typeInlineSearch("ZL AUTO ren ");
+                hideKeyboardOn(d);
+                var left = p.rowNames().stream().filter(n -> n.startsWith("ZL AUTO ren ")).toList();
+                if (left.isEmpty()) break;
+                boolean ok = p.deleteGroupViaLongPress(left.get(0));
+                System.out.println(">>> B sweep: deleted '" + left.get(0) + "' = " + ok);
+                if (!ok) break;
+            }
+            p.tapChip("All");
+        } catch (Exception e) {
+            System.out.println(">>> B sweep failed: " + e.getMessage());
+        }
+    }
+
+    private void hideKeyboardOn(io.appium.java_client.android.AndroidDriver d) {
+        try { if (d.isKeyboardShown()) d.hideKeyboard(); } catch (Exception ignored) {}
+    }
+
+    private boolean presentOn(io.appium.java_client.android.AndroidDriver d, String id) {
+        try { return !d.findElements(io.appium.java_client.AppiumBy.id(appPackage + ":id/" + id)).isEmpty(); }
+        catch (Exception e) { return false; }
+    }
+
+    private void clickTextOn(io.appium.java_client.android.AndroidDriver d, String regex) {
+        try {
+            var l = d.findElements(io.appium.java_client.AppiumBy.androidUIAutomator(
+                    "new UiSelector().clickable(true).textMatches(\"" + regex + "\")"));
+            if (!l.isEmpty()) l.get(0).click();
+        } catch (Exception ignored) { }
+    }
+
+    private static String firstNonBlank(String... vals) {
+        for (String v : vals) if (v != null && !v.isBlank()) return v;
+        return null;
     }
 }

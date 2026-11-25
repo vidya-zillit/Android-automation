@@ -88,6 +88,11 @@ class HomeChatTest extends BaseTest {
         List<String> units = page.visibleUnitNames();
         assertTrue(!units.isEmpty(), "At least one unit should be listed");
         System.out.println(">>> Units: " + units);
+        // [WEB #25] strengthened: the standard units are there by name, not just "something".
+        String all = String.join("|", units).toLowerCase();
+        for (String want : List.of("bulletin", "calendar", "call")) {
+            assertTrue(all.contains(want), "The units strip should include '" + want + "': " + units);
+        }
         screenshot("home-units");
     }
 
@@ -209,6 +214,8 @@ class HomeChatTest extends BaseTest {
         // Camera-based options launch the device camera which may be absent on
         // some emulators; the pure-picker/in-app ones are the reliable checks.
         List<String> toDrive = List.of("Gallery", "Video Gallery", "Audio", "Document", "Location", "Contact");
+        // [WEB #13] strengthened: backing out of every picker (Location Upload included) posts nothing.
+        String newestBefore = page.newestRowSignature();
         for (String option : toDrive) {
             page.tapAttachment();
             assumeTrue(page.isAttachmentPickerVisible(), "Picker did not open for " + option);
@@ -220,6 +227,9 @@ class HomeChatTest extends BaseTest {
             assertTrue(page.isInputBarVisible(),
                     "Should be back in the chat after backing out of " + option);
         }
+        assertTrue(page.newestRowSignature().equals(newestBefore),
+                "Backing out of the pickers must post nothing: newest row was '" + newestBefore
+                        + "', now '" + page.newestRowSignature() + "'");
         screenshot("home-media-types-driven");
     }
 

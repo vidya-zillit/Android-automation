@@ -3,6 +3,7 @@ package com.zillit.automation.tests.drive;
 import com.zillit.automation.core.Config;
 import com.zillit.automation.core.DriverFactory;
 import com.zillit.automation.core.TestOrder;
+import com.zillit.automation.core.ReasonLogger;
 import com.zillit.automation.pages.common.BottomNavPage;
 import com.zillit.automation.pages.drive.CreateFolderSheet;
 import com.zillit.automation.pages.drive.DriveHomePage;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
 
@@ -52,6 +54,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *
  * <p>Drives two drivers itself, so it does not extend {@code BaseTest}.
  */
+@ExtendWith(ReasonLogger.class)
 @Order(TestOrder.DRIVE_FOLDER_SHARE)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -110,7 +113,7 @@ class DriveFolderShareTest {
             if (!tools.isLoaded(Duration.ofSeconds(15))) { sleep(2000); continue; }
             tools.searchTools("Drive");
             sleep(2000);
-            if (tools.isModuleListed("Drive", Duration.ofSeconds(6)) && tools.openModule("Drive")
+            if (tools.isModuleListed("Drive", Duration.ofSeconds(6)) && tools.openModuleContaining("Drive")
                     && drive.isLoaded(Duration.ofSeconds(40))) {
                 return true;
             }
